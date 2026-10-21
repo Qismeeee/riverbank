@@ -1,0 +1,10 @@
+# Caddy tự xin và gia hạn chứng chỉ Let's Encrypt cho SITE_ADDRESS.
+# Đổi SITE_ADDRESS trong infra/.env trên EC2 khi có domain thật.
+{$SITE_ADDRESS} {
+    encode gzip
+    reverse_proxy api:8000
+    log {
+        output stdout
+        format json
+    }
+}

@@ -1,0 +1,26 @@
+# secrets, never commit
+.env
+*.pem
+riverbank-ci*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# data and models
+data/raw/
+*.duckdb
+*.pkl
+
+# node (web/)
+web/node_modules/
+web/.next/
+
+# editors
+.vscode/
+.idea/
+.DS_Store

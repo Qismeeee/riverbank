@@ -1,0 +1,48 @@
+# Chạy trên EC2 riverbank-app. GitHub Actions copy thư mục infra/ lên /opt/riverbank rồi `docker compose up -d`.
+# Không build ở đây: image đã build sẵn trên GHCR (arm64), EC2 chỉ pull.
+
+x-logging: &cw-logging
+  driver: awslogs
+  options:
+    awslogs-region: ap-southeast-1
+    awslogs-group: /riverbank/app
+    awslogs-create-group: "true"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    depends_on:
+      - api
+    logging: *cw-logging
+
+  api:
+    image: ghcr.io/qismeeee/riverbank-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      RIVERBANK_ENV: prod
+      AWS_REGION: ap-southeast-1
+      DB_HOST: riverbank-db.cdcgq4mmivnf.ap-southeast-1.rds.amazonaws.com
+      DB_SECRET_ID: "rds!db-1893a3d4-b65e-47a7-bb55-2134b3deaff7"
+      S3_BUCKET: riverbank-data-424016506356
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    deploy:
+      resources:
+        limits:
+          memory: 1200m
+    logging: *cw-logging
+
+volumes:
+  caddy_data:
+  caddy_config:
