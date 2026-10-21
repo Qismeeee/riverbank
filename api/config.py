@@ -1,5 +1,5 @@
 """
-Cấu hình chạy. Nguyên tắc: đọc một lần lúc tiến trình khởi động, giữ trong RAM.
+Cấu hình chạy.
 
 - local  : lấy từ biến môi trường / file .env, không chạm AWS.
 - prod   : lấy key từ AWS Secrets Manager qua IAM role của EC2, không có file key nào trên đĩa.
@@ -39,9 +39,13 @@ def _from_env_or_secret(env_key: str, secret_id: str, field: str) -> str:
     return _secret(secret_id).get(field, "")
 
 
-OPENAI_API_KEY = _from_env_or_secret("OPENAI_API_KEY", "riverbank/openai", "OPENAI_API_KEY")
+OPENAI_API_KEY = _from_env_or_secret(
+    "OPENAI_API_KEY", "riverbank/openai", "OPENAI_API_KEY")
 ANTHROPIC_API_KEY = _from_env_or_secret(
     "ANTHROPIC_API_KEY", "riverbank/anthropic", "ANTHROPIC_API_KEY"
+)
+OPENROUTER_API_KEY = _from_env_or_secret(
+    "OPENROUTER_API_KEY", "riverbank/openrouter", "OPENROUTER_API_KEY"
 )
 
 

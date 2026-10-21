@@ -1,10 +1,3 @@
-"""
-Riverbank API. Entry point FastAPI.
-
-Hiện chỉ có /health để chứng minh pipeline deploy chạy end to end.
-Team đổ code thật vào các router riêng rồi include vào app này.
-"""
-
 import socket
 from datetime import datetime, timezone
 
@@ -34,7 +27,7 @@ def _check_db() -> str:
         with psycopg.connect(url, connect_timeout=3) as conn:
             conn.execute("select 1")
         return "ok"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return f"error: {type(e).__name__}"
 
 
@@ -44,9 +37,10 @@ def _check_s3() -> str:
     try:
         import boto3
 
-        boto3.client("s3", region_name=config.AWS_REGION).head_bucket(Bucket=config.S3_BUCKET)
+        boto3.client("s3", region_name=config.AWS_REGION).head_bucket(
+            Bucket=config.S3_BUCKET)
         return "ok"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return f"error: {type(e).__name__}"
 
 
