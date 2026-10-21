@@ -14,13 +14,19 @@ infra/      docker-compose.yml, Caddyfile, .env.prod cho EC2.
 
 ## Chạy local
 
+Cần Python 3.12 (giống CI và Docker). Dùng `uv` để không phụ thuộc Python hệ thống:
+
 ```bash
-cp .env.example .env            # điền OPENAI_API_KEY, DATABASE_URL local
+curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.local/bin/env   # một lần
+cp .env.example .env             # điền key, hoặc RIVERBANK_ENV=cloud + AWS_PROFILE để đọc từ Secrets Manager
+docker run -d --name rb-pg -e POSTGRES_USER=riverbank -e POSTGRES_PASSWORD=riverbank \
+  -e POSTGRES_DB=riverbank -p 5432:5432 postgres:18-alpine                     # DB local
 cd api
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
+uv venv --python 3.12 .venv && source .venv/bin/activate
+uv pip install -r requirements-dev.txt
 uvicorn main:app --reload        # http://localhost:8000/docs
 pytest -q && ruff check .
+python jev.py                    # thử Jev (cần OPENROUTER_API_KEY)
 ```
 
 ## Quy trình
@@ -38,7 +44,7 @@ pytest -q && ruff check .
 | EC2 | t4g.small, Elastic IP 13.214.87.165, Ubuntu 26.04 arm64 |
 | DB | RDS Postgres 18, mật khẩu trong Secrets Manager |
 | Files | S3 riverbank-data-424016506356 |
-| Keys | Secrets Manager riverbank/openai, riverbank/anthropic |
+| Keys | Secrets Manager riverbank/openai, riverbank/anthropic, riverbank/openrouter |
 | Alerts | SNS riverbank-alerts, 3 CloudWatch alarm |
 
 EC2 đọc secret bằng IAM role, không có access key trong repo hay trên máy. Local dùng `.env`, không bao giờ commit.
@@ -48,3 +54,4 @@ EC2 đọc secret bằng IAM role, không có access key trong repo hay trên m�
 - Code tính, LLM viết. Mọi con số đi qua engine Python, LLM chỉ diễn giải.
 - Mọi claim trong memo có `evidence_id`.
 - Output model phải qua JSON Schema validator trước khi dùng.
+- Quyết định có/không, phân loại, chấm mức: dùng Jev (`api/jev.py`), nhận xác suất rồi đặt ngưỡng trong code.
