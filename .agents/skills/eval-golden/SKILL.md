@@ -18,6 +18,10 @@ Case A đến E trong `docs/Riverbank-BRD.md` mục 9 phải có đủ ở đây
 - Metric: faithfulness (Jev score ≥ 4 và citation guard pass), số đúng 100%, latency p50, cost per case.
 - Judge khác model sinh. Người kiểm 10 case, ghi vào `eval/REVIEW.md`.
 
+## Data huấn luyện risk model
+
+`data/synth/train.py` sinh `train_shops.csv` (feature lúc thẩm định + `label_default`) và `train_weeks.csv`, hiệu chỉnh từ `data/synth/calibration.json` (60 shop thật). Nhãn mô phỏng theo BL-11, cách sinh và feature ghi ở `docs/Riverbank-risk-model.md`. Đổi quy tắc sinh thì cập nhật doc đó và `api/tests/test_train_data.py`.
+
 ## Báo cáo
 
 `eval/report.md` sinh từ `run.py`: bảng case, pass/fail, cost. Đây là slide số liệu của buổi chấm.

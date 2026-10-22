@@ -31,7 +31,7 @@ api/routers/    HTTP endpoint, mỏng, gọi services
 api/agents/     orchestrator, data_analyst, memo_writer, doc_verifier, monitor (LLM facade)
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động
-data/synth/     generate.py sinh 50 shop synthetic theo schema Shopee, out/ không commit
+data/synth/     generate.py (shop demo theo schema Shopee), train.py (data huấn luyện có nhãn), calibration.json (60 shop thật); out/ và train/ không commit
 web/            Next.js, deploy Vercel
 infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 .agents/skills/ skill cho Codex và Claude Code, đọc skill đúng việc trước khi code

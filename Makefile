@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export
+.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -35,3 +35,6 @@ etl:
 
 export:
 	cd api && .venv/bin/python -m etl.export --run-date $$(date +%F)
+
+train-data:
+	cd api && .venv/bin/python ../data/synth/train.py --n 3000 --out ../data/synth/train

@@ -1,0 +1,606 @@
+{
+ "source": "v_shop_features 2026-10-22, 60 shop, data.addlivetag.com",
+ "snapshot_date": "2026-10-22",
+ "shops": [
+  {
+   "archetype": "fashion",
+   "segment": "brand",
+   "n_products": 204,
+   "n_tracked": 9,
+   "gmv_30d": 646348280,
+   "aov": 403463,
+   "top3_share": 0.149,
+   "rating": 4.91
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 186,
+   "n_tracked": 1,
+   "gmv_30d": 58410000,
+   "aov": 165000,
+   "top3_share": 0.596,
+   "rating": 4.86
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 2,
+   "gmv_30d": 13747000,
+   "aov": 264365,
+   "top3_share": 0.156,
+   "rating": 4.9
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 5,
+   "gmv_30d": 19439838,
+   "aov": 119999,
+   "top3_share": 0.455,
+   "rating": 4.88
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 146,
+   "n_tracked": 1,
+   "gmv_30d": 2499000,
+   "aov": 119000,
+   "top3_share": 0.182,
+   "rating": 4.85
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 201,
+   "n_tracked": 10,
+   "gmv_30d": 266037694,
+   "aov": 1108490,
+   "top3_share": 0.129,
+   "rating": 4.91
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 77,
+   "n_tracked": 3,
+   "gmv_30d": 905282000,
+   "aov": 235382,
+   "top3_share": 0.384,
+   "rating": 4.92
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 125,
+   "n_tracked": 1,
+   "gmv_30d": 35314200,
+   "aov": 767700,
+   "top3_share": 0.213,
+   "rating": 4.9
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 28,
+   "n_tracked": 4,
+   "gmv_30d": 436041750,
+   "aov": 240243,
+   "top3_share": 0.633,
+   "rating": 4.86
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 82,
+   "n_tracked": 2,
+   "gmv_30d": 373800000,
+   "aov": 280000,
+   "top3_share": 0.403,
+   "rating": 4.92
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 199,
+   "n_tracked": 9,
+   "gmv_30d": 444740000,
+   "aov": 301314,
+   "top3_share": 0.156,
+   "rating": 4.76
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 199,
+   "n_tracked": 10,
+   "gmv_30d": 1277658500,
+   "aov": 345126,
+   "top3_share": 0.102,
+   "rating": 4.9
+  },
+  {
+   "archetype": "fashion",
+   "segment": "brand",
+   "n_products": 68,
+   "n_tracked": 3,
+   "gmv_30d": 52447000,
+   "aov": 212336,
+   "top3_share": 0.505,
+   "rating": 4.83
+  },
+  {
+   "archetype": "fashion",
+   "segment": "brand",
+   "n_products": 201,
+   "n_tracked": 6,
+   "gmv_30d": 2487342434,
+   "aov": 1577262,
+   "top3_share": 0.341,
+   "rating": 4.93
+  },
+  {
+   "archetype": "fashion",
+   "segment": "brand",
+   "n_products": 104,
+   "n_tracked": 18,
+   "gmv_30d": 16683964200,
+   "aov": 1072923,
+   "top3_share": 0.262,
+   "rating": 4.94
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 84,
+   "n_tracked": 2,
+   "gmv_30d": 1069380000,
+   "aov": 180000,
+   "top3_share": 0.581,
+   "rating": 4.31
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 6,
+   "gmv_30d": 252147000,
+   "aov": 266540,
+   "top3_share": 0.197,
+   "rating": 4.77
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 187,
+   "n_tracked": 1,
+   "gmv_30d": 124456200,
+   "aov": 51900,
+   "top3_share": 0.825,
+   "rating": 4.75
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 197,
+   "n_tracked": 2,
+   "gmv_30d": 44792000,
+   "aov": 100430,
+   "top3_share": 0.283,
+   "rating": 4.75
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 65,
+   "n_tracked": 13,
+   "gmv_30d": 879288780,
+   "aov": 1634365,
+   "top3_share": 0.41,
+   "rating": 4.88
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 193,
+   "n_tracked": 4,
+   "gmv_30d": 496215865,
+   "aov": 282583,
+   "top3_share": 0.3,
+   "rating": 4.77
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 33,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.499,
+   "rating": 4.92
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 15,
+   "n_tracked": 15,
+   "gmv_30d": 110669000,
+   "aov": 773909,
+   "top3_share": 0.789,
+   "rating": 4.86
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 17,
+   "n_tracked": 2,
+   "gmv_30d": 404964000,
+   "aov": 755529,
+   "top3_share": 0.913,
+   "rating": 4.9
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 14,
+   "n_tracked": 7,
+   "gmv_30d": 268437000,
+   "aov": 782615,
+   "top3_share": 0.523,
+   "rating": 4.75
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 12,
+   "n_tracked": 1,
+   "gmv_30d": 6159992,
+   "aov": 769999,
+   "top3_share": 0.997,
+   "rating": 4.76
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 59,
+   "n_tracked": 2,
+   "gmv_30d": 1567943000,
+   "aov": 266339,
+   "top3_share": 0.557,
+   "rating": 4.84
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 199,
+   "n_tracked": 2,
+   "gmv_30d": 127115500,
+   "aov": 69500,
+   "top3_share": 0.505,
+   "rating": 4.77
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 1,
+   "gmv_30d": 52034400,
+   "aov": 356400,
+   "top3_share": 0.572,
+   "rating": 4.84
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 1,
+   "gmv_30d": 32855040,
+   "aov": 33120,
+   "top3_share": 0.177,
+   "rating": 4.72
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 1,
+   "gmv_30d": 12767700,
+   "aov": 21900,
+   "top3_share": 0.314,
+   "rating": 4.85
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 1,
+   "gmv_30d": 6433700,
+   "aov": 63700,
+   "top3_share": 0.137,
+   "rating": 4.92
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 61,
+   "n_tracked": 12,
+   "gmv_30d": 462269000,
+   "aov": 277972,
+   "top3_share": 0.388,
+   "rating": 4.88
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 203,
+   "n_tracked": 8,
+   "gmv_30d": 155431000,
+   "aov": 1204891,
+   "top3_share": 0.165,
+   "rating": 4.9
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 122,
+   "n_tracked": 1,
+   "gmv_30d": 61374000,
+   "aov": 579000,
+   "top3_share": 0.375,
+   "rating": 4.92
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 128,
+   "n_tracked": 10,
+   "gmv_30d": 139651000,
+   "aov": 655638,
+   "top3_share": 0.229,
+   "rating": 4.95
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 31,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 1.0,
+   "rating": 5.0
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 193,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.129,
+   "rating": 4.89
+  },
+  {
+   "archetype": "fmcg",
+   "segment": "brand",
+   "n_products": 201,
+   "n_tracked": 22,
+   "gmv_30d": 2803564000,
+   "aov": 314230,
+   "top3_share": 0.163,
+   "rating": 4.79
+  },
+  {
+   "archetype": "fmcg",
+   "segment": "brand",
+   "n_products": 174,
+   "n_tracked": 14,
+   "gmv_30d": 563813500,
+   "aov": 262116,
+   "top3_share": 0.24,
+   "rating": 4.91
+  },
+  {
+   "archetype": "fmcg",
+   "segment": "brand",
+   "n_products": 68,
+   "n_tracked": 12,
+   "gmv_30d": 1513932000,
+   "aov": 371425,
+   "top3_share": 0.447,
+   "rating": 4.9
+  },
+  {
+   "archetype": "fmcg",
+   "segment": "brand",
+   "n_products": 70,
+   "n_tracked": 6,
+   "gmv_30d": 15614800,
+   "aov": 29573,
+   "top3_share": 0.423,
+   "rating": 4.89
+  },
+  {
+   "archetype": "fmcg",
+   "segment": "brand",
+   "n_products": 107,
+   "n_tracked": 16,
+   "gmv_30d": 725643000,
+   "aov": 650217,
+   "top3_share": 0.273,
+   "rating": 4.87
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 16,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.655,
+   "rating": 4.91
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 29,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.621,
+   "rating": 4.88
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 47,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.729,
+   "rating": 4.86
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 76,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.5,
+   "rating": 4.83
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 79,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.537,
+   "rating": 4.88
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 30,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.714,
+   "rating": 4.83
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 65,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.786,
+   "rating": 4.82
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 96,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.274,
+   "rating": 4.83
+  },
+  {
+   "archetype": "fashion",
+   "segment": "sme",
+   "n_products": 51,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.571,
+   "rating": 4.65
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 5,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 1.0,
+   "rating": 5.0
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 200,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.116,
+   "rating": 4.91
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 200,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.283,
+   "rating": 4.77
+  },
+  {
+   "archetype": "electronics",
+   "segment": "brand",
+   "n_products": 199,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.121,
+   "rating": 4.93
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 55,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.944,
+   "rating": 4.79
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 48,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.659,
+   "rating": 4.97
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 196,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.2,
+   "rating": 4.95
+  },
+  {
+   "archetype": "electronics",
+   "segment": "sme",
+   "n_products": 26,
+   "n_tracked": 0,
+   "gmv_30d": 0,
+   "aov": null,
+   "top3_share": 0.854,
+   "rating": 4.65
+  }
+ ]
+}
