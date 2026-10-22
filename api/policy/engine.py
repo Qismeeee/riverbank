@@ -32,6 +32,7 @@ class PolicyInput:
     cic_outstanding: int | None = None
     borrower_is_individual: bool = True
     evidence_ids: dict[str, str] = field(default_factory=dict)
+    requested_amount: int | None = None
 
 
 @dataclass
