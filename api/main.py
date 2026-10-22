@@ -37,8 +37,7 @@ def _check_s3() -> str:
     try:
         import boto3
 
-        boto3.client("s3", region_name=config.AWS_REGION).head_bucket(
-            Bucket=config.S3_BUCKET)
+        boto3.client("s3", region_name=config.AWS_REGION).head_bucket(Bucket=config.S3_BUCKET)
         return "ok"
     except Exception as e:
         return f"error: {type(e).__name__}"

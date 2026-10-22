@@ -1,6 +1,3 @@
-# Chạy trên EC2 riverbank-app. GitHub Actions copy thư mục infra/ lên /opt/riverbank rồi `docker compose up -d`.
-# Không build ở đây: image đã build sẵn trên GHCR (arm64), EC2 chỉ pull.
-
 x-logging: &cw-logging
   driver: awslogs
   options:
@@ -21,8 +18,11 @@ services:
       - caddy_config:/config
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
+    env_file:
+      - .env.local
     depends_on:
       - api
+      - pgweb
     logging: *cw-logging
 
   api:
@@ -41,6 +41,20 @@ services:
       resources:
         limits:
           memory: 1200m
+    logging: *cw-logging
+
+  pgweb:
+    image: sosedoff/pgweb:0.16.2
+    restart: unless-stopped
+    command: ["--bind=0.0.0.0", "--listen=8081", "--prefix=db", "--readonly"]
+    env_file:
+      - .env.local
+    expose:
+      - "8081"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     logging: *cw-logging
 
 volumes:

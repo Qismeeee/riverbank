@@ -20,7 +20,7 @@ jobs:
           cache-dependency-path: api/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - name: lint
-        run: ruff check .
+        run: ruff check . && ruff format --check .
       - name: test
         env:
           RIVERBANK_ENV: local

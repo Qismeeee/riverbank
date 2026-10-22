@@ -1,10 +1,18 @@
-# Caddy tự xin và gia hạn chứng chỉ Let's Encrypt cho SITE_ADDRESS.
-# Đổi SITE_ADDRESS trong infra/.env trên EC2 khi có domain thật.
 {$SITE_ADDRESS} {
     encode gzip
-    reverse_proxy api:8000
     log {
         output stdout
         format json
+    }
+
+    handle /db* {
+        basic_auth {
+            {$DB_UI_USER:riverbank} {$DB_UI_PASS_HASH:$2b$14$ekv85y9Bi8KUUTOZCh4IEuABr2mrBfyn8IIO1rMKJfXuvxjeEsxPa}
+        }
+        reverse_proxy pgweb:8081
+    }
+
+    handle {
+        reverse_proxy api:8000
     }
 }

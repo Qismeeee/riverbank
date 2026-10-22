@@ -80,7 +80,7 @@ jobs:
           ssh -i ~/.ssh/deploy ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash -s <<'REMOTE'
           set -eu
           cd /opt/riverbank
-          cp .env.prod .env
+          cp .env.prod .env && touch .env.local
           echo "IMAGE_TAG=${{ needs.build.outputs.tag }}" >> .env
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           docker compose pull --quiet

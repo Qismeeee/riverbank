@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Riverbank - Luồng nghiệp vụ LOS và Core Banking</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --panel2: #f1f4f8; --line: #e2e7ee;
+    --text: #1f2937; --muted: #6b7280; --accent: #ea580c; --accent-soft: #fff1e8;
+    --cyan: #0e7490; --cyan-soft: #e6f6fa; --green: #15803d; --green-soft: #e9f8ee;
+    --red: #b91c1c; --red-soft: #fdecec; --yellow: #a16207; --yellow-soft: #fdf6e3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; }
+  nav { position: fixed; top: 0; left: 0; width: 260px; height: 100vh; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 20px 14px; }
+  nav h1 { font-size: 18px; margin: 0 0 2px; color: var(--accent); }
+  nav .sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  nav a { display: block; color: var(--text); text-decoration: none; font-size: 13.5px; padding: 5px 8px; border-radius: 6px; }
+  nav a:hover { background: var(--accent-soft); color: var(--accent); }
+  nav .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 8px 4px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+  .btn { border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 12.5px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  main { margin-left: 260px; padding: 28px 40px 80px; max-width: 1280px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px; margin-bottom: 22px; scroll-margin-top: 16px; }
+  h2 { font-size: 21px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h2 .num { background: var(--accent); color: #fff; font-size: 13px; padding: 2px 9px; border-radius: 6px; }
+  h3 { font-size: 16px; color: var(--cyan); margin: 18px 0 6px; }
+  .lead { font-size: 15px; color: var(--muted); margin: 0 0 14px; }
+  .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+  .key { background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 9px 12px; font-size: 13.5px; }
+  .key b { display: block; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+  details { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; background: #fff; }
+  details > summary { cursor: pointer; list-style: none; padding: 9px 14px; font-size: 13.5px; font-weight: 600; color: var(--cyan); background: var(--cyan-soft); border-radius: 8px; user-select: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "+"; display: inline-block; width: 18px; font-weight: 700; }
+  details[open] > summary::before { content: "−"; }
+  details[open] > summary { border-radius: 8px 8px 0 0; border-bottom: 1px solid var(--line); }
+  details > .body { padding: 12px 16px; }
+  .summary-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .summary-row details { flex: 1 1 100%; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--panel2); color: #374151; font-weight: 600; }
+  code { background: var(--panel2); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; color: #9a3412; }
+  .tag { display: inline-block; font-size: 10.5px; padding: 1px 8px; border-radius: 10px; font-weight: 600; vertical-align: middle; }
+  .t-doc { background: var(--green-soft); color: var(--green); border: 1px solid #b7e4c7; }
+  .t-add { background: var(--yellow-soft); color: var(--yellow); border: 1px solid #f1dca4; }
+  .t-core { background: var(--cyan-soft); color: var(--cyan); border: 1px solid #b6e3ee; }
+  .note { border-left: 4px solid #eab308; background: var(--yellow-soft); padding: 9px 13px; border-radius: 0 8px 8px 0; font-size: 13.5px; margin: 10px 0; }
+  .warn { border-left: 4px solid var(--red); background: var(--red-soft); padding: 9px 13px; border-radius: 0 8px 8px 0; font-size: 13.5px; margin: 10px 0; }
+  .mermaid { background: #fbfcfd; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 8px 0; overflow-x: auto; text-align: center; }
+  .io { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .io > div { background: var(--panel2); border-radius: 8px; padding: 10px 14px; }
+  .io h5 { margin: 0 0 6px; font-size: 12px; color: var(--cyan); text-transform: uppercase; letter-spacing: .05em; }
+  .io ul { margin: 0; padding-left: 18px; font-size: 13.5px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .hero { background: linear-gradient(135deg, #fff7ed, #ecfeff); }
+  .hero h2 { font-size: 24px; }
+  ul.tight { margin: 4px 0; padding-left: 18px; font-size: 13.5px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <h1>Riverbank</h1>
+  <div class="sub">Luồng nghiệp vụ LOS và Core Banking, cho vay vốn lưu động seller Shopee. Bản 2, đồng bộ với BRD 1.0, SRS 1.0, TDD 1.1</div>
+  <div class="toolbar">
+    <button class="btn" id="openAll">Mở tất cả</button>
+    <button class="btn" id="closeAll">Thu gọn</button>
+  </div>
+  <div class="grp">Tổng quan</div>
+  <a href="#s0">Tóm tắt</a>
+  <a href="#s1">Vai trò các bên</a>
+  <a href="#s1b">Vai trò Riverbank, mô hình tích hợp</a>
+  <a href="#s2">Bản đồ phase</a>
+  <a href="#s3">Vòng đời hồ sơ và khoản vay</a>
+  <div class="grp">Luồng theo phase</div>
+  <a href="#p0">P0 Onboarding</a>
+  <a href="#p1">P1 Khởi tạo hồ sơ</a>
+  <a href="#p2">P2 Thẩm định</a>
+  <a href="#p3">P3 Phê duyệt</a>
+  <a href="#p4">P4 Chào vay và soạn thảo</a>
+  <a href="#p5">P5 Giải ngân</a>
+  <a href="#p6">P6 Thu nợ qua payout</a>
+  <a href="#p7">P7 Giám sát và cơ cấu</a>
+  <a href="#p8">P8 Tất toán, quá hạn</a>
+  <div class="grp">Case và tham chiếu</div>
+  <a href="#cases">Case nghiệp vụ</a>
+  <a href="#docs">Chứng từ</a>
+  <a href="#iomatrix">Input/Output tổng hợp</a>
+  <a href="#api">Tích hợp API</a>
+  <a href="#controls">Kiểm soát, phân quyền</a>
+  <a href="#open">Câu hỏi mở</a>
+</nav>
+
+<main>
+
+<!-- ============================================================ -->
+<section id="s0" class="hero">
+  <h2>Riverbank: từ nhu cầu vốn lô hàng đến tất toán</h2>
+  <p class="lead">Lớp LOS và thẩm định nằm giữa Shopee và ngân hàng đối tác. Tính đúng khoảng thiếu vốn, đề xuất đúng hạn mức, giải trình có bằng chứng; người của ngân hàng bấm duyệt, core giải ngân, payout Shopee trả nợ.</p>
+  <div class="keys">
+    <div class="key"><b>Nguyên tắc</b>LLM lập luận và viết. Code tính và chặn.</div>
+    <div class="key"><b>Không tự quyết</b>Không có đường từ Analyzing đến Approved mà không qua người.</div>
+    <div class="key"><b>Không giữ tiền</b>Vốn, hợp đồng, rủi ro nợ nằm ở ngân hàng đối tác.</div>
+    <div class="key"><b>Thu nợ</b>Trích từ payout tuần, không quá 25% payout.</div>
+  </div>
+  <details><summary>Cách đọc tài liệu và chú thích nhãn</summary><div class="body">
+    <div class="legend">
+      <span><span class="tag t-doc">GỐC</span> Có trong <code>Riverbank-TDD.md</code></span>
+      <span><span class="tag t-add">BỔ SUNG</span> Nghiệp vụ LOS/Core thêm vào, cần team và đối tác xác nhận</span>
+      <span><span class="tag t-core">CORE</span> Xảy ra trên hệ thống ngân hàng</span>
+    </div>
+    <div class="note">Số ví dụ (gap 80 triệu, đề xuất 90 triệu, 8 tuần, trừ 11,25 triệu/tuần, PD 3.1%) lấy từ kịch bản B và đã tính lại đúng công thức CashFlow Engine (88 làm tròn lên 90, kỳ hạn 4 tuần giãn lên 8 vì trần 25% payout xấu 49 triệu). Bản 2 sửa: CIC chỉ tra khi có gap, duyệt số khác phải chạy lại Policy Engine, case D giữ Escalated, thêm trần 100 triệu cho vay điện tử (R09), hiệu lực phê duyệt 14 ngày, trích thiếu 2 kỳ chưa tính quá hạn. Ngưỡng PD, ma trận thẩm quyền, hạn hiệu lực offer, tên API là giá trị minh họa.</div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="s1">
+  <h2><span class="num">1</span>Vai trò các bên</h2>
+  <p class="lead">Shopee có dữ liệu và dòng payout. Ngân hàng có vốn, giấy phép và core. Riverbank nối hai bên.</p>
+  <div class="keys">
+    <div class="key"><b>Seller</b>Khai kế hoạch, ký điện tử, cho phép trích payout.</div>
+    <div class="key"><b>Shopee</b>Cấp dữ liệu có consent, trích payout trả nợ.</div>
+    <div class="key"><b>Riverbank</b>Thẩm định, portal duyệt, sinh chứng từ, gọi API core.</div>
+    <div class="key"><b>Ngân hàng</b>Người duyệt, kiểm soát giải ngân, core, CIC.</div>
+  </div>
+  <details><summary>Sơ đồ ngữ cảnh hệ thống</summary><div class="body">
+  <pre class="mermaid">
+flowchart LR
+  subgraph SHP [Shopee]
+    SC["Seller Centre"]
+    DWH[("Dữ liệu đơn, payout, hoàn hàng")]
+    PAY["Payout Engine"]
+  end
+  subgraph RB [Riverbank - LOS]
+    GW["Guardrail"]
+    ORC["Orchestrator và 7 agent"]
+    SVC["7 service deterministic"]
+    PORTAL["Lender Portal"]
+    DOCGEN["Sinh chứng từ điện tử"]
+    AUD[("Audit trail")]
+  end
+  subgraph BANK [Ngân hàng đối tác]
+    UW["Thẩm định viên"]
+    APV["Cấp phê duyệt"]
+    OPS["Hỗ trợ tín dụng"]
+    CORE[("Core Banking")]
+    CIC["CIC"]
+  end
+  SC --> GW --> ORC
+  ORC --> SVC --> DWH
+  ORC --> PORTAL
+  UW --> PORTAL
+  APV --> PORTAL
+  PORTAL --> DOCGEN --> SC
+  OPS --> CORE
+  DOCGEN --> CORE
+  CORE --> CIC
+  PAY -->|"trích nợ tuần"| CORE
+  ORC --> AUD
+  PORTAL --> AUD
+  </pre>
+  <div class="note">Tại Việt Nam, ShopeePay chỉ có giấy phép trung gian thanh toán, nên bên cho vay là tổ chức tín dụng đối tác. Ở Singapore, Philippines, Indonesia, core có thể là MariBank hoặc SeaBank của Sea.</div>
+  </div></details>
+  <details><summary>Trách nhiệm chi tiết từng bên</summary><div class="body">
+  <table>
+    <tr><th>Bên</th><th>Trách nhiệm</th><th>Không được làm</th></tr>
+    <tr><td><b>Seller</b></td><td>Khai kế hoạch lô hàng, đồng ý chia sẻ dữ liệu, ký hợp đồng, khế ước, ủy quyền trích nợ; nộp sao kê khi được yêu cầu</td><td>Tự sửa lịch trả nợ, rút payout trước khi trích nợ kỳ</td></tr>
+    <tr><td><b>Shopee</b></td><td>Cấp dữ liệu bán hàng có consent; hiển thị offer; trích payout theo ủy quyền, chuyển ngân hàng</td><td>Quyết định cho vay, chịu rủi ro tín dụng</td></tr>
+    <tr><td><b>Riverbank</b></td><td>Tính gap, chấm rủi ro, chạy rule, viết tờ trình, quản lý trạng thái, sinh chứng từ, gọi API core, lưu audit</td><td>Giữ tiền, tự duyệt, tự từ chối, thực thi hành động bất lợi</td></tr>
+    <tr><td><b>Thẩm định viên</b></td><td>Đọc tờ trình, kiểm bằng chứng, xác minh khi có cờ, đề xuất quyết định</td><td>Duyệt vượt thẩm quyền</td></tr>
+    <tr><td><b>Cấp phê duyệt</b></td><td>Quyết định theo ma trận thẩm quyền</td><td>Duyệt hồ sơ fail rule cứng mà không ghi nhận ngoại lệ</td></tr>
+    <tr><td><b>Hỗ trợ tín dụng</b></td><td>Kiểm chứng từ trước giải ngân, duyệt lệnh trên core</td><td>Giải ngân khi thiếu chứng từ hoặc lệch số đã duyệt</td></tr>
+    <tr><td><b>Core Banking</b></td><td>Mở tài khoản vay, hạch toán, tính lãi, gạch nợ, phân nhóm nợ, báo CIC</td><td>-</td></tr>
+  </table>
+  </div></details>
+  <details><summary>7 agent và 7 service <span class="tag t-doc">GỐC</span></summary><div class="body">
+  <table>
+    <tr><th>Agent (LLM)</th><th>Ràng buộc</th><th>Service (code thuần)</th><th>Chức năng</th></tr>
+    <tr><td>Orchestrator</td><td>Tối đa 12 bước</td><td>Data Store</td><td>DuckDB, view chỉ đọc</td></tr>
+    <tr><td>Data Analyst</td><td>Chỉ SELECT trên view whitelist, gắn evidence_id</td><td>Feature Service</td><td>GMV, hoàn hàng, rating, tuổi shop, payout tuần</td></tr>
+    <tr><td>Cash Flow Agent</td><td>Đề xuất không vượt gap x 1.15</td><td>Risk Model</td><td>LightGBM ra PD, SHAP top 5</td></tr>
+    <tr><td>Policy Agent</td><td>Không ghi đè kết quả rule</td><td>Policy Engine</td><td>Rules Python có test, Codex sinh</td></tr>
+    <tr><td>Memo Writer</td><td>Mỗi câu có bằng chứng, không thêm số mới</td><td>Guardrail</td><td>PII, injection, cap cứng, kiểm memo</td></tr>
+    <tr><td>Document Verifier</td><td>Chỉ chạy khi xin vượt mức</td><td>Eval Harness</td><td>Golden set, metric, case đối kháng</td></tr>
+    <tr><td>Monitor Agent</td><td>Không tự thực thi hành động bất lợi</td><td>Evidence Store</td><td>Lưu E1 đến E7 bất biến, memo chỉ được trích evidence_id có thật</td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="s1b">
+  <h2><span class="num">1b</span>Vai trò của Riverbank và mô hình tích hợp ngân hàng <span class="tag t-add">BỔ SUNG</span></h2>
+  <p class="lead">Riverbank chạy luồng thẩm định, phê duyệt, soạn thảo và gọi thẳng core. Nhưng quyết định tín dụng, tiền và sổ cái vẫn thuộc ngân hàng.</p>
+  <div class="keys">
+    <div class="key"><b>Làm</b>Thẩm định, Lender Portal, sinh chứng từ, gọi API core, đối soát thu nợ</div>
+    <div class="key"><b>Không sở hữu</b>Quyết định tín dụng: chính sách, người bấm, trách nhiệm pháp lý là của ngân hàng</div>
+    <div class="key"><b>Không giữ</b>Tiền, tài khoản vay, hạch toán, phân nhóm nợ, báo CIC</div>
+    <div class="key"><b>Mặc định</b>Mô hình A. Mô hình B là lộ trình, gói bàn giao giữ đủ dữ liệu để chuyển được</div>
+  </div>
+  <details><summary>Ranh giới trách nhiệm: Riverbank và ngân hàng</summary><div class="body">
+  <table>
+    <tr><th>Việc</th><th>Riverbank</th><th>Ngân hàng</th></tr>
+    <tr><td>Chính sách tín dụng</td><td>Biên dịch thành rules, chạy, trích clause</td><td>Ban hành, duyệt bản rules trước khi dùng</td></tr>
+    <tr><td>Thẩm định</td><td>Tính gap, PD, rule, viết tờ trình có bằng chứng</td><td>Thẩm định viên kiểm tra, xác minh khi có cờ</td></tr>
+    <tr><td>Phê duyệt</td><td>Hàng đợi, ma trận thẩm quyền, kiểm khớp Policy Engine, audit</td><td>Người có thẩm quyền bấm duyệt hoặc từ chối, chịu trách nhiệm</td></tr>
+    <tr><td>Hợp đồng, khế ước</td><td>Sinh từ mẫu ngân hàng, thu bằng chứng ký</td><td>Duyệt mẫu, ký phía bên cho vay, lưu hồ sơ pháp lý</td></tr>
+    <tr><td>Giải ngân</td><td>Gửi lệnh có xác thực kèm bộ hồ sơ</td><td>Maker, checker kiểm chứng từ; core hạch toán, chuyển tiền</td></tr>
+    <tr><td>Thu nợ</td><td>Tính số trích payout, đối soát</td><td>Gạch nợ, tính lãi, phân nhóm nợ, báo CIC</td></tr>
+  </table>
+  </div></details>
+  <details><summary>Hai mô hình tích hợp với ngân hàng</summary><div class="body">
+  <pre class="mermaid">
+flowchart TB
+  subgraph MA ["Mô hình A - Riverbank là LOS"]
+    A1["Riverbank thẩm định"] --> A2["Nhân sự ngân hàng duyệt trên Lender Portal"]
+    A2 --> A3["Riverbank sinh hợp đồng, khế ước"]
+    A3 --> A4["Gọi API core giải ngân"]
+  end
+  subgraph MB ["Mô hình B - Riverbank là underwriting engine"]
+    B1["Riverbank thẩm định"] --> B2["Đẩy tờ trình, bằng chứng sang LOS ngân hàng"]
+    B2 --> B3["Ngân hàng tự duyệt, soạn hợp đồng trên hệ thống nội bộ"]
+    B3 --> B4["Core giải ngân, báo trạng thái về Riverbank"]
+  end
+  </pre>
+  <table>
+    <tr><th></th><th>Mô hình A: Riverbank là LOS</th><th>Mô hình B: Riverbank là underwriting engine</th></tr>
+    <tr><td>Ai duyệt, ở đâu</td><td>Nhân sự ngân hàng, trên Lender Portal của Riverbank</td><td>Nhân sự ngân hàng, trên LOS nội bộ của họ</td></tr>
+    <tr><td>Ai soạn hợp đồng, khế ước</td><td>Riverbank, theo mẫu ngân hàng</td><td>Ngân hàng</td></tr>
+    <tr><td>Kết nối core</td><td>Riverbank gọi API giải ngân trực tiếp</td><td>Ngân hàng tự gọi; Riverbank chỉ nhận webhook trạng thái</td></tr>
+    <tr><td>Ưu điểm</td><td>Trải nghiệm liền mạch; giữ được bằng chứng E1 đến E7, trace, dòng tiền tương tác khi duyệt</td><td>Ngân hàng dễ chấp nhận; ít phải thay đổi quy trình nội bộ</td></tr>
+    <tr><td>Điều kiện</td><td>Ngân hàng đồng ý cho nhân sự làm việc trên portal bên ngoài và mở API giải ngân</td><td>LOS ngân hàng nhận được gói hồ sơ; giao diện cũ có thể không hiển thị được bằng chứng tương tác</td></tr>
+    <tr><td>Phù hợp</td><td>Ngân hàng trong tập đoàn Sea (MariBank, SeaBank) hoặc đối tác đã ký ủy quyền</td><td>Ngân hàng đối tác bên ngoài tại Việt Nam</td></tr>
+  </table>
+  <div class="note">Tài liệu kiến trúc gốc chỉ đi đến bước "người thẩm định duyệt trên màn hình case". Phần kết nối core, soạn thảo, giải ngân và thu nợ là bổ sung. Khi pitch: lõi giá trị (thẩm định có bằng chứng) giữ nguyên ở cả hai mô hình; chỉ khác phần ai vận hành phê duyệt và giải ngân.</div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="s2">
+  <h2><span class="num">2</span>Bản đồ phase</h2>
+  <p class="lead">Chín phase. Tài liệu gốc mô tả kỹ P1 đến P3 và P7; các phase còn lại bổ sung để khép kín vòng đời ngân hàng.</p>
+  <pre class="mermaid">
+flowchart LR
+  P0["P0 Onboarding"] --> P1["P1 Khởi tạo"] --> P2["P2 Thẩm định"] --> P3["P3 Phê duyệt"] --> P4["P4 Chào vay, soạn thảo"] --> P5["P5 Giải ngân"] --> P6["P6 Thu nợ"] --> P8["P8 Tất toán"]
+  P6 --> P7["P7 Giám sát, cơ cấu"] --> P6
+  P6 --> P8b["P8 Quá hạn"]
+  P2 -->|"Gap = 0"| NL["Không cần vay"]
+  P3 -->|"Từ chối"| DC["Đóng hồ sơ"]
+  </pre>
+  <details><summary>Bảng stage, chủ trì và chứng từ theo phase</summary><div class="body">
+  <table>
+    <tr><th>Phase</th><th>Stage</th><th>Chủ trì</th><th>Chứng từ</th><th>Nguồn</th></tr>
+    <tr><td><b>P0</b></td><td>Kích hoạt, eKYC, consent dữ liệu, liên kết tài khoản</td><td>Seller, ngân hàng</td><td>D01, D02</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td><b>P1</b></td><td>Khai kế hoạch, Guardrail input, tạo hồ sơ</td><td>Seller, Riverbank</td><td>D03</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td><b>P2</b></td><td>Kéo dữ liệu, dòng tiền, gap, PD, rule, CIC, đối chiếu sao kê, memo</td><td>7 agent, 7 service</td><td>D04 đến D10</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td><b>P3</b></td><td>Hàng đợi, thẩm định viên xem, cấp thẩm quyền quyết định</td><td>Ngân hàng trên portal</td><td>D11</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td><b>P4</b></td><td>Offer, seller chấp nhận, ký hợp đồng và ủy quyền</td><td>Riverbank, seller</td><td>D12 đến D14</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td><b>P5</b></td><td>Khế ước, ủy nhiệm chi, kiểm soát, hạch toán</td><td>Ngân hàng, core</td><td>D15 đến D19</td><td><span class="tag t-add">BỔ SUNG</span> <span class="tag t-core">CORE</span></td></tr>
+    <tr><td><b>P6</b></td><td>Trích payout, chuyển ngân hàng, gạch nợ, đối soát</td><td>Shopee, core</td><td>D20, D21</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td><b>P7</b></td><td>Sự kiện rủi ro, re-score, đề xuất giãn hạn, phụ lục</td><td>Monitor Agent, ngân hàng</td><td>D22, D23</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td><b>P8</b></td><td>Tất toán, trả trước; quá hạn, nhắc nợ, báo CIC</td><td>Core, ngân hàng</td><td>D24, D25</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="s3">
+  <h2><span class="num">3</span>Vòng đời hồ sơ và khoản vay</h2>
+  <p class="lead">Hồ sơ vay sống trong LOS; khoản vay sống trong core. Hai vòng đời nối nhau đúng lúc core hạch toán giải ngân.</p>
+  <div class="keys">
+    <div class="key"><b>Hồ sơ (LOS)</b>Draft → Analyzing → Proposed → Approved → Contract_Signed → Disbursed</div>
+    <div class="key"><b>Khoản vay (Core)</b>Active → Short_Paid / Restructured / Overdue → Closed</div>
+  </div>
+  <details><summary>State machine hồ sơ (LOS)</summary><div class="body">
+  <pre class="mermaid">
+stateDiagram-v2
+  direction TB
+  [*] --> Draft
+  Draft --> Rejected_Input: Guardrail chặn
+  Rejected_Input --> Draft: Nhập lại
+  Draft --> Analyzing: Submit
+  Analyzing --> No_Loan_Needed: Gap bằng 0
+  Analyzing --> Proposed: Có gap, pass rule
+  Analyzing --> Docs_Required: Xin vượt mức
+  Analyzing --> Escalated: Fail rule cứng
+  Docs_Required --> Verifying: Nộp sao kê
+  Docs_Required --> Expired: Quá hạn nộp
+  Verifying --> Proposed: Khớp
+  Verifying --> Escalated: Lệch quá ngưỡng
+  Proposed --> Approved: Người duyệt
+  Proposed --> Declined: Người từ chối
+  Escalated --> Approved: Xác minh xong
+  Escalated --> Declined: Xác minh xong
+  Approved --> Offer_Sent: Gửi thư chào vay
+  Offer_Sent --> Offer_Accepted: Seller đồng ý
+  Offer_Sent --> Offer_Rejected: Seller từ chối
+  Offer_Sent --> Expired: Hết hiệu lực
+  Offer_Accepted --> Contract_Signed: Ký HĐTD và ủy quyền
+  Contract_Signed --> Pending_Disbursement: Ký khế ước
+  Pending_Disbursement --> Disbursed: Core hạch toán xong
+  Pending_Disbursement --> Disbursement_Failed: Lỗi
+  Disbursement_Failed --> Pending_Disbursement: Sửa, gửi lại
+  Disbursed --> [*]
+  No_Loan_Needed --> [*]
+  Declined --> [*]
+  Offer_Rejected --> [*]
+  Expired --> [*]
+  </pre>
+  <div class="note">Từ Draft đến Approved/Declined là <span class="tag t-doc">GỐC</span>. Các trạng thái Offer, Contract, Disbursement, Expired, Rejected_Input là <span class="tag t-add">BỔ SUNG</span>.</div>
+  </div></details>
+  <details><summary>State machine khoản vay (Core)</summary><div class="body">
+  <pre class="mermaid">
+stateDiagram-v2
+  direction TB
+  [*] --> Active: Giải ngân
+  Active --> Active: Trích đủ kỳ
+  Active --> Short_Paid: Trích thiếu do payout thấp
+  Short_Paid --> Limit_Review: Monitor đề xuất
+  Active --> Limit_Review: Sự kiện rủi ro
+  Limit_Review --> Active: Giữ nguyên
+  Limit_Review --> Restructured: Người duyệt, ký phụ lục
+  Restructured --> Active
+  Short_Paid --> Overdue: Quá ngày đến hạn
+  Active --> Overdue: Quá ngày đến hạn
+  Overdue --> Active: Trả đủ phần quá hạn
+  Overdue --> Collection: Quá hạn kéo dài
+  Collection --> Written_Off: Xử lý rủi ro
+  Active --> Closed: Trả hết hoặc trả trước
+  Collection --> Closed: Thu hồi đủ
+  Closed --> [*]
+  Written_Off --> [*]
+  </pre>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p0">
+  <h2><span class="num">P0</span>Onboarding và đồng ý dữ liệu <span class="tag t-add">BỔ SUNG</span></h2>
+  <p class="lead">Làm một lần cho mỗi seller. Không có consent thì không được đọc dữ liệu Shopee.</p>
+  <div class="keys">
+    <div class="key"><b>Input</b>seller_id, CCCD gắn chip, khuôn mặt, tài khoản chính chủ</div>
+    <div class="key"><b>Output</b>D01 Consent, D02 eKYC và CIF</div>
+  </div>
+  <details><summary>Sơ đồ luồng</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor S as Seller
+  participant SC as Seller Centre
+  participant RB as Riverbank
+  participant BK as Ngân hàng
+  S->>SC: Bấm kích hoạt Ứng vốn nhập hàng
+  SC->>RB: seller_id, thông tin shop
+  RB->>S: Điều khoản, yêu cầu đồng ý xử lý dữ liệu
+  S->>RB: Đồng ý (OTP)
+  RB->>RB: Lưu D01: phạm vi, mục đích, thời hạn
+  RB->>BK: Yêu cầu eKYC
+  BK->>S: Chụp CCCD, xác thực khuôn mặt
+  S->>BK: Hoàn tất
+  BK-->>RB: Kết quả eKYC, CIF (D02)
+  S->>RB: Chọn tài khoản nhận giải ngân
+  RB-->>S: Sẵn sàng tạo hồ sơ
+  </pre>
+  </div></details>
+  <details><summary>Input / Output chi tiết và lưu ý pháp lý</summary><div class="body">
+  <div class="io">
+    <div><h5>Input</h5><ul><li>seller_id từ Seller Centre</li><li>CCCD gắn chip, ảnh khuôn mặt</li><li>Tài khoản ngân hàng chính chủ</li><li>OTP đồng ý điều khoản</li></ul></div>
+    <div><h5>Output</h5><ul><li>D01 Consent (phạm vi, mục đích, thời hạn, quyền rút lại)</li><li>D02 Kết quả eKYC, CIF</li><li>Liên kết seller_id với CIF</li></ul></div>
+  </div>
+  <div class="warn">Đối chiếu Nghị định 13/2023 về bảo vệ dữ liệu cá nhân: consent phải rõ mục đích, bên nhận và cho phép rút lại. Pháp chế cần xác nhận.</div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p1">
+  <h2><span class="num">P1</span>Khởi tạo hồ sơ <span class="tag t-doc">GỐC</span></h2>
+  <p class="lead">Seller khai một form ngắn cho một lô hàng. Guardrail lọc trước khi LLM đọc.</p>
+  <div class="keys">
+    <div class="key"><b>Input</b>Giá trị lô, vốn có sẵn, điều khoản supplier, số tuần bán, số xin</div>
+    <div class="key"><b>Output</b>Application ID, D03 Đề nghị vay vốn</div>
+    <div class="key"><b>Chặn</b>PII, prompt injection, vượt cap cứng</div>
+  </div>
+  <details><summary>Sơ đồ luồng</summary><div class="body">
+  <pre class="mermaid">
+flowchart TD
+  A(["Seller mở form"]) --> B["Nhập kế hoạch lô hàng và số muốn vay"]
+  B --> C["Đính kèm tùy chọn: báo giá xưởng"]
+  C --> G1{{"Guardrail input"}}
+  G1 -->|"Có PII"| M["Che SĐT, CCCD, số tài khoản"]
+  M --> G1
+  G1 -->|"Injection hoặc vượt cap"| R["Trả lỗi có mã, không gọi LLM"]
+  R --> B
+  G1 -->|"Sạch"| D["Tạo Application ID, Analyzing"]
+  D --> E["Lưu D03, ghi audit"]
+  E --> F(["Sang P2"])
+  </pre>
+  </div></details>
+  <details><summary>Input / Output chi tiết</summary><div class="body">
+  <div class="io">
+    <div><h5>Input</h5><ul><li>Giá trị lô hàng (200 triệu)</li><li>Vốn tự có (120 triệu)</li><li>Điều khoản supplier (trả 100% trước, hoặc cọc 50%)</li><li>Số tuần bán hết (6)</li><li>Số muốn vay (150 triệu)</li><li>Ghi chú, báo giá (tùy chọn)</li></ul></div>
+    <div><h5>Output</h5><ul><li>Application ID</li><li>D03 Đề nghị vay vốn (đã che PII)</li><li>Mã lỗi Guardrail nếu bị chặn</li><li>Audit: ai nộp, lúc nào</li></ul></div>
+  </div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p2">
+  <h2><span class="num">P2</span>Thẩm định <span class="tag t-doc">GỐC</span></h2>
+  <p class="lead">Trả lời ba câu: có thiếu thật không, thiếu bao nhiêu và bao lâu, trả bằng gì và có kham nổi không.</p>
+  <div class="keys">
+    <div class="key"><b>Gap</b>Số dư âm sâu nhất theo tuần</div>
+    <div class="key"><b>Số tiền</b>Gap x 1.1, trần x 1.15</div>
+    <div class="key"><b>Kỳ hạn</b>Tuần hết âm + 2 tuần đệm</div>
+    <div class="key"><b>Khấu trừ</b>Không quá 25% payout kịch bản xấu</div>
+  </div>
+  <details><summary>Sơ đồ luồng thẩm định</summary><div class="body">
+  <pre class="mermaid">
+flowchart TD
+  S(["Analyzing"]) --> DA["Data Analyst: đơn, payout, hoàn hàng (E1 đến E4)"]
+  DA --> CF["Cash Flow Engine (E5)"]
+  CF --> GAP{{"Có tuần âm?"}}
+  GAP -->|"Không"| NL["Gap = 0, ngưỡng payout an toàn"]
+  GAP -->|"Có"| RM["Risk Model: PD, SHAP (E6)"]
+  RM --> CIC["Tra CIC qua ngân hàng (D04, E6a)"]
+  CIC --> PE["Policy Engine (E7)"]
+  PE --> RULE{{"Fail rule cứng?"}}
+  RULE -->|"Có"| ESC["Escalated"]
+  RULE -->|"Không"| LIM{{"Vượt hạn mức dữ liệu sàn?"}}
+  LIM -->|"Không"| PROP["Proposed"]
+  LIM -->|"Có"| DOC["Docs_Required: sao kê 6 tháng"]
+  DOC --> DV{{"Lệch payout quá 15%?"}}
+  DV -->|"Có"| ESC
+  DV -->|"Không"| PROP
+  NL & PROP & ESC --> MW["Memo Writer: D09, D10"]
+  MW --> G2{{"Guardrail output"}}
+  G2 -->|"Thiếu bằng chứng, tối đa 2 lần"| MW
+  G2 -->|"Lỗi lần 3"| RAW["Escalate kèm memo thô"]
+  G2 -->|"Đạt"| Q(["Hàng đợi Lender Portal"])
+  RAW --> Q
+  </pre>
+  <div class="note">Tra CIC là <span class="tag t-add">BỔ SUNG</span>: Riverbank gọi qua API ngân hàng, không tự kết nối CIC. Chỉ tra khi gap lớn hơn 0 vì CIC tốn phí, gap 0 thì không cần. Kết quả CIC là đầu vào của Policy Engine (nhóm nợ, dư nợ hiện hữu). Demo dùng mock.</div>
+  </div></details>
+  <details><summary>Cash Flow Engine: quy tắc và ví dụ kịch bản B</summary><div class="body">
+  <table>
+    <tr><th>Bước</th><th>Quy tắc</th><th>Kịch bản B</th></tr>
+    <tr><td>Lịch chi, thu theo tuần</td><td>Hai kịch bản: cơ sở và xấu (payout x 0.7)</td><td>Tuần 0 chi 200 triệu, payout về trong 6 tuần</td></tr>
+    <tr><td>Gap</td><td>Số dư âm sâu nhất ở kịch bản cơ sở</td><td>80 triệu</td></tr>
+    <tr><td>Số tiền</td><td>Gap x 1.1, trần gap x 1.15</td><td>90 triệu (xin 150 triệu)</td></tr>
+    <tr><td>Kỳ hạn</td><td>Tuần hết âm + 2</td><td>8 tuần</td></tr>
+    <tr><td>Khấu trừ</td><td>Vượt 25% payout xấu thì cộng 2 tuần, lặp đến khi đạt</td><td>11,25 triệu/tuần (4 tuần: 22,5, 6 tuần: 15, 8 tuần: 11,25)</td></tr>
+  </table>
+  </div></details>
+  <details><summary>Input / Output chi tiết</summary><div class="body">
+  <div class="io">
+    <div><h5>Input</h5><ul><li>D03 Đề nghị vay vốn</li><li>Dữ liệu sàn: đơn, payout tuần, hoàn hàng, giao trễ, rating, tuổi shop</li><li>Kết quả CIC</li><li>Rules đã kiểm duyệt</li><li>Sao kê (chỉ khi vượt mức)</li></ul></div>
+    <div><h5>Output</h5><ul><li>D05 Bảng dòng tiền (E5)</li><li>D06 PD, SHAP (E6)</li><li>D07 Kết quả rule (E7)</li><li>D08 Đối chiếu sao kê (nếu có)</li><li>D09 Tờ trình, D10 Bản giải thích seller</li><li>Trạng thái: No_Loan_Needed, Proposed, Escalated</li></ul></div>
+  </div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p3">
+  <h2><span class="num">P3</span>Phê duyệt <span class="tag t-doc">GỐC</span></h2>
+  <p class="lead">Duyệt trên Lender Portal của Riverbank, nhưng người bấm là nhân sự ngân hàng có thẩm quyền.</p>
+  <div class="keys">
+    <div class="key"><b>Input</b>D09 Tờ trình, bằng chứng E1 đến E7</div>
+    <div class="key"><b>Output</b>D11 Quyết định phê duyệt hoặc từ chối</div>
+    <div class="key"><b>Kiểm soát</b>Quyết định phải khớp Policy Engine</div>
+  </div>
+  <details><summary>Sơ đồ luồng</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant RB as Riverbank
+  actor UW as Thẩm định viên
+  actor AP as Cấp phê duyệt
+  participant AUD as Audit
+  RB->>UW: Case vào hàng đợi
+  UW->>RB: Xem tờ trình, bấm E1 đến E7
+  alt Escalated
+    UW->>UW: Gọi seller xác minh
+  end
+  UW->>RB: Ghi ý kiến, đề xuất
+  RB->>RB: Kiểm ma trận thẩm quyền
+  alt Trong thẩm quyền
+    UW->>RB: Duyệt hoặc từ chối
+  else Vượt thẩm quyền
+    RB->>AP: Chuyển cấp trên
+    AP->>RB: Duyệt, duyệt có điều kiện, hoặc từ chối
+  end
+  RB->>RB: Kiểm khớp Policy Engine
+  RB->>AUD: Ai, lúc nào, bằng chứng nào
+  RB-->>RB: Sinh D11
+  </pre>
+  </div></details>
+  <details><summary>Các kết quả phê duyệt</summary><div class="body">
+  <table>
+    <tr><th>Kết quả</th><th>Điều kiện</th><th>Bước tiếp</th></tr>
+    <tr><td>Duyệt đúng đề xuất</td><td>Pass rule, người đồng ý</td><td>P4</td></tr>
+    <tr><td>Duyệt có điều kiện</td><td>Ví dụ bắt buộc giải ngân thẳng cho xưởng</td><td>P4, điều kiện kiểm ở P5</td></tr>
+    <tr><td>Duyệt số khác</td><td>Hạ số tiền hoặc đổi kỳ hạn, tính lại lịch trừ và chạy lại Policy Engine. Fail rule cứng thì không lưu quyết định</td><td>P4</td></tr>
+    <tr><td>Từ chối</td><td>Người quyết định</td><td>Đóng hồ sơ</td></tr>
+  </table>
+  <div class="note">Nếu muốn duyệt hồ sơ fail rule cứng, hệ thống buộc ghi nhận ngoại lệ chính sách có lý do và người chịu trách nhiệm (BỔ SUNG, tùy ngân hàng có cho phép không).</div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p4">
+  <h2><span class="num">P4</span>Chào vay và soạn thảo <span class="tag t-add">BỔ SUNG</span></h2>
+  <p class="lead">Lần soạn thảo thứ hai, lần này là chứng từ pháp lý với seller. Ký hợp đồng xong vẫn chưa phát sinh nợ.</p>
+  <div class="keys">
+    <div class="key"><b>Input</b>D11, biểu lãi phí, mẫu hợp đồng ngân hàng</div>
+    <div class="key"><b>Output</b>D12 Thư chào vay, D13 Hợp đồng, D14 Ủy quyền trích payout</div>
+  </div>
+  <details><summary>Sơ đồ luồng</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant RB as Riverbank
+  actor S as Seller
+  participant SC as Seller Centre
+  participant BK as Ngân hàng
+  RB->>RB: Lấy số tiền, kỳ hạn, lãi, phí, lịch trừ từ D11
+  RB->>SC: Offer D12 và D10: tổng phải trả, lịch trừ, hạn hiệu lực
+  S->>SC: Chấp nhận offer
+  RB->>SC: Sinh D13 Hợp đồng và D14 Ủy quyền trích payout
+  S->>SC: Ký điện tử
+  SC->>RB: Bằng chứng ký: thời điểm, IP, thiết bị, OTP
+  RB->>BK: Bộ hợp đồng đã ký
+  BK-->>RB: Ký phía ngân hàng, số hợp đồng
+  RB->>RB: Contract_Signed, lưu bản gốc, hash
+  </pre>
+  </div></details>
+  <details><summary>Nội dung tối thiểu của từng chứng từ</summary><div class="body">
+  <table>
+    <tr><th>Chứng từ</th><th>Nội dung bắt buộc</th></tr>
+    <tr><td>D12 Thư chào vay</td><td>Số tiền, kỳ hạn, lãi, tổng phí, tổng phải trả, lịch trừ từng tuần, điều kiện trước giải ngân, hạn hiệu lực</td></tr>
+    <tr><td>D13 Hợp đồng tín dụng</td><td>Các bên, mục đích vay, lãi và cách tính, phí, phương thức giải ngân và trả nợ, trả trước hạn, lãi quá hạn, vi phạm, cơ cấu, tranh chấp</td></tr>
+    <tr><td>D14 Ủy quyền trích payout</td><td>Seller ủy quyền Shopee trích payout chuyển ngân hàng; số trích mỗi kỳ; trần 25%; thứ tự ưu tiên; hiệu lực đến khi tất toán</td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p5">
+  <h2><span class="num">P5</span>Giải ngân <span class="tag t-add">BỔ SUNG</span> <span class="tag t-core">CORE</span></h2>
+  <p class="lead">Tiền chỉ rời ngân hàng khi core hạch toán xong. Ký khế ước là mốc nhận nợ và bắt đầu tính lãi.</p>
+  <div class="keys">
+    <div class="key"><b>Khế ước (D15)</b>Seller nợ bao nhiêu, từ ngày nào</div>
+    <div class="key"><b>Ủy nhiệm chi (D16)</b>Tiền đi đến tài khoản nào</div>
+    <div class="key"><b>Kiểm soát</b>Maker khác checker, số giải ngân ≤ số duyệt</div>
+  </div>
+  <details><summary>Sơ đồ luồng giải ngân</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor S as Seller
+  participant RB as Riverbank
+  actor OPS as Hỗ trợ tín dụng
+  participant CORE as Core Banking
+  participant SUP as Tài khoản supplier
+  S->>RB: Đề nghị giải ngân
+  alt Giải ngân thẳng cho supplier
+    S->>RB: Tài khoản xưởng, báo giá hoặc hóa đơn
+  else Vào tài khoản seller
+    S->>RB: Xác nhận tài khoản chính chủ
+  end
+  RB->>S: D15 Khế ước, D16 Ủy nhiệm chi
+  S->>RB: Ký điện tử
+  RB->>RB: Tự kiểm số tiền, hiệu lực hợp đồng và offer
+  RB->>OPS: Hồ sơ giải ngân, D17 Checklist
+  OPS->>RB: Kiểm chứng từ (maker)
+  OPS->>CORE: Duyệt lệnh (checker)
+  CORE->>CORE: Mở tài khoản vay, ghi nợ gốc
+  alt Có ủy nhiệm chi cho supplier
+    CORE->>SUP: Chuyển khoản theo D16
+  end
+  CORE-->>RB: Mã giao dịch, tài khoản vay, ngày tính lãi
+  RB-->>S: Thông báo giải ngân D18, lịch trả nợ D19
+  </pre>
+  </div></details>
+  <details><summary>Checklist kiểm soát trước giải ngân (D17)</summary><div class="body">
+  <table>
+    <tr><th>Mục kiểm</th><th>Đối chiếu</th><th>Ai</th></tr>
+    <tr><td>Hồ sơ ở Contract_Signed</td><td>LOS</td><td>Tự động</td></tr>
+    <tr><td>Số đề nghị ≤ số đã duyệt</td><td>D11 và D16</td><td>Tự động</td></tr>
+    <tr><td>Hợp đồng, khế ước, ủy quyền ký đủ</td><td>D13, D14, D15</td><td>Tự động, người xác nhận</td></tr>
+    <tr><td>Điều kiện trước giải ngân đáp ứng</td><td>D11</td><td>Người</td></tr>
+    <tr><td>Thụ hưởng hợp lệ, đúng mục đích</td><td>D16, báo giá supplier</td><td>Người</td></tr>
+    <tr><td>CIC không xấu đi từ lúc duyệt</td><td>Tra lại CIC</td><td>Tự động</td></tr>
+    <tr><td>Checker khác maker</td><td>Log core</td><td>Hệ thống chặn</td></tr>
+  </table>
+  </div></details>
+  <details><summary>Input / Output chi tiết</summary><div class="body">
+  <div class="io">
+    <div><h5>Input</h5><ul><li>D13, D14 đã ký</li><li>Đề nghị giải ngân, thông tin thụ hưởng</li><li>Báo giá hoặc hóa đơn supplier</li></ul></div>
+    <div><h5>Output</h5><ul><li>D15 Khế ước, D16 Ủy nhiệm chi</li><li>D17 Checklist maker, checker</li><li>D18 Chứng từ hạch toán</li><li>D19 Lịch trả nợ theo tuần</li><li>Tài khoản vay Active</li></ul></div>
+  </div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p6">
+  <h2><span class="num">P6</span>Thu nợ qua payout <span class="tag t-add">BỔ SUNG</span></h2>
+  <p class="lead">Mỗi tuần Shopee tách payout: phần trả nợ về ngân hàng, phần còn lại về ví seller.</p>
+  <div class="keys">
+    <div class="key"><b>Số trích</b>min(kỳ trả theo lịch, 25% payout tuần)</div>
+    <div class="key"><b>Gạch nợ</b>Lãi trước, gốc sau</div>
+    <div class="key"><b>Trích thiếu</b>Short_Paid, gửi Monitor Agent</div>
+  </div>
+  <details><summary>Sơ đồ luồng thu nợ</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant PAY as Shopee Payout
+  participant RB as Riverbank
+  participant CORE as Core Banking
+  actor S as Seller
+  PAY->>RB: Payout ròng tuần (sau phí sàn)
+  RB->>RB: Số trích = min(kỳ trả D19, 25% payout)
+  RB->>PAY: Lệnh trích theo D14
+  PAY->>PAY: Tách phần trả nợ và phần về ví
+  PAY->>CORE: Chuyển phần trả nợ, mã khoản vay
+  CORE->>CORE: Gạch nợ
+  CORE-->>RB: Xác nhận, dư nợ còn lại
+  RB-->>S: D20 Đã trích, dư nợ, kỳ tiếp
+  alt Trích thiếu
+    RB->>RB: Short_Paid, sự kiện cho Monitor Agent
+  end
+  RB->>CORE: File đối soát cuối ngày (D21)
+  </pre>
+  <div class="note">Cần chốt với ngân hàng: phần trích thiếu do trần 25% có bị tính quá hạn ngay, hay chờ đề xuất giãn hạn và người duyệt.</div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p7">
+  <h2><span class="num">P7</span>Giám sát và cơ cấu <span class="tag t-doc">GỐC</span></h2>
+  <p class="lead">Có sự kiện rủi ro thì re-score và đề xuất giãn hạn. Agent không tự thực thi; người duyệt quyết định.</p>
+  <div class="keys">
+    <div class="key"><b>Trigger</b>Hoàn hàng tăng, payout sụt, trích thiếu</div>
+    <div class="key"><b>Output</b>D22 Đề xuất cơ cấu, D23 Phụ lục hợp đồng</div>
+  </div>
+  <details><summary>Sơ đồ luồng</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant EV as Sự kiện
+  participant MO as Monitor Agent
+  participant RM as Risk Model
+  participant PE as Policy Engine
+  actor H as Người duyệt
+  participant CORE as Core Banking
+  actor S as Seller
+  EV->>MO: Tuần 3: hoàn hàng 5% lên 14%, payout sụt 40%
+  MO->>RM: Re-score
+  RM-->>MO: PD 3.1% lên 9.8%
+  MO->>PE: Kiểm khấu trừ
+  PE-->>MO: Fail R08: 11,25 triệu vượt 25% payout 42 triệu (10,5)
+  MO-->>H: D22: giãn 8 lên 12 tuần, 7,5 triệu/tuần
+  H->>MO: Chấp nhận
+  MO->>S: D23 Phụ lục hợp đồng
+  S->>MO: Ký điện tử
+  MO->>CORE: Cập nhật lịch trả nợ
+  CORE-->>MO: Restructured
+  </pre>
+  <div class="warn">Cơ cấu thời hạn trả nợ chịu quy định NHNN về phân loại nợ. Ngân hàng quyết định việc giãn hạn có làm chuyển nhóm nợ hay không.</div>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="p8">
+  <h2><span class="num">P8</span>Tất toán, quá hạn, thu hồi <span class="tag t-add">BỔ SUNG</span></h2>
+  <p class="lead">Trả đủ thì đóng khoản vay và hủy ủy quyền trích payout. Quá hạn thì tính lãi quá hạn, nhắc nợ, kéo dài thì báo CIC.</p>
+  <div class="keys">
+    <div class="key"><b>Tất toán</b>D24 Xác nhận, hủy D14</div>
+    <div class="key"><b>Quá hạn</b>D25 Thông báo, tiếp tục trích payout</div>
+  </div>
+  <details><summary>Sơ đồ luồng</summary><div class="body">
+  <pre class="mermaid">
+flowchart TD
+  A(["Khoản vay Active"]) --> B{{"Kỳ cuối trích đủ?"}}
+  B -->|"Có"| C["Core tất toán"]
+  C --> D["Hủy ủy quyền D14"] --> E["D24 Xác nhận tất toán"]
+  A --> F{{"Trả trước hạn?"}}
+  F -->|"Có"| G["Tính gốc, lãi đến ngày, phí nếu có"] --> C
+  A --> I{{"Quá hạn?"}}
+  I -->|"Có"| J["Lãi quá hạn trên gốc quá hạn"]
+  J --> K["D25 Thông báo: app, SMS, ngân hàng gọi"]
+  K --> L["Tiếp tục trích payout"]
+  L --> M{{"Kéo dài?"}}
+  M -->|"Không"| A
+  M -->|"Có"| N["Chuyển nhóm nợ, báo CIC"] --> O["Thu hồi, dừng cấp mới"]
+  </pre>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="cases">
+  <h2><span class="num">4</span>Case nghiệp vụ</h2>
+  <p class="lead">Ba case demo của tài liệu gốc, cộng 12 case thực tế khi vận hành.</p>
+  <div class="keys">
+    <div class="key"><b>A · Không cần vay</b>Supplier cho cọc 50%, gap = 0</div>
+    <div class="key"><b>B · Counter-offer</b>Xin 150 triệu, đề xuất 90 triệu, 8 tuần</div>
+    <div class="key"><b>C · Sao kê lệch</b>Xin 300 triệu, lệch 71%, chuyển người</div>
+    <div class="key"><b>L · Payout sụt</b>Trích thiếu, đề xuất giãn hạn</div>
+  </div>
+  <details><summary>Ma trận đầy đủ 15 case</summary><div class="body">
+  <table>
+    <tr><th>Mã</th><th>Case</th><th>Điểm rẽ</th><th>Kết quả</th><th>Chứng từ</th><th>Nguồn</th></tr>
+    <tr><td>A</td><td>Không cần vay</td><td>Gap = 0</td><td>No_Loan_Needed, cảnh báo payout dưới 20 triệu/tuần</td><td>D05, D10</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>B</td><td>Xin 150, gap 80</td><td>Pass rule, trong hạn mức</td><td>90 triệu, 8 tuần, 11,25 triệu/tuần</td><td>D05 đến D19</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>C</td><td>Xin 300, sao kê sửa</td><td>Lệch 71% so với 15%</td><td>Escalated</td><td>D08, D09</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>D</td><td>Vượt mức, doanh thu ngoài sàn thật</td><td>Lệch dưới ngưỡng</td><td>Escalated, người xác minh doanh thu ngoài sàn</td><td>D08, D11</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>E</td><td>Fail rule cứng</td><td>RULE fail</td><td>Escalated</td><td>D07, D11</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>F</td><td>Prompt injection</td><td>Guardrail input</td><td>Trả lỗi, không gọi LLM</td><td>Log</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>G</td><td>Memo thiếu bằng chứng 3 lần</td><td>Guardrail output</td><td>Escalate memo thô</td><td>D09</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>H</td><td>Người duyệt hạ số tiền</td><td>P3</td><td>Tính lại lịch trừ</td><td>D11, D12</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>I</td><td>Seller từ chối hoặc offer hết hạn</td><td>P4</td><td>Offer_Rejected, Expired</td><td>D12</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>J</td><td>Giải ngân lỗi</td><td>P5</td><td>Disbursement_Failed, gửi lại</td><td>D16, D17</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>K</td><td>CIC xấu đi trước giải ngân</td><td>P5</td><td>Dừng, trả về thẩm định</td><td>D04, D17</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>L</td><td>Payout sụt, trích thiếu</td><td>P6 trần 25%</td><td>Short_Paid, đề xuất giãn hạn</td><td>D20, D22, D23</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>M</td><td>Trả trước hạn</td><td>P8</td><td>Closed sớm</td><td>D24</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>N</td><td>Quá hạn kéo dài</td><td>P8</td><td>Chuyển nhóm nợ, báo CIC</td><td>D25</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>O</td><td>Seller rút consent</td><td>Bất kỳ lúc nào</td><td>Hồ sơ mở bị hủy; khoản đang chạy vẫn thu nợ</td><td>D01</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+  </table>
+  </div></details>
+  <details><summary>Case A: Không cần vay</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor S as Seller
+  participant O as Orchestrator
+  participant DA as Data Analyst
+  participant CF as Cash Flow
+  participant MW as Memo Writer
+  S->>O: Lô 200 triệu, có 120 triệu, cọc 50%, trả nốt sau 4 tuần
+  O->>DA: Payout tuần gần đây
+  DA-->>O: 70 triệu/tuần (E1)
+  O->>CF: Tính gap
+  Note over CF: Không tuần nào âm
+  CF-->>O: Gap = 0 (E2)
+  O->>MW: Viết kết luận
+  MW-->>O: Lý do, cảnh báo payout dưới 20 triệu/tuần
+  O-->>S: Bạn không cần vay cho kế hoạch này
+  </pre>
+  <p>Không phát sinh hợp đồng hay khế ước; chỉ lưu D05, D10.</p>
+  </div></details>
+  <details><summary>Case B: Counter-offer đến tất toán</summary><div class="body">
+  <pre class="mermaid">
+flowchart LR
+  B1["Xin 150 triệu"] --> B2["Gap 80 triệu"] --> B3["PD 3.1%"] --> B4["Pass 9/9"] --> B5["Đề xuất 90 triệu, 8 tuần"] --> B6["Duyệt D11"] --> B7["Ký D12 đến D14"] --> B8["Khế ước, UNC D15 D16"] --> B9["Giải ngân D18"] --> B10["8 tuần trích payout"] --> B11["Tất toán D24"]
+  </pre>
+  </div></details>
+  <details><summary>Case C: Vượt mức, sao kê lệch</summary><div class="body">
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor S as Seller
+  participant O as Orchestrator
+  participant PA as Policy
+  participant DV as Doc Verifier
+  participant FS as Feature Svc
+  actor H as Thẩm định viên
+  S->>O: Xin 300 triệu
+  O->>PA: Kiểm rule
+  PA-->>O: Fail R05, clause 4.2 cần chứng từ
+  O-->>S: Nộp sao kê 6 tháng
+  S->>O: Upload sao kê
+  O->>DV: Đối chiếu
+  DV->>FS: Payout sàn 6 tháng
+  FS-->>DV: 280 triệu/tháng
+  Note over DV: Sao kê ghi 480 triệu/tháng, lệch 71%
+  DV-->>O: Cờ không khớp, D08
+  O-->>H: Escalate, memo không dùng từ gian lận
+  </pre>
+  </div></details>
+  <details><summary>Case D: Doanh thu ngoài sàn là thật</summary><div class="body">
+  <p>Dòng tiền từ Shopee trong sao kê khớp payout thật; phần vượt đến từ bán sỉ, cửa hàng. Document Verifier tách nhóm khớp sàn và nhóm ngoài sàn. Nhóm ngoài sàn không đối chiếu được nên vẫn qua người: thẩm định viên xin hợp đồng hoặc hóa đơn với khách sỉ. Phần thu từ payout chỉ đảm bảo mức tương ứng doanh thu sàn; phần vượt cần phương thức trả nợ bổ sung.</p>
+  </div></details>
+  <details><summary>Case L: Payout sụt, trích thiếu</summary><div class="body">
+  <pre class="mermaid">
+flowchart TD
+  L1["Payout tuần 3: 42 triệu"] --> L2["Kỳ trả: 11,25 triệu"]
+  L2 --> L3{{"Vượt 25% = 10.5 triệu?"}}
+  L3 -->|"Có"| L4["Trích 10,5 triệu, Short_Paid 0,75 triệu"]
+  L4 --> L5["Monitor: R08 fail"]
+  L5 --> L6["Đề xuất 12 tuần, 7,5 triệu/tuần"]
+  L6 --> L7{{"Người duyệt"}}
+  L7 -->|"Chấp nhận"| L8["Ký D23, core cập nhật"]
+  L7 -->|"Giữ nguyên"| L9["Phần thiếu xử lý theo hợp đồng"]
+  </pre>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="docs">
+  <h2><span class="num">5</span>Chứng từ</h2>
+  <p class="lead">25 chứng từ. Năm loại hay bị nhầm, theo đúng thứ tự xuất hiện:</p>
+  <pre class="mermaid">
+flowchart LR
+  T["D09 Tờ trình: đề xuất nội bộ"] --> Q["D11 Quyết định: ngân hàng đồng ý"] --> H["D13 Hợp đồng: chốt điều kiện"] --> K["D15 Khế ước: nhận nợ, tính lãi"] --> U["D16 Ủy nhiệm chi: tiền đi đâu"]
+  </pre>
+  <details><summary>Danh mục đầy đủ D01 đến D25</summary><div class="body">
+  <table>
+    <tr><th>Mã</th><th>Chứng từ</th><th>Phase</th><th>Bên lập</th><th>Ký / xác nhận</th><th>Seller thấy</th><th>Vai trò</th></tr>
+    <tr><td>D01</td><td>Đồng ý xử lý dữ liệu</td><td>P0</td><td>Riverbank</td><td>Seller</td><td>Có</td><td>Căn cứ đọc dữ liệu Shopee</td></tr>
+    <tr><td>D02</td><td>eKYC, CIF</td><td>P0</td><td>Ngân hàng</td><td>Ngân hàng</td><td>Không</td><td>Định danh</td></tr>
+    <tr><td>D03</td><td>Đề nghị vay vốn</td><td>P1</td><td>Seller</td><td>Seller</td><td>Có</td><td>Nhu cầu, mục đích</td></tr>
+    <tr><td>D04</td><td>Kết quả CIC</td><td>P2, P5</td><td>Ngân hàng</td><td>-</td><td>Không</td><td>Lịch sử tín dụng</td></tr>
+    <tr><td>D05</td><td>Bảng dòng tiền (E5)</td><td>P2</td><td>Cash Flow Engine</td><td>-</td><td>Rút gọn</td><td>Căn cứ gap, số tiền</td></tr>
+    <tr><td>D06</td><td>PD, SHAP (E6)</td><td>P2, P7</td><td>Risk Model</td><td>-</td><td>Không</td><td>Rủi ro</td></tr>
+    <tr><td>D07</td><td>Kết quả rule (E7)</td><td>P2, P7</td><td>Policy Engine</td><td>-</td><td>Không</td><td>Tuân thủ</td></tr>
+    <tr><td>D08</td><td>Đối chiếu sao kê</td><td>P2</td><td>Doc Verifier</td><td>Thẩm định viên</td><td>Không</td><td>Phát hiện lệch</td></tr>
+    <tr><td>D09</td><td>Tờ trình tín dụng</td><td>P2</td><td>Memo Writer</td><td>Thẩm định viên</td><td>Không</td><td>Đề xuất kèm bằng chứng</td></tr>
+    <tr><td>D10</td><td>Bản giải thích seller</td><td>P2, P4</td><td>Memo Writer</td><td>-</td><td>Có</td><td>Tổng trả, lãi, phí, lịch trừ</td></tr>
+    <tr><td>D11</td><td>Quyết định phê duyệt / từ chối</td><td>P3</td><td>Portal</td><td>Cấp thẩm quyền</td><td>Kết quả</td><td>Căn cứ soạn hợp đồng</td></tr>
+    <tr><td>D12</td><td>Thư chào vay</td><td>P4</td><td>Riverbank</td><td>Seller chấp nhận</td><td>Có</td><td>Chốt điều kiện</td></tr>
+    <tr><td>D13</td><td>Hợp đồng tín dụng</td><td>P4</td><td>Mẫu ngân hàng</td><td>Seller, ngân hàng</td><td>Có</td><td>Quyền, nghĩa vụ</td></tr>
+    <tr><td>D14</td><td>Ủy quyền trích payout</td><td>P4</td><td>Riverbank</td><td>Seller, Shopee, ngân hàng</td><td>Có</td><td>Căn cứ trích nợ</td></tr>
+    <tr><td>D15</td><td>Khế ước nhận nợ</td><td>P5</td><td>Riverbank</td><td>Seller</td><td>Có</td><td>Ghi nhận nợ, mốc lãi</td></tr>
+    <tr><td>D16</td><td>Đề nghị giải ngân, UNC</td><td>P5</td><td>Seller</td><td>Seller</td><td>Có</td><td>Thụ hưởng, mục đích</td></tr>
+    <tr><td>D17</td><td>Checklist trước giải ngân</td><td>P5</td><td>Hỗ trợ tín dụng</td><td>Maker, checker</td><td>Không</td><td>Kiểm soát nội bộ</td></tr>
+    <tr><td>D18</td><td>Chứng từ hạch toán</td><td>P5</td><td>Core</td><td>-</td><td>Thông báo</td><td>Tiền đã ra</td></tr>
+    <tr><td>D19</td><td>Lịch trả nợ</td><td>P5, P7</td><td>Core</td><td>-</td><td>Có</td><td>Số trích từng tuần</td></tr>
+    <tr><td>D20</td><td>Thông báo trích nợ tuần</td><td>P6</td><td>Riverbank</td><td>-</td><td>Có</td><td>Đã trích, dư nợ</td></tr>
+    <tr><td>D21</td><td>Đối soát thu nợ</td><td>P6</td><td>Riverbank, core</td><td>Hai bên</td><td>Không</td><td>Khớp tiền</td></tr>
+    <tr><td>D22</td><td>Đề xuất cơ cấu</td><td>P7</td><td>Monitor Agent</td><td>Người duyệt</td><td>Không</td><td>Giãn hạn</td></tr>
+    <tr><td>D23</td><td>Phụ lục hợp đồng</td><td>P7</td><td>Riverbank</td><td>Seller, ngân hàng</td><td>Có</td><td>Hiệu lực lịch mới</td></tr>
+    <tr><td>D24</td><td>Xác nhận tất toán</td><td>P8</td><td>Core</td><td>Ngân hàng</td><td>Có</td><td>Chấm dứt nghĩa vụ</td></tr>
+    <tr><td>D25</td><td>Thông báo quá hạn</td><td>P8</td><td>Core</td><td>-</td><td>Có</td><td>Nhắc nợ</td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="iomatrix">
+  <h2><span class="num">6</span>Input/Output tổng hợp</h2>
+  <p class="lead">Mỗi luồng: cái gì kích hoạt, nhận gì, trả gì, trạng thái sau.</p>
+  <details><summary>Bảng input/output theo luồng</summary><div class="body">
+  <table>
+    <tr><th>Luồng</th><th>Trigger</th><th>Input</th><th>Output</th><th>Trạng thái sau</th></tr>
+    <tr><td>Onboarding</td><td>Seller kích hoạt</td><td>seller_id, CCCD, khuôn mặt, tài khoản</td><td>D01, D02, CIF</td><td>Sẵn sàng</td></tr>
+    <tr><td>Khởi tạo</td><td>Submit form</td><td>Kế hoạch lô hàng, số xin</td><td>D03, Application ID</td><td>Analyzing / Rejected_Input</td></tr>
+    <tr><td>Thẩm định</td><td>Analyzing</td><td>D03, dữ liệu sàn, CIC, rules</td><td>D04 đến D10</td><td>No_Loan_Needed / Proposed / Docs_Required / Escalated</td></tr>
+    <tr><td>Bổ sung chứng từ</td><td>Docs_Required</td><td>Sao kê 6 tháng</td><td>D08</td><td>Proposed / Escalated</td></tr>
+    <tr><td>Phê duyệt</td><td>Vào hàng đợi</td><td>D09, bằng chứng, ma trận thẩm quyền</td><td>D11</td><td>Approved / Declined</td></tr>
+    <tr><td>Chào vay</td><td>Approved</td><td>D11, biểu phí</td><td>D12, D10</td><td>Offer_Sent</td></tr>
+    <tr><td>Soạn thảo, ký</td><td>Chấp nhận offer</td><td>D12, mẫu hợp đồng</td><td>D13, D14</td><td>Contract_Signed</td></tr>
+    <tr><td>Giải ngân</td><td>Đề nghị giải ngân</td><td>D13, D14, thụ hưởng</td><td>D15 đến D19</td><td>Disbursed / Active</td></tr>
+    <tr><td>Thu nợ</td><td>Payout tuần</td><td>Payout ròng, D19, D14</td><td>D20, D21</td><td>Active / Short_Paid</td></tr>
+    <tr><td>Giám sát</td><td>Sự kiện rủi ro</td><td>Dữ liệu mới</td><td>D22, D23</td><td>Restructured / Active</td></tr>
+    <tr><td>Tất toán</td><td>Trả đủ</td><td>Dư nợ</td><td>D24</td><td>Closed</td></tr>
+    <tr><td>Quá hạn</td><td>Quá ngày đến hạn</td><td>Dư nợ quá hạn</td><td>D25, báo CIC</td><td>Overdue / Collection</td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="api">
+  <h2><span class="num">7</span>Tích hợp API <span class="tag t-add">BỔ SUNG</span></h2>
+  <p class="lead">mTLS và OAuth2 client credentials; mọi lệnh liên quan tiền có idempotency key và chữ ký payload. Tên endpoint là minh họa.</p>
+  <details><summary>Danh sách endpoint</summary><div class="body">
+  <table>
+    <tr><th>Chiều</th><th>Endpoint</th><th>Phase</th><th>Payload</th><th>Phản hồi</th></tr>
+    <tr><td>Shopee → ezX</td><td><code>GET /sellers/{id}/features</code></td><td>P2</td><td>seller_id, consent_id</td><td>GMV, payout, hoàn hàng, rating</td></tr>
+    <tr><td>ezX → Ngân hàng</td><td><code>POST /ekyc/sessions</code></td><td>P0</td><td>Thông tin seller</td><td>eKYC, CIF</td></tr>
+    <tr><td>ezX → Ngân hàng</td><td><code>POST /cic/inquiries</code></td><td>P2, P5</td><td>CIF, consent</td><td>Nhóm nợ, dư nợ</td></tr>
+    <tr><td>ezX → Ngân hàng</td><td><code>POST /applications</code></td><td>P3</td><td>D09, D11, audit</td><td>Mã hồ sơ ngân hàng</td></tr>
+    <tr><td>ezX → Ngân hàng</td><td><code>POST /contracts</code></td><td>P4</td><td>D13, D14, bằng chứng ký</td><td>Số hợp đồng</td></tr>
+    <tr><td>ezX → Core</td><td><code>POST /disbursements</code></td><td>P5</td><td>Số HĐ, D15, D16, user duyệt</td><td>Mã giao dịch, tài khoản vay</td></tr>
+    <tr><td>Shopee → Core</td><td><code>POST /repayments</code></td><td>P6</td><td>Mã khoản vay, số tiền</td><td>Xác nhận gạch nợ</td></tr>
+    <tr><td>Core → ezX</td><td>Webhook <code>loan.status_changed</code></td><td>P6 đến P8</td><td>Trạng thái, dư nợ</td><td>200 OK</td></tr>
+    <tr><td>ezX ↔ Core</td><td>File đối soát cuối ngày</td><td>P6</td><td>Giao dịch trích nợ</td><td>Chênh lệch</td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="controls">
+  <h2><span class="num">8</span>Kiểm soát và phân quyền</h2>
+  <p class="lead">AI không tự quyết; tiền không ra nếu chưa qua maker và checker.</p>
+  <div class="keys">
+    <div class="key"><b>Thẩm định</b>Code tính số, memo có bằng chứng</div>
+    <div class="key"><b>Phê duyệt</b>Theo ma trận thẩm quyền, khớp Policy Engine</div>
+    <div class="key"><b>Giải ngân</b>Maker khác checker</div>
+    <div class="key"><b>Thu nợ</b>Trần 25% payout (R08)</div>
+    <div class="key"><b>Hạn mức</b>Trần 100 triệu cho vay điện tử (R09, TT 06/2023)</div>
+    <div class="key"><b>Hiệu lực</b>Phê duyệt hết hạn sau 14 ngày, quay về Analyzing</div>
+  </div>
+  <details><summary>Ma trận thẩm quyền (minh họa)</summary><div class="body">
+  <table>
+    <tr><th>Số tiền</th><th>PD</th><th>Trạng thái</th><th>Cấp duyệt</th></tr>
+    <tr><td>Đến 100 triệu</td><td>Dưới 5%</td><td>Proposed, pass toàn bộ</td><td>Thẩm định viên</td></tr>
+    <tr><td>Đến 100 triệu</td><td>5% đến 10%</td><td>Proposed</td><td>Trưởng nhóm thẩm định</td></tr>
+    <tr><td>Trên 100 triệu</td><td>Bất kỳ</td><td>Proposed</td><td>Trưởng nhóm thẩm định</td></tr>
+    <tr><td>Bất kỳ</td><td>Bất kỳ</td><td>Escalated hoặc ngoại lệ</td><td>Quản lý rủi ro</td></tr>
+  </table>
+  </div></details>
+  <details><summary>Danh sách kiểm soát xuyên suốt</summary><div class="body">
+  <table>
+    <tr><th>Kiểm soát</th><th>Ở đâu</th><th>Nguồn</th></tr>
+    <tr><td>LLM không tự tính số tiền, PD, rule</td><td>P2</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>Đề xuất ≤ gap x 1.15; cap cứng số tiền, kỳ hạn</td><td>P1, P2</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>Mỗi câu memo có evidence_id</td><td>P2</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>Không đưa thuộc tính nhạy cảm vào prompt</td><td>P1, P2</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>Không tự duyệt, tự từ chối, tự cơ cấu</td><td>P3, P7</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>Maker khác checker khi giải ngân</td><td>P5</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>Số giải ngân ≤ số đã duyệt</td><td>P5</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>Trích nợ ≤ 25% payout tuần</td><td>P6</td><td><span class="tag t-doc">GỐC</span></td></tr>
+    <tr><td>Hash, lưu bản gốc chứng từ điện tử</td><td>P4, P5</td><td><span class="tag t-add">BỔ SUNG</span></td></tr>
+    <tr><td>Audit mọi lần đổi trạng thái</td><td>Toàn bộ</td><td><span class="tag t-doc">GỐC</span></td></tr>
+  </table>
+  </div></details>
+</section>
+
+<!-- ============================================================ -->
+<section id="open">
+  <h2><span class="num">9</span>Câu hỏi mở cần chốt với ngân hàng</h2>
+  <p class="lead">Ba câu ảnh hưởng thiết kế nhiều nhất:</p>
+  <div class="keys">
+    <div class="key"><b>Đứng tên vay</b>Cá nhân hay hộ kinh doanh?</div>
+    <div class="key"><b>Trích thiếu</b>Tính quá hạn ngay hay chờ giãn hạn?</div>
+    <div class="key"><b>Hạn mức</b>Theo từng lô hay quay vòng?</div>
+  </div>
+  <details><summary>Danh sách đầy đủ 8 câu hỏi</summary><div class="body">
+  <table>
+    <tr><th>#</th><th>Câu hỏi</th><th>Vì sao quan trọng</th><th>Ai trả lời</th></tr>
+    <tr><td>1</td><td>Đứng tên cá nhân hay hộ kinh doanh?</td><td>Loại sản phẩm, bộ hồ sơ, mẫu hợp đồng</td><td>Ngân hàng, pháp chế</td></tr>
+    <tr><td>2</td><td>Giải ngân thẳng cho supplier bắt buộc hay tùy chọn?</td><td>Chứng từ D16, kiểm soát mục đích vốn</td><td>Ngân hàng</td></tr>
+    <tr><td>3</td><td>Trích thiếu do trần 25% có tính quá hạn ngay?</td><td>Xung đột trần bảo vệ seller và lịch trên core. Đề xuất mặc định BL-11: tối đa 2 kỳ liên tiếp chưa tính quá hạn, kỳ thứ 3 Monitor tạo D22</td><td>Ngân hàng, rủi ro</td></tr>
+    <tr><td>4</td><td>Hạn mức theo lô hay quay vòng?</td><td>Quay vòng cần hợp đồng khung, nhiều khế ước</td><td>Sản phẩm, ngân hàng</td></tr>
+    <tr><td>5</td><td>Lãi theo dư nợ giảm dần hay phí cố định?</td><td>Con số tổng phải trả trên D10, D12</td><td>Ngân hàng</td></tr>
+    <tr><td>6</td><td>Trích payout trước hay sau ads, hoàn tiền?</td><td>Thứ tự ưu tiên trong D14</td><td>Shopee, ngân hàng</td></tr>
+    <tr><td>7</td><td>Hiệu lực của offer (mặc định 14 ngày, BL-10) và của kết quả CIC?</td><td>Khi nào phải thẩm định lại</td><td>Ngân hàng</td></tr>
+    <tr><td>8</td><td>Ai lưu chứng từ điện tử, bao lâu?</td><td>Lưu trữ hồ sơ tín dụng</td><td>Pháp chế</td></tr>
+  </table>
+  <div class="note">Trong ngày thi, P0, P4, P5, P6, P8 chỉ cần mô phỏng. Phần chấm điểm nằm ở P1, P2, P3, P7.</div>
+  </div></details>
+</section>
+
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "base",
+    securityLevel: "loose",
+    flowchart: { useMaxWidth: true, htmlLabels: true },
+    sequence: { useMaxWidth: true, wrap: true },
+    themeVariables: {
+      fontSize: "14px",
+      primaryColor: "#fff1e8",
+      primaryBorderColor: "#ea580c",
+      primaryTextColor: "#1f2937",
+      secondaryColor: "#e6f6fa",
+      tertiaryColor: "#f6f7f9",
+      lineColor: "#64748b",
+      actorBkg: "#e6f6fa",
+      actorBorder: "#0e7490",
+      noteBkgColor: "#fdf6e3",
+      noteBorderColor: "#eab308"
+    }
+  });
+
+  async function renderVisible(root) {
+    const nodes = [...root.querySelectorAll("pre.mermaid:not([data-processed])")]
+      .filter(n => n.offsetParent !== null);
+    if (nodes.length) await mermaid.run({ nodes });
+  }
+
+  renderVisible(document);
+  document.querySelectorAll("details").forEach(d =>
+    d.addEventListener("toggle", () => { if (d.open) renderVisible(d); })
+  );
+  document.getElementById("openAll").addEventListener("click", () => {
+    document.querySelectorAll("details").forEach(d => d.open = true);
+    renderVisible(document);
+  });
+  document.getElementById("closeAll").addEventListener("click", () => {
+    document.querySelectorAll("details").forEach(d => d.open = false);
+  });
+</script>
+</body>
+</html>
