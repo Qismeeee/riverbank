@@ -1,0 +1,40 @@
+{
+  "case_id": "A",
+  "title": "Không cần vay, gap 0, cảnh báo khi payout tuần dưới 20 triệu",
+  "source": "docs/Riverbank-BRD.md mục 9",
+  "input": {
+    "cash_on_hand": 100000000,
+    "supplier_schedule": [
+      {
+        "week": 0,
+        "amount": 60000000
+      },
+      {
+        "week": 2,
+        "amount": 80000000
+      }
+    ],
+    "sell_weeks": 6,
+    "payout_weekly_history": [
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000,
+      40000000
+    ]
+  },
+  "expected": {
+    "payout_stress": 28000000,
+    "gap": 0,
+    "negative_weeks": [],
+    "amount_proposed": 0,
+    "payout_warning_threshold": 20000000
+  }
+}

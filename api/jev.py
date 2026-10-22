@@ -11,7 +11,6 @@ MODEL = "typesafe/jev-1.14"
 
 
 def image_part(path: str | Path) -> dict:
-    """Đóng gói một ảnh local thành phần tử state."""
     data = base64.b64encode(Path(path).read_bytes()).decode()
     suffix = Path(path).suffix.lstrip(".").lower() or "png"
     return {"type": "image_url", "image_url": {"url": f"data:image/{suffix};base64,{data}"}}
@@ -30,10 +29,8 @@ def score(instructions: str, levels: list[str]) -> dict:
 
 
 def decide(state: list[Any], questions: dict[str, dict], timeout: float = 30.0) -> dict:
-    """Gọi Jev một lần, trả về dict answers theo tên câu hỏi."""
     if not config.OPENROUTER_API_KEY:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY chưa cấu hình (.env local hoặc Secrets Manager)")
+        raise RuntimeError("OPENROUTER_API_KEY chưa cấu hình (.env local hoặc Secrets Manager)")
     r = httpx.post(
         URL,
         headers={

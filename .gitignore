@@ -1,5 +1,6 @@
 # secrets, never commit
 .env
+.env.local
 *.pem
 riverbank-ci*
 
@@ -24,3 +25,6 @@ web/.next/
 .vscode/
 .idea/
 .DS_Store
+
+# synthetic output
+data/synth/out/

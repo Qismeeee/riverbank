@@ -1,0 +1,11 @@
+{"query":{"raw":"ao mua"},"market":{"totalProducts":18781,"totalShops":4379},
+ "last30Days":{"totalSold":70688,"coverage":0.3042},
+ "topShops":[{"shopId":1218336683,"revenue":3287947224,"products":13},{"shopId":984839978,"revenue":1252220000,"products":7}],
+ "products":[
+  {"itemId":25171045245,"productName":"Áo mưa đi xe máy đơn nam nữ","shopName":"dhf18-HN","price":146620,"sales":12733,"sold7d":0,"sold30d":0,"revenueAll":1866912460,"revenue30d":0,"daysTracked":54,"commissionRate":0.16,"shopId":1218336683,"catId":100637,"rating":4.9},
+  {"itemId":23449754057,"productName":"Áo mưa PTLUXURY 2 người","shopName":"PTLUXURY ","price":85000,"sales":12227,"sold30d":1172,"revenueAll":1039295000,"revenue30d":99620000,"daysTracked":30,"commissionRate":0.09,"shopId":984839978,"catId":100637,"rating":4.5},
+  {"itemId":90000000001,"productName":"[QUÀ TẶNG KHÔNG BÁN] Khăn lau","shopName":"PTLUXURY ","price":1000,"sales":5000,"sold30d":900,"revenueAll":5000000,"revenue30d":900000,"daysTracked":30,"shopId":984839978,"catId":100637,"rating":5},
+  {"itemId":90000000002,"productName":"Sản phẩm giá 0","price":0,"sales":10,"sold30d":1,"revenueAll":0,"revenue30d":0,"daysTracked":30,"shopId":984839978},
+  {"itemId":90000000003,"productName":"Sold 30d vượt tổng","price":50000,"sales":10,"sold30d":20,"revenueAll":500000,"revenue30d":1000000,"daysTracked":30,"shopId":984839978},
+  {"itemId":77777,"productName":"Shop ngoài danh sách","price":50000,"sales":10,"sold30d":2,"revenueAll":500000,"revenue30d":100000,"daysTracked":30,"shopId":5}
+ ],"status":"success"}
