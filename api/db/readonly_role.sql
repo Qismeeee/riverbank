@@ -1,4 +1,4 @@
--- psql "$DATABASE_URL" -v ro_password="'mat-khau'" -f api/db/readonly_role.sql
+-- psql "$DATABASE_URL" -v ro_password="'<mật khẩu role>'" -f api/db/readonly_role.sql
 do $$
 begin
     if not exists (select 1 from pg_roles where rolname = 'riverbank_ro') then
