@@ -26,12 +26,17 @@ Log cũng ở CloudWatch log group `/riverbank/app`.
 
 ## Giao diện xem DB cho team
 
-`https://<SITE_ADDRESS>/db` là pgweb chạy readonly trên EC2, sau Caddy basic auth, nối RDS bằng role `riverbank_ro` (chỉ SELECT). Cấu hình nằm ở `/opt/riverbank/.env.local` trên EC2 (mẫu `infra/.env.local.example`), deploy không ghi đè file này. Lần đầu:
+`https://<SITE_ADDRESS>/db` là pgweb trên EC2, sau Caddy basic auth, nối RDS bằng role `riverbank_dev` (đọc, ghi, không đổi schema; `api/db/dev_role.sql`). Muốn chỉ đọc thì dùng `riverbank_ro` (`api/db/readonly_role.sql`). Cấu hình nằm ở `/opt/riverbank/.env.local` trên EC2 (mẫu `infra/.env.local.example`), deploy không ghi đè file này. Lần đầu:
 
 ```
 ssh -i ~/.ssh/riverbank-key.pem ubuntu@13.214.87.165
 cd /opt/riverbank
-docker compose exec api psql "$(docker compose exec api python -c 'import config;print(config.database_url())')" -v ro_password="'MAT_KHAU_RO'" -f /app/db/readonly_role.sql
+docker compose exec -T api python - <<'EOF'
+import config, psycopg
+sql = open("db/dev_role.sql").read().replace(":dev_password", "'<mật khẩu role>'")
+with psycopg.connect(config.database_url()) as c:
+    c.execute(sql)
+EOF
 docker run --rm caddy:2-alpine caddy hash-password --plaintext 'MAT_KHAU_UI'
 nano .env.local      # điền DB_UI_USER, DB_UI_PASS_HASH, PGWEB_DATABASE_URL theo mẫu
 docker compose up -d
