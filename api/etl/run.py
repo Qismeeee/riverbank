@@ -33,13 +33,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("step", choices=["extract", "transform", "load", "all"])
     ap.add_argument("--run-date", default=date.today().isoformat())
-    ap.add_argument("--no-s3", action="store_true")
+    ap.add_argument("--raw", choices=["mirror", "local", "s3"], default="mirror")
     a = ap.parse_args(argv)
 
     need_key = a.step in ("extract", "all")
-    pipeline = build_pipeline(
-        a.run_date, not a.no_s3, config.ADDLIVETAG_API_KEY if need_key else ""
-    )
+    pipeline = build_pipeline(a.run_date, a.raw, config.ADDLIVETAG_API_KEY if need_key else "")
 
     if need_key:
         m = pipeline.extract(a.run_date)

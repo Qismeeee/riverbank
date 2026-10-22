@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
 import config
 
 TABLES = ("v_shop_features", "shop_snapshot", "product_snapshot", "etl_run")
+REPO_EXPORTS = Path(__file__).resolve().parents[2] / "data" / "exports"
+
+
+def default_out_dir() -> Path:
+    try:
+        REPO_EXPORTS.mkdir(parents=True, exist_ok=True)
+        return REPO_EXPORTS
+    except OSError:
+        return Path(tempfile.gettempdir()) / "riverbank-exports"
 
 
 class CsvExporter:
@@ -40,9 +50,10 @@ class CsvExporter:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-date", default=date.today().isoformat())
-    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "data" / "exports"))
+    ap.add_argument("--out", default="")
     ap.add_argument("--no-s3", action="store_true")
     a = ap.parse_args(argv)
+    out = Path(a.out) if a.out else default_out_dir()
     url = config.database_url()
     if not url:
         print("export: DATABASE_URL trống", file=sys.stderr)
@@ -51,7 +62,7 @@ def main(argv=None) -> int:
 
     with psycopg.connect(url) as conn:
         bucket = "" if a.no_s3 else config.S3_BUCKET
-        for target in CsvExporter(conn, Path(a.out), bucket, config.AWS_REGION).export(a.run_date):
+        for target in CsvExporter(conn, out, bucket, config.AWS_REGION).export(a.run_date):
             print(target)
     return 0
 
