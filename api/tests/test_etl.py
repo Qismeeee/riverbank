@@ -303,3 +303,31 @@ def test_export_writes_csv_per_table(tmp_path):
     rows = list(csv.DictReader(open(written[0], encoding="utf-8")))
     assert {r["shop_id"] for r in rows} >= {"984839978", "1218336683"}
     assert "gmv_30d" in rows[0]
+
+
+def test_run_cli_accepts_raw_source(monkeypatch, tmp_path):
+    import etl.run as run
+
+    captured = {}
+
+    def fake_build(run_date, raw, api_key=""):
+        captured.update(run_date=run_date, raw=raw, api_key=api_key)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(run, "build_pipeline", fake_build)
+    with pytest.raises(SystemExit):
+        run.main(["load", "--run-date", "2026-10-22", "--raw", "s3"])
+    assert captured == {"run_date": "2026-10-22", "raw": "s3", "api_key": ""}
+    with pytest.raises(SystemExit):
+        run.main(["transform", "--run-date", "2026-10-22"])
+    assert captured["raw"] == "mirror"
+
+
+def test_export_default_dir_falls_back_when_repo_unwritable(monkeypatch, tmp_path):
+    import etl.export as ex
+
+    monkeypatch.setattr(ex, "REPO_EXPORTS", Path("/proc/forbidden/exports"))
+    out = ex.default_out_dir()
+    assert out.name == "riverbank-exports" and out != ex.REPO_EXPORTS
+    monkeypatch.setattr(ex, "REPO_EXPORTS", tmp_path / "exports")
+    assert ex.default_out_dir() == tmp_path / "exports" and (tmp_path / "exports").is_dir()
