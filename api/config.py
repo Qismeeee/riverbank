@@ -23,11 +23,16 @@ def _secret(secret_id: str) -> dict:
     return json.loads(client.get_secret_value(SecretId=secret_id)["SecretString"])
 
 
-def _from_env_or_secret(env_key: str, secret_id: str, field: str) -> str:
+def _from_env_or_secret(env_key: str, secret_id: str, field: str, required: bool = True) -> str:
     value = os.getenv(env_key)
     if value or ENV == "local":
         return value or ""
-    return _secret(secret_id).get(field, "")
+    try:
+        return _secret(secret_id).get(field, "")
+    except Exception:
+        if required:
+            raise
+        return ""
 
 
 OPENAI_API_KEY = _from_env_or_secret("OPENAI_API_KEY", "riverbank/openai", "OPENAI_API_KEY")
@@ -38,7 +43,7 @@ OPENROUTER_API_KEY = _from_env_or_secret(
     "OPENROUTER_API_KEY", "riverbank/openrouter", "OPENROUTER_API_KEY"
 )
 ADDLIVETAG_API_KEY = _from_env_or_secret(
-    "ADDLIVETAG_API_KEY", "riverbank/addlivetag", "ADDLIVETAG_API_KEY"
+    "ADDLIVETAG_API_KEY", "riverbank/addlivetag", "ADDLIVETAG_API_KEY", required=False
 )
 
 
