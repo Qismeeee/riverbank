@@ -32,12 +32,16 @@ def migrate(conn) -> None:
             )
 
 
+def apply(url: str) -> None:
+    with psycopg.connect(url) as conn:
+        migrate(conn)
+
+
 def main() -> None:
     url = config.database_url()
     if not url:
         raise SystemExit("DATABASE_URL is required")
-    with psycopg.connect(url) as conn:
-        migrate(conn)
+    apply(url)
     print("Underwriting migrations applied")
 
 

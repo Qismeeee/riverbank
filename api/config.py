@@ -15,6 +15,8 @@ WORKFLOW_STORAGE = os.getenv("RIVERBANK_WORKFLOW_STORAGE", "memory")
 WORKFLOW_FEATURES = os.getenv("RIVERBANK_WORKFLOW_FEATURES", "demo")
 WORKFLOW_RISK = os.getenv("RIVERBANK_WORKFLOW_RISK", "lightgbm")
 WORKFLOW_CIC_GATE = os.getenv("RIVERBANK_WORKFLOW_CIC_GATE", "jev")
+WORKFLOW_IDENTITY = os.getenv("RIVERBANK_WORKFLOW_IDENTITY", "header")
+AUTH_TOKEN_TTL_SECONDS = int(os.getenv("RIVERBANK_AUTH_TOKEN_TTL_SECONDS", "28800"))
 WORKFLOW_TEST_DATABASE_URL = os.getenv("WORKFLOW_TEST_DATABASE_URL", "")
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
@@ -47,6 +49,12 @@ ANTHROPIC_API_KEY = _from_env_or_secret(
 )
 OPENROUTER_API_KEY = _from_env_or_secret(
     "OPENROUTER_API_KEY", "riverbank/openrouter", "OPENROUTER_API_KEY"
+)
+AUTH_SIGNING_KEY = _from_env_or_secret(
+    "AUTH_SIGNING_KEY", "riverbank/auth", "AUTH_SIGNING_KEY", required=False
+)
+DEMO_PASSCODE = _from_env_or_secret(
+    "DEMO_PASSCODE", "riverbank/auth", "DEMO_PASSCODE", required=False
 )
 ADDLIVETAG_API_KEY = _from_env_or_secret(
     "ADDLIVETAG_API_KEY", "riverbank/addlivetag", "ADDLIVETAG_API_KEY", required=False

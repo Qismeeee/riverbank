@@ -1,10 +1,12 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Path, Query
 
 import config
+from db.migrate import apply as migrate_database
+from routers.auth import BankUser, Principal, seller_of
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.models import (
@@ -39,34 +41,9 @@ RISK_MODELS: dict[str, type[RiskModel]] = {"demo": DemoRiskModel, "lightgbm": Li
 CIC_GATES: dict[str, type[CicGate]] = {"open": OpenCicGate, "jev": JevCicGate}
 
 
-@dataclass(frozen=True)
-class Actor:
-    subject: str
-    role: str
-
-
-def get_actor(
-    actor_id: Annotated[str | None, Header(alias="X-Actor-ID")] = None,
-    actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
-) -> Actor:
-    if config.WORKFLOW_MODE != "demo" or config.ENV != "local":
-        raise WorkflowError("VERIFIED_IDENTITY_ADAPTER_REQUIRED", 503)
-    if not actor_id or not actor_id.strip():
-        raise WorkflowError("AUTHENTICATION_REQUIRED", 401)
-    if actor_role not in {"seller", "underwriter"}:
-        raise WorkflowError("ROLE_NOT_ALLOWED", 403)
-    return Actor(actor_id, actor_role)
-
-
-def underwriter(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
-    if actor.role != "underwriter":
-        raise WorkflowError("UNDERWRITER_REQUIRED", 403)
-    return actor
-
-
 @lru_cache
 def get_service() -> UnderwritingService:
-    if config.WORKFLOW_MODE != "demo" or config.ENV != "local":
+    if config.WORKFLOW_MODE != "demo":
         raise WorkflowError("WORKFLOW_DEMO_DISABLED", 503)
     if config.WORKFLOW_STORAGE not in {"memory", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_STORAGE", 503)
@@ -81,6 +58,8 @@ def get_service() -> UnderwritingService:
     url = config.database_url()
     if "postgres" in {config.WORKFLOW_STORAGE, config.WORKFLOW_FEATURES} and not url:
         raise WorkflowError("DATABASE_REQUIRED", 503)
+    if config.WORKFLOW_STORAGE == "postgres":
+        migrate_database(url)
     repository = (
         PostgresCaseRepository(url)
         if config.WORKFLOW_STORAGE == "postgres"
@@ -102,8 +81,6 @@ def get_service() -> UnderwritingService:
 
 
 Service = Annotated[UnderwritingService, Depends(get_service)]
-BankUser = Annotated[Actor, Depends(underwriter)]
-Principal = Annotated[Actor, Depends(get_actor)]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)]
 Identifier = Annotated[str, Path(pattern=r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")]
 
@@ -123,16 +100,14 @@ def summary(case: Case) -> dict:
 
 @router.post("/cases", status_code=201, response_model=CaseSummary)
 def create_case(plan: Plan, key: IdempotencyKey, actor: Principal, service: Service) -> dict:
-    if actor.role != "seller" or actor.subject != plan.seller_id:
-        raise WorkflowError("SELLER_SCOPE_MISMATCH", 403)
+    seller_of(actor, plan.seller_id)
     return summary(service.create(plan, key))
 
 
 @router.get("/cases/{case_id}/seller-view", response_model=SellerView)
 def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict:
     case = service.repository.get(case_id)
-    if actor.role != "seller" or case.seller_id != actor.subject:
-        raise WorkflowError("SELLER_SCOPE_MISMATCH", 403)
+    seller_of(actor, case.seller_id)
     return {
         **summary(case),
         "explanation": (
