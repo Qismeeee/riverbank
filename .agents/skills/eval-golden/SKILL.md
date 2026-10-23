@@ -20,7 +20,7 @@ Case A đến E trong `docs/Riverbank-BRD.md` mục 9 phải có đủ ở đây
 
 ## Data huấn luyện risk model
 
-`data/synth/train.py` sinh `train_shops.csv` (feature lúc thẩm định + `label_default`) và `train_weeks.csv`, hiệu chỉnh từ `data/synth/calibration.json` (60 shop thật). Nhãn mô phỏng theo BL-11, cách sinh và feature ghi ở `docs/Riverbank-risk-model.md`. Đổi quy tắc sinh thì cập nhật doc đó và `api/tests/test_train_data.py`.
+`data/synth/train.py` sinh `train_shops.csv` (feature lúc thẩm định + `label_default`) và `train_weeks.csv`, hiệu chỉnh từ `data/synth/calibration.json` (60 shop thật). Nhãn mô phỏng theo BL-11, cách sinh và feature ghi ở `docs/Riverbank-risk-model.md`. Đổi quy tắc sinh thì cập nhật doc đó, `api/tests/test_train_data.py`, và chạy lại `make oracle` vì trần AUC đổi theo. Feature chỉ thêm ở `api/services/features.py` (FeatureBuilder), train và serving cùng đọc một chỗ, `RiskModel.load()` từ chối meta lệch feature. Train lại: `make train-data && make test-data && make oracle && make train-pd` (headless) hoặc `make notebook` (đầy đủ, có output). Kết quả hiện tại: AUC test 0,77, trần 0,81, logistic và LightGBM hòa nhau. Đừng tuning thêm, mọi số vượt trần là rò rỉ; việc đáng làm là feature từ `train_weeks.csv` hoặc nhãn thật khi có.
 
 ## Báo cáo
 

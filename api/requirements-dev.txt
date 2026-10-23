@@ -2,3 +2,9 @@
 pytest==8.4.2
 ruff==0.13.2
 pre-commit==4.3.0
+scikit-learn==1.8.0
+pandas==3.0.2
+matplotlib==3.10.9
+jupyter==1.1.1
+nbconvert==7.17.2
+ipykernel==7.4.0

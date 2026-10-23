@@ -23,7 +23,7 @@ Case A: gap 0, cảnh báo khi payout tuần dưới 20 triệu. Xem `eval/golde
 
 ```
 api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client)
-api/services/   engine code thuần: cashflow.py; shopee/ (schemas, weekly, seller_export, openapi_client)
+api/services/   engine code thuần: cashflow.py, features.py (FeatureBuilder, một nguồn feature cho train và serving), risk.py (RiskModel từ api/models/); shopee/ (schemas, weekly, seller_export, openapi_client)
 api/policy/     policy.md là nguồn, engine.py là PolicyEngine, rules.py là bộ rule, test_rules.py là bằng chứng
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
 api/db/         schema.sql, một DB Postgres cho feature lẫn trạng thái app
@@ -31,7 +31,8 @@ api/routers/    HTTP endpoint, mỏng, gọi services
 api/agents/     orchestrator, data_analyst, memo_writer, doc_verifier, monitor (LLM facade)
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động
-data/synth/     generate.py (shop demo theo schema Shopee), train.py (data huấn luyện có nhãn), calibration.json (60 shop thật); out/ và train/ không commit
+eval/pdlib.py, train_pd.py, train_pd.ipynb   metric, trainer, calibration dùng chung; train headless; notebook đầy đủ (xem docs/Riverbank-risk-model.md)
+data/synth/     generate.py (shop demo theo schema Shopee), train.py (data huấn luyện có nhãn), oracle.py (PD thật của tập test, trần AUC), calibration.json (60 shop thật); out/, train/, test/ không commit
 web/            Next.js, deploy Vercel
 infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 .agents/skills/ skill cho Codex và Claude Code, đọc skill đúng việc trước khi code
@@ -43,7 +44,7 @@ infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 make setup      tạo venv Python 3.12 bằng uv, cài dev deps, cài pre-commit
 make db-up      Postgres local trong docker
 make dev        uvicorn reload tại :8000
-make test       ruff check + ruff format --check + pytest
+make test       ruff check + ruff format --check (api, eval, data/synth) + pytest
 make fmt        ruff format
 ```
 

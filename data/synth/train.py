@@ -27,6 +27,7 @@ ARCHETYPE_CV = {
     "home": (0.15, 0.4),
 }
 SHORT_PAID_DEFAULT_PERIODS = 3
+RISK_INTERCEPT = -10.4
 
 
 @dataclass
@@ -58,11 +59,7 @@ class TrainShop:
 class Calibration:
     def __init__(self, path: Path):
         data = json.loads(path.read_text(encoding="utf-8"))
-        rows = [
-            r
-            for r in data["shops"]
-            if r["segment"] == "sme" and r["gmv_30d"] > 0 and r["aov"]
-        ]
+        rows = [r for r in data["shops"] if r["segment"] == "sme" and r["gmv_30d"] > 0 and r["aov"]]
         self.by_archetype = {}
         for r in rows:
             self.by_archetype.setdefault(r["archetype"], []).append(r)
@@ -95,16 +92,12 @@ class TrainingSetGenerator:
         base = self.cal.sample(rng)
         arch = base["archetype"]
         median_p, sigma, lo, hi = PAYOUT_TARGET
-        payout_mean = int(
-            min(hi, max(lo, rng.lognormvariate(math.log(median_p), sigma)))
-        )
+        payout_mean = int(min(hi, max(lo, rng.lognormvariate(math.log(median_p), sigma))))
         gmv_30d = int(payout_mean * 30 / 7 / (1 - FEE_RATE))
         aov = int(base["aov"] * rng.uniform(0.8, 1.25))
         n_products = max(3, int(base["n_products"] * rng.uniform(0.6, 1.4)))
         top3 = min(0.98, max(0.05, (base["top3_share"] or 0.4) * rng.uniform(0.8, 1.2)))
-        rating = round(
-            min(5.0, max(3.5, (base["rating"] or 4.6) + rng.gauss(0, 0.15))), 2
-        )
+        rating = round(min(5.0, max(3.5, (base["rating"] or 4.6) + rng.gauss(0, 0.15))), 2)
         shop_age = rng.randint(2, 60)
         return_rate = max(0.0, ARCHETYPE_RETURN[arch] * rng.lognormvariate(0, 0.4))
         cv = rng.uniform(*ARCHETYPE_CV[arch])
@@ -131,9 +124,7 @@ class TrainingSetGenerator:
             result.weekly_deduction,
             result.payout_stress,
         )
-        repay, shock_weeks, short_paid = self._repayment(
-            payout_mean, cv, result, risk, rng
-        )
+        repay, shock_weeks, short_paid = self._repayment(payout_mean, cv, result, risk, rng)
         trend = mean(history[-4:]) / max(1, mean(history[:4]))
         shop = TrainShop(
             shop_id=shop_id,
@@ -154,9 +145,7 @@ class TrainingSetGenerator:
             amount=result.amount_proposed,
             tenor_weeks=result.tenor_weeks,
             weekly_deduction=result.weekly_deduction,
-            deduction_to_stress=round(
-                result.weekly_deduction / max(1, result.payout_stress), 4
-            ),
+            deduction_to_stress=round(result.weekly_deduction / max(1, result.payout_stress), 4),
             shock_weeks=shock_weeks,
             short_paid_periods=short_paid,
             label_default=int(short_paid >= SHORT_PAID_DEFAULT_PERIODS),
@@ -176,9 +165,7 @@ class TrainingSetGenerator:
         return shop, series
 
     @staticmethod
-    def _series(
-        mean_payout: int, cv: float, weeks: int, rng: random.Random
-    ) -> list[int]:
+    def _series(mean_payout: int, cv: float, weeks: int, rng: random.Random) -> list[int]:
         sigma = math.sqrt(math.log(1 + cv * cv))
         mu = math.log(mean_payout) - sigma * sigma / 2
         return [max(0, int(rng.lognormvariate(mu, sigma))) for _ in range(weeks)]
@@ -186,12 +173,12 @@ class TrainingSetGenerator:
     @staticmethod
     def _risk_score(cv, return_rate, top3, shop_age, deduction, payout_stress) -> float:
         z = (
-            -3.9
-            + 3.0 * cv
-            + 6.0 * return_rate
-            + 1.2 * top3
-            + 1.5 * (12 / (shop_age + 12))
-            + 4.0 * max(0.0, deduction / max(1, payout_stress) - 0.15)
+            RISK_INTERCEPT
+            + 9.0 * cv
+            + 18.0 * return_rate
+            + 3.0 * top3
+            + 4.0 * (12 / (shop_age + 12))
+            + 12.0 * max(0.0, deduction / max(1, payout_stress) - 0.15)
         )
         return 1 / (1 + math.exp(-z))
 
@@ -200,8 +187,8 @@ class TrainingSetGenerator:
         shock_weeks = 0
         if rng.random() < risk:
             start = rng.randint(0, max(0, result.tenor_weeks - 2))
-            length = rng.randint(2, 6)
-            factor = rng.uniform(0.25, 0.65)
+            length = rng.randint(3, 8)
+            factor = rng.uniform(0.2, 0.5)
             for w in range(start, min(result.tenor_weeks, start + length)):
                 payouts[w] = int(payouts[w] * factor)
                 shock_weeks += 1
@@ -251,9 +238,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument(
-        "--calibration", default=str(Path(__file__).parent / "calibration.json")
-    )
+    ap.add_argument("--calibration", default=str(Path(__file__).parent / "calibration.json"))
     ap.add_argument("--out", default=str(ROOT / "data" / "synth" / "train"))
     a = ap.parse_args(argv)
     gen = TrainingSetGenerator(Calibration(Path(a.calibration)), a.seed)
