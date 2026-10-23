@@ -12,7 +12,8 @@ from services.cashflow import CashFlowEngine, CashFlowInput
 from .evidence import build_document, digest, emit, validate_sentences
 from .models import Case, DecisionInput, Plan, Statement, WorkflowError
 from .repository import CaseRepository
-from .sources import CicSource, FeatureSource, LosAdapter, RiskModel, validate_features
+from .risk import RiskInput, RiskModel
+from .sources import CicSource, FeatureSource, LosAdapter, validate_features
 
 _UNSAFE_NOTE = re.compile(
     r"(?:ignore|bỏ\s+qua).*(?:policy|instruction|chính\s+sách|quy\s+tắc)|"
@@ -22,6 +23,26 @@ _UNSAFE_NOTE = re.compile(
     r"gender|religion|ethnicity|health|giới\s*tính|tôn\s*giáo|dân\s*tộc|sức\s*khỏe",
     re.IGNORECASE,
 )
+
+
+def _valid_risk(risk: dict) -> bool:
+    if risk.get("missing_fields"):
+        return risk["pd_bps"] is None and not risk["factors"]
+    return risk["pd_bps"] is not None and 0 <= risk["pd_bps"] <= 10_000 and bool(risk["factors"])
+
+
+def _route(results: list, risk: dict, statement: dict | None) -> tuple[str, str | None]:
+    failures = [r for r in results if r.hard and not r.passed]
+    awaiting_statement = bool(failures) and all(
+        r.rule_id == "R05" and r.missing_data for r in failures
+    )
+    if (failures and not awaiting_statement) or (statement and not statement["matched"]):
+        return "ESCALATED", "HARD_POLICY_FAILURE"
+    if risk.get("missing_fields"):
+        return "ESCALATED", "RISK_DATA_MISSING"
+    if awaiting_statement:
+        return "AWAITING_STATEMENT", "STATEMENT_REQUIRED"
+    return "PENDING_REVIEW", None
 
 
 def utc_now() -> datetime:
@@ -165,11 +186,11 @@ class UnderwritingService:
                 risk = deepcopy(case.runs[-1]["risk"])
                 cic = deepcopy(case.runs[-1]["cic"])
             else:
-                risk = self.risk.predict(features)
+                risk = self.risk.predict(RiskInput(features, case.plan, cf))
                 cic = self.cic.inquire(case.seller_id, now)
             if cic.get("seller_id") != case.seller_id:
                 raise WorkflowError("CIC_SCOPE_MISMATCH", 403)
-            if not 0 <= risk["pd_bps"] <= 10000 or not risk["factors"]:
+            if not _valid_risk(risk):
                 raise WorkflowError("INVALID_RISK_RESULT", 422)
             run["risk"], run["cic"] = risk, cic
             refs["E6"] = emit(case, run_id, "E6", risk, now.isoformat())
@@ -203,13 +224,7 @@ class UnderwritingService:
             }
             run["policy"] = policy
             refs["E7"] = emit(case, run_id, "E7", policy, now.isoformat())
-            failures = [r for r in outcome.results if r.hard and not r.passed]
-            if failures and all(r.rule_id == "R05" and r.missing_data for r in failures):
-                case.status, case.reason = "AWAITING_STATEMENT", "STATEMENT_REQUIRED"
-            elif failures or (statement and not statement["matched"]):
-                case.status, case.reason = "ESCALATED", "HARD_POLICY_FAILURE"
-            else:
-                case.status = "PENDING_REVIEW"
+            case.status, case.reason = _route(outcome.results, risk, statement)
         else:
             case.status = "NO_LOAN_NEEDED"
         case.runs.append(run)

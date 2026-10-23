@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import math
+from statistics import mean, pstdev
 
 WEEKS_PER_MONTH = 4.33
 DEDUCTION_STRESS_FLOOR = 0.15
+PAYOUT_WINDOW_WEEKS = 12
+TREND_WEEKS = 4
 
 RAW_FIELDS = [
     "archetype",
@@ -22,6 +25,19 @@ RAW_FIELDS = [
     "deduction_to_stress",
 ]
 LEAK_FIELDS = ["shock_weeks", "short_paid_periods", "label_default"]
+
+
+def payout_profile(history: list[int]) -> dict[str, float]:
+    window = history[-PAYOUT_WINDOW_WEEKS:]
+    if not window:
+        raise ValueError("cần lịch sử payout")
+    average = mean(window)
+    head, tail = window[:TREND_WEEKS], window[-TREND_WEEKS:]
+    return {
+        "payout_mean_12w": int(average),
+        "payout_cv_12w": round(pstdev(window) / max(1, average), 4),
+        "payout_trend": round(mean(tail) / max(1, mean(head)), 4),
+    }
 
 
 class FeatureBuilder:

@@ -11,10 +11,10 @@ from db.migrate import migrate
 from db.seed_underwriting import seed
 from services.underwriting.models import DecisionInput, Plan, WorkflowError
 from services.underwriting.repository import PostgresCaseRepository
+from services.underwriting.risk import DemoRiskModel
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
     DemoCicSource,
-    DemoRiskModel,
     MockLosAdapter,
     PostgresFeatureSource,
     demo_source,

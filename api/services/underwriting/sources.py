@@ -80,13 +80,33 @@ class PostgresFeatureSource(FeatureSource):
             return consent, features
 
 
+DEMO_PROFILES = {
+    "fashion": {
+        "archetype": "fashion",
+        "shop_age_months": 12,
+        "return_rate": 0.05,
+        "n_products": 80,
+        "top3_share": 0.3,
+        "rating": 4.7,
+    },
+    "electronics": {
+        "archetype": "electronics",
+        "shop_age_months": 12,
+        "return_rate": 0.05,
+        "n_products": 40,
+        "top3_share": 0.45,
+        "rating": 4.8,
+    },
+}
+
+
 def demo_source(now: datetime) -> MappingFeatureSource:
     monday = now.date() - timedelta(days=now.weekday())
     records = {}
-    for seller, payout, support in (
-        ("demo-a", 40_000_000, 90_000_000),
-        ("demo-b", 70_000_000, 90_000_000),
-        ("demo-c", 70_000_000, 30_000_000),
+    for seller, payout, support, profile in (
+        ("demo-a", 40_000_000, 90_000_000, DEMO_PROFILES["fashion"]),
+        ("demo-b", 70_000_000, 90_000_000, DEMO_PROFILES["fashion"]),
+        ("demo-c", 70_000_000, 30_000_000, DEMO_PROFILES["electronics"]),
     ):
         consent = {
             "reference": f"demo-consent-{seller}",
@@ -103,8 +123,7 @@ def demo_source(now: datetime) -> MappingFeatureSource:
             "payout_origin": "simulated",
             "disclosure": "synthetic; payout mô phỏng",
             "platform_supported_amount": support,
-            "shop_age_months": 12,
-            "return_rate": 0.05,
+            **profile,
             "weekly_payouts": [
                 {"week_start": (monday - timedelta(weeks=12 - i)).isoformat(), "amount": payout}
                 for i in range(12)
@@ -114,6 +133,28 @@ def demo_source(now: datetime) -> MappingFeatureSource:
         }
         records[(seller, seller)] = (consent, features)
     return MappingFeatureSource(records)
+
+
+PROFILE_RANGES = {
+    "shop_age_months": (int, 0, 1200),
+    "n_products": (int, 0, 10**7),
+    "top3_share": ((int, float), 0, 1),
+    "return_rate": ((int, float), 0, 1),
+    "rating": ((int, float), 0, 5),
+}
+
+
+def _valid_profile(features: dict) -> bool:
+    archetype = features.get("archetype")
+    if archetype is not None and (type(archetype) is not str or not archetype.strip()):
+        return False
+    for name, (kind, low, high) in PROFILE_RANGES.items():
+        value = features.get(name)
+        if value is None:
+            continue
+        if type(value) is bool or not isinstance(value, kind) or not low <= value <= high:
+            return False
+    return True
 
 
 def validate_features(features: dict, seller_id: str, shop_id: str, now: datetime) -> None:
@@ -126,6 +167,10 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
         "platform_supported_amount",
         "shop_age_months",
         "return_rate",
+        "archetype",
+        "n_products",
+        "top3_share",
+        "rating",
         "weekly_payouts",
         "raw_refs",
         "etl_run_id",
@@ -148,6 +193,8 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
     support = features.get("platform_supported_amount")
     if type(support) is not int or support < 0 or not features.get("disclosure"):
         raise WorkflowError("INVALID_FEATURE_SNAPSHOT", 422)
+    if not _valid_profile(features):
+        raise WorkflowError("INVALID_FEATURE_SNAPSHOT", 422)
     rows = features.get("weekly_payouts", [])
     if not 4 <= len(rows) <= 104:
         raise WorkflowError("PAYOUT_HISTORY_REQUIRED", 422)
@@ -166,23 +213,6 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
         ):
             raise WorkflowError("INVALID_PAYOUT_HISTORY", 422)
         previous = start
-
-
-class RiskModel(ABC):
-    @abstractmethod
-    def predict(self, features: dict) -> dict: ...
-
-
-class DemoRiskModel(RiskModel):
-    def predict(self, features: dict) -> dict:
-        return {
-            "pd_bps": 500,
-            "model_version": "demo-fixed-v1",
-            "source": "synthetic",
-            "factors": [
-                {"name": "demo_baseline", "direction": "increase", "contribution_bps": 500}
-            ],
-        }
 
 
 class CicSource(ABC):

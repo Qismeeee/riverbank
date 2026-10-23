@@ -1,0 +1,163 @@
+from types import SimpleNamespace
+
+import pytest
+from fastapi.testclient import TestClient
+
+from main import app
+from routers import underwriting as routes
+from services.risk import MODEL_DIR
+from services.underwriting.models import WorkflowError
+from services.underwriting.repository import MemoryCaseRepository
+from services.underwriting.risk import LightGbmRiskModel, RiskInput
+from services.underwriting.service import UnderwritingService
+from services.underwriting.sources import (
+    DemoCicSource,
+    MockLosAdapter,
+    demo_source,
+    validate_features,
+)
+from tests.test_underwriting import NOW, plan, seller_headers
+
+
+class FakeScorer:
+    meta = {"model_version": "fake-v1"}
+
+    def __init__(self, pd=0.0123, factors=None):
+        self.pd = pd
+        self.factors = factors or [
+            SimpleNamespace(name="payout_cv_12w", shap=0.4, value=0.2),
+            SimpleNamespace(name="rating", shap=-0.1, value=4.7),
+        ]
+        self.calls = []
+
+    def predict(self, raw, top_k=5):
+        self.calls.append((raw, top_k))
+        return SimpleNamespace(pd=self.pd, factors=self.factors, model_version="fake-v1")
+
+
+def build(risk, mutate=None):
+    source = demo_source(NOW)
+    if mutate:
+        for _, features in source.records.values():
+            mutate(features)
+    return UnderwritingService(
+        MemoryCaseRepository(),
+        source,
+        risk,
+        DemoCicSource(),
+        MockLosAdapter(),
+        clock=lambda: NOW,
+    )
+
+
+def create(service, seller="demo-b", **changes):
+    app.dependency_overrides[routes.get_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/cases", json=plan(seller, **changes), headers=seller_headers(seller)
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 201, response.text
+    return service.repository.get(response.json()["case_id"])
+
+
+@pytest.fixture(autouse=True)
+def demo_mode(monkeypatch):
+    monkeypatch.setattr(routes.config, "ENV", "local")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+
+
+def test_raw_features_follow_case_inputs():
+    case = create(build(LightGbmRiskModel(FakeScorer())))
+    run = case.runs[-1]
+    features, cf = run["input_snapshot"]["features"], run["cashflow"]
+    raw = LightGbmRiskModel.raw_features(RiskInput(features, case.plan, cf))
+    payouts = [w["amount"] for w in features["weekly_payouts"]]
+    assert raw["payout_mean_12w"] == sum(payouts[-12:]) // len(payouts[-12:])
+    assert raw["supplier_amount"] == sum(p["amount"] for p in case.plan["supplier_schedule"])
+    assert raw["amount"] == cf["amount_proposed"]
+    assert raw["tenor_weeks"] == cf["tenor_weeks"]
+    assert raw["deduction_to_stress"] == round(cf["weekly_deduction"] / cf["payout_stress"], 4)
+    assert raw["return_rate_12w"] == features["return_rate"]
+    assert raw["rating"] == features["rating"]
+
+
+def test_lightgbm_scores_complete_profile():
+    scorer = FakeScorer()
+    case = create(build(LightGbmRiskModel(scorer, top_k=3)))
+    risk = case.runs[-1]["risk"]
+    assert case.status == "PENDING_REVIEW" and case.reason is None
+    assert risk["source"] == "lightgbm" and risk["model_version"] == "fake-v1"
+    assert risk["pd_bps"] == round(scorer.pd * 10_000)
+    assert [f["direction"] for f in risk["factors"]] == ["increase", "decrease"]
+    assert risk["missing_fields"] == []
+    assert scorer.calls[0][1] == 3
+    memo = case.documents[-1]["underwriter_memo"]
+    assert any(s["template"] == "risk" and risk["disclosure"] in s["text"] for s in memo)
+
+
+@pytest.mark.parametrize("field", ["n_products", "rating", "archetype"])
+def test_missing_profile_escalates_without_scoring(field):
+    scorer = FakeScorer()
+    case = create(build(LightGbmRiskModel(scorer), lambda f: f.pop(field)))
+    risk = case.runs[-1]["risk"]
+    assert (case.status, case.reason) == ("ESCALATED", "RISK_DATA_MISSING")
+    assert risk["pd_bps"] is None and risk["factors"] == []
+    assert risk["missing_fields"] == [field]
+    assert scorer.calls == []
+    memo = case.documents[-1]["underwriter_memo"]
+    assert case.documents[-1]["validated"]
+    assert any(s["template"] == "risk_missing" and field in s["text"] for s in memo)
+
+
+def test_hard_failure_outranks_missing_risk():
+    case = create(
+        build(LightGbmRiskModel(FakeScorer()), lambda f: f.update(rating=None, shop_age_months=1))
+    )
+    assert (case.status, case.reason) == ("ESCALATED", "HARD_POLICY_FAILURE")
+
+
+def test_missing_risk_outranks_statement_request():
+    case = create(build(LightGbmRiskModel(FakeScorer()), lambda f: f.pop("top3_share")), "demo-c")
+    assert (case.status, case.reason) == ("ESCALATED", "RISK_DATA_MISSING")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"rating": 5.5},
+        {"top3_share": -0.1},
+        {"n_products": 1.5},
+        {"n_products": True},
+        {"archetype": " "},
+        {"archetype": 3},
+    ],
+)
+def test_invalid_profile_rejected(changes):
+    _, features = demo_source(NOW).records[("demo-b", "demo-b")]
+    features.update(changes)
+    with pytest.raises(WorkflowError) as error:
+        validate_features(features, "demo-b", "demo-b", NOW)
+    assert (error.value.code, error.value.status) == ("INVALID_FEATURE_SNAPSHOT", 422)
+
+
+def test_unknown_risk_config_is_rejected(monkeypatch):
+    monkeypatch.setattr(routes.config, "WORKFLOW_RISK", "unknown")
+    routes.get_service.cache_clear()
+    try:
+        with pytest.raises(WorkflowError) as error:
+            routes.get_service()
+    finally:
+        routes.get_service.cache_clear()
+    assert error.value.code == "INVALID_WORKFLOW_RISK"
+
+
+@pytest.mark.skipif(not (MODEL_DIR / "pd_lgbm.txt").exists(), reason="chưa train model PD")
+def test_trained_model_scores_demo_case():
+    case = create(build(LightGbmRiskModel()))
+    risk = case.runs[-1]["risk"]
+    assert case.status == "PENDING_REVIEW"
+    assert risk["model_version"] == LightGbmRiskModel().scorer.meta["model_version"]
+    assert 0 <= risk["pd_bps"] <= 10_000 and 1 <= len(risk["factors"]) <= 5

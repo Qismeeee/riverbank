@@ -11,7 +11,7 @@ Chính sách trả lời: hồ sơ được đi tiếp, phải bổ sung sao kê
 | Việc | Ai làm |
 |---|---|
 | Gap, số đề xuất, kỳ hạn, lịch trích | `CashFlowEngine` |
-| PD và yếu tố giải thích | `RiskModel`. Bản prod hiện là `DemoRiskModel`, xem mục 3 |
+| PD và yếu tố giải thích | `RiskModel`. Bản prod là `LightGbmRiskModel`, xem mục 3 |
 | Pass/fail từng rule | `PolicyEngine` |
 | Chấp nhận, sửa số, từ chối | Người có vai trò `underwriter` |
 | Hợp đồng, OTP, giải ngân, sổ cái | LOS và Core ngân hàng |
@@ -27,16 +27,17 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 4. Tính Gap trên kịch bản cơ sở.
 5. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule.
 6. Gap > 0 → chấm PD (E6), tra CIC (E6a), chạy đủ chín rule (E7).
-7. Rule cứng duy nhất fail là R05 vì thiếu kết quả sao kê → `AWAITING_STATEMENT`, lý do `STATEMENT_REQUIRED`.
-8. Có rule cứng khác fail → `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
-9. Không rule cứng nào fail → `PENDING_REVIEW`. Rule mềm fail chỉ hiện trong kết quả rule.
-10. Sinh tờ trình và bản seller từ template, kiểm từng câu với bằng chứng, tối đa 3 lần. Không qua → `ESCALATED`, lý do `MEMO_VALIDATION_FAILED`.
-11. Dừng chờ người bấm.
+7. Có rule cứng fail khác R05 thiếu sao kê, hoặc sao kê lệch → `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
+8. Thiếu dữ liệu hồ sơ shop nên không chấm được PD → `ESCALATED`, lý do `RISK_DATA_MISSING`.
+9. Rule cứng duy nhất fail là R05 vì thiếu kết quả sao kê → `AWAITING_STATEMENT`, lý do `STATEMENT_REQUIRED`.
+10. Còn lại → `PENDING_REVIEW`. Rule mềm fail chỉ hiện trong kết quả rule.
+11. Sinh tờ trình và bản seller từ template, kiểm từng câu với bằng chứng, tối đa 3 lần. Không qua → `ESCALATED`, lý do `MEMO_VALIDATION_FAILED`.
+12. Dừng chờ người bấm.
 
 ## 3. Việc không nằm trong rule
 
 - Số seller xin không bao giờ là số đề xuất. Số đề xuất là đầu ra CashFlow Engine.
-- PD là thông tin cho người duyệt. Không có ngưỡng PD để tự chuyển trạng thái. Bản prod dùng `DemoRiskModel` trả cố định 500 bps (5%) với một yếu tố `demo_baseline`. Model LightGBM ở `api/services/risk.py` đã train nhưng chưa nối vào luồng.
+- PD là thông tin cho người duyệt. Không có ngưỡng PD để tự chuyển trạng thái. Bản prod dùng `LightGbmRiskModel` (`api/services/underwriting/risk.py`) bọc model `api/services/risk.py`. Đầu vào gồm hồ sơ shop trong snapshot (`archetype`, `shop_age_months`, `n_products`, `top3_share`, `rating`, `return_rate`), payout 12 tuần gần nhất (`payout_profile`, dùng chung với lúc train) và số của CashFlow Engine. Kết quả E6 có `pd_bps`, tối đa 5 yếu tố SHAP và lời công bố "PD ước lượng trên dữ liệu mô phỏng". Thiếu một trường hồ sơ shop thì không chấm, E6 ghi `missing_fields`, hồ sơ sang `ESCALATED` lý do `RISK_DATA_MISSING`. `RIVERBANK_WORKFLOW_RISK=demo` chuyển về `DemoRiskModel` 500 bps cố định, bộ golden dùng bản này để số không đổi theo model.
 - Giới tính, tôn giáo, dân tộc, sức khỏe không có trong feature hay rule. Nhắc tới trong `note` thì chặn cả hồ sơ.
 - Lãi và phí không có trong bản seller vì chưa có biểu phí ngân hàng.
 - Tờ trình không viết điều khoản hợp đồng, khế ước, ủy nhiệm chi.
@@ -108,11 +109,12 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07.
 
 ## 5. Nhánh trạng thái sau rule
 
-| Điều kiện | Trạng thái | `reason` |
+| Điều kiện, xét từ trên xuống | Trạng thái | `reason` |
 |---|---|---|
 | Gap = 0 | `NO_LOAN_NEEDED` | `null` |
-| Rule cứng duy nhất fail là R05 thiếu sao kê | `AWAITING_STATEMENT` | `STATEMENT_REQUIRED` |
 | Rule cứng khác fail, hoặc sao kê lệch | `ESCALATED` | `HARD_POLICY_FAILURE` |
+| Thiếu hồ sơ shop, không chấm được PD | `ESCALATED` | `RISK_DATA_MISSING` |
+| Rule cứng duy nhất fail là R05 thiếu sao kê | `AWAITING_STATEMENT` | `STATEMENT_REQUIRED` |
 | Tờ trình không qua kiểm tra sau 3 lần | `ESCALATED` | `MEMO_VALIDATION_FAILED` |
 | Không rule cứng nào fail | `PENDING_REVIEW` | `null` |
 
