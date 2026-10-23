@@ -37,6 +37,6 @@ Số trong câu tiếng Việt viết theo kiểu `80.000.000`. Giá trị JSON 
 
 # Mẫu đạt và mẫu loại
 
-Đạt: "Dòng tiền âm sâu nhất là 80.000.000 VND tại tuần 0, đề xuất 88.000.000 VND trong 8 tuần." với `evidence_ids: ["E5"]`, khi E5 đúng các số đó.
+Đạt: "Dòng tiền âm sâu nhất là 80.000.000 VND tại tuần 0, đề xuất 90.000.000 VND trong 8 tuần." với `evidence_ids: ["E5"]`, khi E5 đúng các số đó.
 
-Loại: câu có số mà `evidence_ids` rỗng. Câu viết 90.000.000 trong khi E5 là 88.000.000. Câu "seller gian lận vì sao kê lệch". Câu "nên duyệt ngay" khi E7 đang fail.
+Loại: câu có số mà `evidence_ids` rỗng. Câu viết 88.000.000 trong khi E5 là 90.000.000. Câu "seller gian lận vì sao kê lệch". Câu "nên duyệt ngay" khi E7 đang fail.

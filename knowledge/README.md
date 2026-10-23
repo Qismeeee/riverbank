@@ -1,31 +1,32 @@
 # Knowledge ezXRiverbank
 
-Bộ này là nguồn cho prompt, rule và policy của sản phẩm. BRD/SRS/TDD giữ nguyên vai trò tài liệu gốc. Khi số liệu lệch nhau, thứ tự bên dưới thắng.
+Bộ này là nguồn cho prompt và guardrail của sản phẩm. Từ 23/10/2026 số và rule lấy theo code đang chạy, xem `AGENTS.md`.
 
 ## Thứ tự hiệu lực
 
-1. `policy/parameters.yaml` — mọi ngưỡng số.
-2. `policy/policy.md` — ý nghĩa rule và nhánh trạng thái.
-3. `policy/worked-examples.md` — nhãn kiểm thử tính tay.
-4. `ezXRiverbank-SRS.md` — hành vi phải đạt.
-5. `ezXRiverbank-TDD.md` — luồng kỹ thuật và API.
-6. `ezXRiverbank-BRD.md` — ý nghiệp vụ.
-7. `riverbank-architecture.md` — cách kể trên sân khấu. Số trong slide không đè công thức.
+1. Code: `api/services/cashflow.py`, `api/policy/engine.py`, `api/policy/rules.py`, `api/services/underwriting/`.
+2. `policy/parameters.yaml`, bản chép ngưỡng của code, có test kiểm khớp.
+3. `policy/policy.md`, ý nghĩa rule R01 đến R09 và nhánh trạng thái.
+4. `policy/worked-examples.md`, nhãn kiểm thử tính tay.
+5. `docs/Riverbank-SRS.md`, `docs/Riverbank-TDD.md`, `docs/Riverbank-BRD.md`.
+6. Slide. Số trong slide không đè công thức.
 
-Hai chỗ đã chốt vì tài liệu kể khác công thức:
+Hai số khóa:
 
-- Shop median 70.000.000/tuần, trả 100% tuần 0: đề xuất **88.000.000**, kỳ hạn **8**, trích **11.000.000**/tuần. Không hard-code 90 triệu và 12 triệu.
+- Shop median 70.000.000/tuần, trả 100% tuần 0: đề xuất **90.000.000**, kỳ hạn **8**, trích **11.250.000**/tuần.
 - Cọc 50% rồi trả nốt tuần 4, cùng payout: Gap = 0, ngưỡng cảnh báo **20.000.000**/tuần. Không hard-code 45 triệu.
 
 ## Policy
 
 | File | Việc |
 |---|---|
-| `policy/policy.md` | R01–R08, thứ tự xử lý, quyết định của người |
+| `policy/policy.md` | R01 đến R09, thứ tự xử lý, quyết định của người, phần chưa có code |
 | `policy/parameters.yaml` | Hệ số, trần, ngưỡng so sánh |
-| `policy/worked-examples.md` | FX-A, FX-B, FX-C, FX-D, FX-E, FX-F, FX-L |
+| `policy/worked-examples.md` | FX-A, FX-B, FX-C, FX-E, FX-F, duyệt số khác. FX-D, FX-L chưa có code |
 
-Chưa có `rules.py`. Policy Engine chỉ nạp bản dịch sau pytest và xác nhận người. Codex dịch từ `policy.md`, không sửa pass/fail bằng lời văn.
+`rules.py` đã có và chạy trên prod. Prompt nào nhắc ngưỡng phải lấy đúng số trong `parameters.yaml`.
+
+Trạng thái hiện tại: luồng `/v1` chưa gọi prompt nào trong thư mục này. Tờ trình sinh từ template trong `api/services/underwriting/evidence.py`. Các prompt là kế hoạch cho bước nối LLM.
 
 ## Prompt
 

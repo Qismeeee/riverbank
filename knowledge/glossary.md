@@ -16,15 +16,17 @@ Dùng đúng tên ở cột SRS. Tài liệu kiến trúc cũ có tên khác; kh
 
 `FAST_TRACK` là cờ `is_fast_track`, không phải trạng thái.
 
+Code hiện lưu hồ sơ ở `NO_LOAN_NEEDED`, `AWAITING_STATEMENT`, `PENDING_REVIEW`, `ESCALATED`, `ACCEPTED`, `REJECTED`. `DRAFT` và `ANALYZING` chỉ xuất hiện trong nhật ký. `BLOCKED_INPUT` trả `422`, không lưu hồ sơ. Kết quả bàn giao nằm ở `handoff.status` (`PENDING`, `SENDING`, `SUCCEEDED`, `FAILED`), không phải trạng thái hồ sơ. `VERIFYING`, `MONITORING_ACTIVE`, `RESTRUCTURE_PROPOSED`, cờ `is_fast_track` chưa có code.
+
 ## Quyết định của người
 
-`ACCEPT_PROPOSAL`, `ACCEPT_MODIFIED`, `REJECT` ở giai đoạn `UNDERWRITING_P3`.
+`ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT` ở giai đoạn `UNDERWRITING_P3`. Tài liệu cũ gọi `ACCEPT_COUNTER` là `ACCEPT_MODIFIED`.
 
 `APPROVE_RESTRUCTURE` ở giai đoạn `RESTRUCTURE_P7`. Giữ nguyên lịch thì không tạo version mới.
 
 ## Nguồn version
 
-`SYSTEM_PROPOSED`, `HUMAN_MODIFIED`, `RESTRUCTURED_P7`. Trạng thái version: `ACTIVE` hoặc `SUPERSEDED`.
+`SYSTEM_PROPOSED`, `HUMAN_MODIFIED`, `RESTRUCTURED_P7`. Trạng thái version: `ACTIVE` hoặc `SUPERSEDED`. Chưa có code: sửa số hiện tạo một lần chạy mới trong `runs` với `trigger = COUNTER`.
 
 ## Chứng từ
 

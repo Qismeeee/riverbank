@@ -4,10 +4,12 @@
 |---|---|
 | Sản phẩm | Riverbank |
 | Loại tài liệu | Business Requirements Document |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | Bản làm việc cho team |
 | Đối tượng đọc | Nghiệp vụ, presenter, dev |
 | Nguồn | `riverbank-architecture.md`, quy trình tín dụng ngân hàng |
+
+**Thay đổi 1.1 so với 1.0:** ghi rule mềm và rule cứng theo code ở case E, ghi case D chưa có code. Số và rule chạy theo `api/` (xem `docs/Riverbank-spec-vs-code.md`).
 
 **Thay đổi 1.0 so với 0.9:** đổi tên sản phẩm thành Riverbank; chốt mô hình tích hợp A (Riverbank là LOS, mục 6); sửa số ví dụ case A và B cho khớp công thức (mục 9); thêm quy tắc làm tròn BL-02, trần cho vay điện tử BL-09, hiệu lực quyết định BL-10, xử lý trích thiếu BL-11; thêm BR-21 về CIC; sửa case D.
 
@@ -191,9 +193,9 @@ Ví dụ case có gap: cùng lô, trả 100% trước, seller xin 150 triệu. S
 | A | Điều khoản xưởng khiến không tuần nào âm | Không đề xuất vay, có ngưỡng cảnh báo |
 | B | Có gap, xin nhiều hơn gap, nằm trong mức dữ liệu, rule pass | Đề xuất theo gap, người duyệt |
 | C | Xin vượt mức, sao kê lệch payout sàn | Chuyển người, không kết luận gian lận |
-| D | Xin vượt mức, dòng tiền từ sàn trong sao kê khớp payout, phần vượt là doanh thu ngoài sàn | Vẫn chuyển người xác minh. Dữ liệu sàn không chứng minh được dòng ngoài sàn. Phần payout chỉ bảo đảm mức tương ứng doanh thu sàn |
-| E | Fail rule cứng | Chuyển người |
-| F | Nội dung nhập vi phạm chặn đầu vào | Không đưa vào thẩm định |
+| D | Xin vượt mức, dòng tiền từ sàn trong sao kê khớp payout, phần vượt là doanh thu ngoài sàn | Vẫn chuyển người xác minh. Dữ liệu sàn không chứng minh được dòng ngoài sàn. Phần payout chỉ bảo đảm mức tương ứng doanh thu sàn. Chưa có trong code: sao kê khớp tổng tiền sàn thì hồ sơ sang `PENDING_REVIEW` |
+| E | Fail rule cứng (R01, R02, R04, R05, R06, R08, R09) | Chuyển người. Rule mềm R03, R07 chỉ cảnh báo |
+| F | Nội dung nhập vi phạm chặn đầu vào | Không đưa vào thẩm định, không lưu hồ sơ |
 
 ## 11. Giả định và câu hỏi mở
 

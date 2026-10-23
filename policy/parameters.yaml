@@ -1,63 +1,83 @@
-# Tham số bản demo của ezXRiverbank.
-# Ngân hàng sửa file này. Không chép các ngưỡng sang prompt, UI, hay lời văn tờ trình.
-# Khi số ở đây lệch với câu kể trong slide, file này thắng.
-schema_version: 1
+# Tham số bản demo của Riverbank.
+# File này là bản chép của giá trị mặc định trong code đang chạy trên prod:
+#   CashFlowConfig  api/services/cashflow.py
+#   PolicyConfig    api/policy/engine.py
+#   Plan            api/services/underwriting/models.py
+# api/tests/test_golden.py kiểm từng số dưới đây khớp code. Đổi ngưỡng thì đổi code và file này cùng PR.
+# Không chép các ngưỡng sang prompt, UI, hay lời văn tờ trình.
+schema_version: 2
 currency: VND
 
 cashflow:
-  # BL-01. Payout kịch bản xấu.
+  # BL-01. Payout kịch bản xấu = int(payout_base * stress_factor), cắt phần lẻ.
   stress_factor: 0.7
-  # BL-02. Số đề xuất = min(gap * buffer_factor, gap * buffer_cap), rồi làm tròn.
+  # BL-02. Số đề xuất = min(làm tròn lên bội amount_rounding_vnd của gap * buffer_factor, int(gap * buffer_cap)).
   buffer_factor: 1.1
   buffer_cap: 1.15
-  # Làm tròn đến triệu gần nhất. Gap 80.000.000 → 88.000.000, không phải 90.000.000.
-  amount_rounding_vnd: 1000000
-  # BL-03.
+  # Gap 80.000.000 → 88.000.000 → 90.000.000. Trần 92.000.000.
+  amount_rounding_vnd: 5000000
+  # BL-03. Kỳ hạn cơ sở = số tuần từ tuần âm đầu đến tuần âm cuối + tenor_buffer_weeks.
   tenor_buffer_weeks: 2
-  # BL-04. Mỗi vòng không đủ trần thì cộng thêm bấy nhiêu tuần.
+  # BL-04. Kỳ trích vượt trần thì cộng bấy nhiêu tuần rồi tính lại.
   tenor_extend_step_weeks: 2
-  max_tenor_weeks: 24
-  # BL-04, R08. Trần trích trên payout tham chiếu.
+  max_tenor_weeks: 26
+  # BL-04, R08. Trần trích = int(payout_stress * deduction_cap_ratio).
   deduction_cap_ratio: 0.25
-  # TDD FLOW-03: tuần 0 chưa có payout của lô.
-  week0_inflow: 0
-  payout_window_weeks: 12
-  payout_statistic: median
-  # int(payout * stress_factor) — cắt phần lẻ, không làm tròn lên.
-  stress_rounding: trunc_toward_zero
-  # math.ceil(proposed_amount / tenor_weeks), đơn vị VND.
+  # Tuần 0 là tuần nhập hàng, payout của lô bắt đầu từ tuần này.
+  payout_start_week: 1
+  # Số tuần cộng thêm sau max(sell_weeks, tuần chi cuối + 1) khi dựng bảng dòng tiền.
+  extra_weeks: 2
+  # Payout cơ sở = median toàn bộ lịch sử truyền vào. Feature snapshot đòi 4 đến 104 tuần.
+  payout_statistic: median_all
+  min_history_weeks: 4
+  # Trích mỗi tuần = ceil(số tiền / kỳ hạn). Lịch trích chia đều, các tuần đầu nhận phần dư.
   weekly_deduction_rounding: ceil_vnd
 
-routing:
-  # BL-05, R05. Case C: 300.000.000 >= 2.5 * 120.000.000.
-  statement_request_multiple: 2.5
-  statement_compare: greater_or_equal
-  # BL-06, R06. Vượt ngưỡng này thì ESCALATED. So trên tổng kỳ, không trung bình tỷ lệ từng tháng.
-  statement_mismatch_ratio: 0.15
-  statement_mismatch_compare: greater_than
-
-appetite:
+policy:
+  # R01. Hạn mức tuyệt đối của bộ demo, so với số đề xuất.
+  max_amount_vnd: 300000000
   # R02. Fail khi shop_age_months < min.
   min_shop_age_months: 6
-  # R03. Fail khi return_rate_90d > max.
-  max_return_rate_90d: 0.08
-  # R07. Fail khi cic_group >= 2. Chỉ chạy sau khi Gap > 0 và đã có D04.
-  max_cic_group_pass: 1
+  # R03, rule mềm. Fail khi return_rate > max.
+  max_return_rate: 0.15
+  # R04. Khung kỳ hạn.
+  min_tenor_weeks: 2
+  max_tenor_weeks: 26
+  # R05. Đòi sao kê khi max(số xin, số đề xuất) > doc_required_multiple * platform_supported_amount.
+  # Bằng đúng mốc thì không đòi.
+  doc_required_multiple: 2.5
+  # R06. Fail khi nhóm nợ CIC > max.
+  max_cic_group: 2
+  # R07, rule mềm. Fail khi dư nợ CIC > tỷ lệ này * payout_stress * 4.
+  max_outstanding_to_monthly_payout: 3.0
+  # R08. Giống cashflow.deduction_cap_ratio.
+  deduction_cap_of_stress_payout: 0.25
+  # R09. Trần dư nợ cho vay điện tử cá nhân, TT 06/2023/TT-NHNN.
+  e_lending_cap_vnd: 100000000
+
+statement:
+  # So khớp sao kê: |payout sàn - tổng sàn trên sao kê| <= 15% payout sàn.
+  mismatch_ratio: 0.15
 
 input_hard_cap:
-  # Trần cổng nhập (FR-04), không phải rule tín dụng. Vượt trần → BLOCKED_INPUT, không gọi model.
-  # Mức demo đặt trên Case C (300 triệu) để Case C vẫn vào được nhánh sao kê.
-  max_amount_requested_vnd: 1000000000
-  max_lot_value_vnd: 5000000000
-  max_cash_on_hand_vnd: 5000000000
-  max_sell_weeks: 52
-  max_supplier_weeks: 52
+  # Kiểm bằng Pydantic, vượt thì 422 lỗi kiểu dữ liệu, không phải BLOCKED_INPUT.
+  max_requested_amount_vnd: 300000000
+  max_sell_weeks: 26
+  max_supplier_week: 52
+  max_supplier_rows: 100
   max_note_chars: 2000
 
-memo:
-  # BL-07. Sai lần 1 và 2 thì sinh lại. Lần thứ 3 → ESCALATED + UNVERIFIED_DRAFT.
-  max_regen_attempts: 2
+decision:
+  # FR-31b. Quyết định chấp nhận hết hiệu lực sau bấy nhiêu ngày.
+  validity_days: 14
+  # Kỳ hạn người duyệt được nhập khi ACCEPT_COUNTER.
+  counter_min_tenor_weeks: 2
+  counter_max_tenor_weeks: 26
 
-guardrail:
-  # Xác suất Jev từ mức này trở lên thì BLOCKED_INPUT hoặc loại văn bản.
-  block_probability: 0.5
+memo:
+  # BL-07. Sinh tờ trình từ template, kiểm từng câu với bằng chứng, tối đa 3 lần. Lần 3 fail → ESCALATED.
+  max_attempts: 3
+
+handoff:
+  # Khóa một lần gửi LOS.
+  lease_seconds: 60

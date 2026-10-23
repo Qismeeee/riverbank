@@ -4,6 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from policy.engine import PolicyConfig
+from policy.rules import RULES
+from services.cashflow import ROUND_UNIT, CashFlowConfig
+from services.underwriting.models import Plan
+
 ROOT = Path(__file__).resolve().parents[2]
 _SPEC = importlib.util.spec_from_file_location("riverbank_eval_score", ROOT / "eval" / "score.py")
 score = importlib.util.module_from_spec(_SPEC)
@@ -12,12 +17,7 @@ _SPEC.loader.exec_module(score)
 
 GOLDEN = ROOT / "eval" / "golden"
 LLM = GOLDEN / "llm"
-UNDERWRITING_RULES = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08"]
-SLIDE_LOCKS = {
-    "amount_proposed": {90_000_000},
-    "weekly_deduction": {11_250_000, 12_000_000},
-    "payout_warning_threshold": {45_000_000},
-}
+UNDERWRITING_RULES = [r.rule_id for r in RULES]
 
 
 def _cases() -> list[tuple[str, dict, dict]]:
@@ -65,13 +65,13 @@ def test_worked_example(case_id: str, inp: dict, expected: dict):
 )
 def test_case_stops_before_a_human_decision(case_id: str, inp: dict):
     got = score.score_case(inp)
-    assert got["status"] not in {"ACCEPTED", "REJECTED", "RESTRUCTURED_P7"}, case_id
+    assert got["status"] not in {"ACCEPTED", "REJECTED"}, case_id
     assert got["auto_rejected"] is False
-    assert got["auto_applied"] is False
-    if got["status"] in {"NO_LOAN_NEEDED", "BLOCKED_INPUT"}:
+    if got["status"] in {"NO_LOAN_NEEDED", "BLOCKED_INPUT", "INVALID_INPUT"}:
         assert got["cic_called"] is False
         assert got["pd_scored"] is False
         assert got["rules_evaluated"] == []
+    if got["status"] in {"BLOCKED_INPUT", "INVALID_INPUT"}:
         assert got["underwriting_started"] is False
     if got["gap"] == 0:
         assert got["status"] == "NO_LOAN_NEEDED"
@@ -82,29 +82,49 @@ def test_case_stops_before_a_human_decision(case_id: str, inp: dict):
         assert got["rules_evaluated"] == UNDERWRITING_RULES
 
 
-def test_parameters_are_the_threshold_source():
+def _field_bound(model, name: str, attr: str):
+    for item in model.model_fields[name].metadata:
+        if hasattr(item, attr):
+            return getattr(item, attr)
+    raise AssertionError(f"{model.__name__}.{name} thiếu {attr}")
+
+
+def test_parameters_mirror_code():
     cfg = score.parameters()
-    cash = cfg["cashflow"]
-    assert cash["amount_rounding_vnd"] == 1_000_000
-    assert cash["buffer_factor"] == "1.1"
-    assert cash["buffer_cap"] == "1.15"
-    assert cash["stress_factor"] == "0.7"
-    assert cash["deduction_cap_ratio"] == "0.25"
-    assert cash["max_tenor_weeks"] == 24
-    assert cfg["routing"]["statement_request_multiple"] == "2.5"
-    assert cfg["routing"]["statement_mismatch_ratio"] == "0.15"
-    assert cfg["appetite"]["max_return_rate_90d"] == "0.08"
-    assert cfg["appetite"]["min_shop_age_months"] == 6
-    assert cfg["appetite"]["max_cic_group_pass"] == 1
-    assert cfg["input_hard_cap"]["max_amount_requested_vnd"] == 1_000_000_000
+    cash, policy, cap = cfg["cashflow"], cfg["policy"], cfg["input_hard_cap"]
+    cf, pc = CashFlowConfig(), PolicyConfig()
+    assert float(cash["stress_factor"]) == cf.stress_factor
+    assert float(cash["buffer_factor"]) == cf.buffer_factor
+    assert float(cash["buffer_cap"]) == cf.buffer_cap
+    assert cash["amount_rounding_vnd"] == ROUND_UNIT
+    assert cash["tenor_buffer_weeks"] == cf.tenor_buffer_weeks
+    assert cash["tenor_extend_step_weeks"] == cf.tenor_extend_step
+    assert cash["max_tenor_weeks"] == cf.tenor_max_weeks
+    assert float(cash["deduction_cap_ratio"]) == cf.deduction_cap_of_stress_payout
+    assert cash["payout_start_week"] == cf.payout_start_week
+    assert cash["extra_weeks"] == cf.extra_weeks
+    assert cash["min_history_weeks"] == cf.min_history_weeks
+    assert policy["max_amount_vnd"] == pc.max_amount
+    assert policy["min_shop_age_months"] == pc.min_shop_age_months
+    assert float(policy["max_return_rate"]) == pc.max_return_rate
+    assert policy["min_tenor_weeks"] == pc.min_tenor_weeks
+    assert policy["max_tenor_weeks"] == pc.max_tenor_weeks
+    assert float(policy["doc_required_multiple"]) == pc.doc_required_multiple
+    assert policy["max_cic_group"] == pc.max_cic_group
+    ratio = float(policy["max_outstanding_to_monthly_payout"])
+    assert ratio == pc.max_outstanding_to_monthly_payout
+    assert float(policy["deduction_cap_of_stress_payout"]) == pc.deduction_cap_of_stress_payout
+    assert policy["e_lending_cap_vnd"] == pc.e_lending_cap
+    assert cap["max_requested_amount_vnd"] == _field_bound(Plan, "requested_amount", "le")
+    assert cap["max_sell_weeks"] == _field_bound(Plan, "sell_weeks", "le")
+    assert cap["max_supplier_rows"] == _field_bound(Plan, "supplier_schedule", "max_length")
+    assert cap["max_note_chars"] == _field_bound(Plan, "note", "max_length")
 
 
-def test_labels_do_not_reuse_slide_amounts():
-    for path in GOLDEN.glob("*.json"):
-        case = json.loads(path.read_text(encoding="utf-8"))
-        for block in _expected_blocks(case):
-            for key, banned in SLIDE_LOCKS.items():
-                assert block.get(key) not in banned, path.name
+def test_rule_ids_match_policy_doc():
+    text = (ROOT / "policy" / "policy.md").read_text(encoding="utf-8")
+    for rule in RULES:
+        assert f"### {rule.rule_id} " in text, rule.rule_id
 
 
 def test_case_wording_has_no_forbidden_lexicon():

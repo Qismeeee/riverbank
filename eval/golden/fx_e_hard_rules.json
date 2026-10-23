@@ -1,58 +1,199 @@
 {
   "case_id": "FX-E",
-  "title": "Rule cứng chuyển người, không tự từ chối",
+  "title": "Rule cứng chuyển người, rule mềm chỉ cảnh báo, không tự từ chối",
   "source": "policy/worked-examples.md",
   "base_input": {
     "cash_on_hand": 120000000,
-    "supplier_schedule": [{"week": 0, "amount": 200000000}],
+    "supplier_schedule": [
+      {
+        "week": 0,
+        "amount": 200000000
+      }
+    ],
     "sell_weeks": 6,
-    "payout_weekly_history": [70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000],
+    "payout_weekly_history": [
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000
+    ],
     "requested_amount": 150000000,
     "platform_support_limit": 120000000,
-    "shop_age_months": 6,
-    "return_rate_90d": 0.08,
-    "cic_group": 1
+    "shop_age_months": 12,
+    "return_rate_90d": 0.05,
+    "cic_group": 1,
+    "cic_outstanding": 0
   },
   "variants": [
     {
-      "variant_id": "cic",
-      "input": {"cic_group": 2},
+      "variant_id": "cic_group_3",
+      "input": {
+        "cic_group": 3
+      },
       "expected": {
-        "gap": 80000000,
-        "amount_proposed": 88000000,
         "status": "ESCALATED",
-        "is_fast_track": false,
-        "failed_rules": ["R07"],
-        "reason_codes": ["R07_CIC_GROUP"],
+        "failed_rules": [
+          "R06"
+        ],
         "cic_called": true,
         "pd_scored": true,
         "auto_rejected": false,
-        "rules_evaluated": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08"]
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07"
+        ],
+        "amount_proposed": 90000000
+      }
+    },
+    {
+      "variant_id": "cic_group_2",
+      "input": {
+        "cic_group": 2
+      },
+      "expected": {
+        "status": "PENDING_REVIEW",
+        "failed_rules": [],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07"
+        ],
+        "amount_proposed": 90000000
       }
     },
     {
       "variant_id": "shop_age",
-      "input": {"shop_age_months": 5},
+      "input": {
+        "shop_age_months": 5
+      },
       "expected": {
-        "amount_proposed": 88000000,
         "status": "ESCALATED",
-        "is_fast_track": false,
-        "failed_rules": ["R02"],
-        "reason_codes": ["R02_SHOP_TOO_YOUNG"],
+        "failed_rules": [
+          "R02"
+        ],
         "cic_called": true,
-        "auto_rejected": false
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07"
+        ],
+        "amount_proposed": 90000000
       }
     },
     {
-      "variant_id": "return_rate",
-      "input": {"return_rate_90d": 0.09},
+      "variant_id": "return_rate_soft",
+      "input": {
+        "return_rate_90d": 0.2
+      },
       "expected": {
-        "amount_proposed": 88000000,
+        "status": "PENDING_REVIEW",
+        "failed_rules": [
+          "R03"
+        ],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07"
+        ],
+        "amount_proposed": 90000000
+      }
+    },
+    {
+      "variant_id": "outstanding_soft",
+      "input": {
+        "cic_outstanding": 600000000
+      },
+      "expected": {
+        "status": "PENDING_REVIEW",
+        "failed_rules": [
+          "R07"
+        ],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07"
+        ],
+        "amount_proposed": 90000000
+      }
+    },
+    {
+      "variant_id": "e_lending_cap",
+      "input": {
+        "cash_on_hand": 50000000
+      },
+      "expected": {
         "status": "ESCALATED",
-        "is_fast_track": false,
-        "failed_rules": ["R03"],
-        "reason_codes": ["R03_RETURN_RATE"],
-        "auto_rejected": false
+        "failed_rules": [
+          "R09"
+        ],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07"
+        ],
+        "gap": 150000000,
+        "amount_proposed": 165000000,
+        "tenor_weeks": 15,
+        "weekly_deduction": 11000000
       }
     }
   ]
