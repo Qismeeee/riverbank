@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 import config
 from routers.auth import router as auth_router
+from routers.copilot import router as copilot_router
 from routers.studio import router as studio_router
 from routers.underwriting import router as underwriting_router
 from services.underwriting.models import WorkflowError
@@ -15,6 +16,7 @@ app = FastAPI(title="Riverbank API", version="0.1.0")
 app.include_router(auth_router)
 app.include_router(underwriting_router)
 app.include_router(studio_router)
+app.include_router(copilot_router)
 
 
 @app.exception_handler(WorkflowError)

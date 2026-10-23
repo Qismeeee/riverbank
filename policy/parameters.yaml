@@ -67,6 +67,10 @@ input_hard_cap:
   max_supplier_rows: 100
   max_note_chars: 2000
 
+guardrail:
+  # Jev jev-input-guard. Nhãn rủi ro có xác suất >= ngưỡng thì 422 BLOCKED_INPUT, không gọi LLM phía sau.
+  block_probability: 0.5
+
 decision:
   # FR-31b. Quyết định chấp nhận hết hiệu lực sau bấy nhiêu ngày.
   validity_days: 14
