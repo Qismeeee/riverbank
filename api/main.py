@@ -3,10 +3,23 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import config
+from routers.underwriting import router as underwriting_router
+from services.underwriting.models import WorkflowError
 
 app = FastAPI(title="Riverbank API", version="0.1.0")
+app.include_router(underwriting_router)
+
+
+@app.exception_handler(WorkflowError)
+async def workflow_error_handler(request, exc: WorkflowError):
+    return JSONResponse(
+        status_code=exc.status,
+        content={"detail": {"code": exc.code, "details": exc.details}},
+    )
+
 
 app.add_middleware(
     CORSMiddleware,

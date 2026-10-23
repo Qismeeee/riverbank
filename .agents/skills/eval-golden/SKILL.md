@@ -5,15 +5,18 @@ description: Thêm golden case, chạy eval offline, đo metric cho engine và m
 
 # Eval và golden set
 
-## Tầng 1: engine, chạy trong CI
+## Tầng 1: nhãn nghiệp vụ, chạy trong CI
 
-`eval/golden/*.json` với `input` và `expected`. `api/tests/test_golden.py` đọc tự động, không cần mạng.
-Thêm case: chép file có sẵn, đổi `case_id`, điền `expected` đã tính tay theo TDD FLOW-03. Chạy `make test`.
-Case A đến E trong `docs/Riverbank-BRD.md` mục 9 phải có đủ ở đây trước ngày demo.
+`eval/golden/fx_*.json` với `input` và `expected`. `api/tests/test_golden.py` chấm bằng `eval/score.py`, không cần mạng.
+Số lấy từ `policy/worked-examples.md`. Ngưỡng lấy từ `policy/parameters.yaml`. Hai file này thắng slide và TDD khi lệch số.
+Thêm case: chép một file FX, đổi `case_id`, điền `expected` đã tính từ file tham số. Chạy `make test`.
+Bộ khóa: FX-A, FX-B, FX-C, FX-D, FX-E, FX-F, FX-L.
 
-## Tầng 2: LLM, chạy tay
+## Tầng 2: chữ trên tờ trình
 
-`eval/golden/llm/*.json` cho memo, doc verifier, orchestrator. `eval/run.py` (viết khi có agents):
+`eval/golden/llm/*.json`. CI chạy validator Python trong `eval/score.py`: số khớp bằng chứng, từ cấm, lời văn trái trạng thái.
+Jev chấm bốn câu trong `knowledge/prompts/jev-eval-judge.md` khi có harness, không chấm lại Gap.
+`eval/run.py` (viết khi có agents):
 - Cache LLM theo `sha256(model + prompt)` trong `eval/.cache/`, commit cache để rerun free.
 - Metric: faithfulness (Jev score ≥ 4 và citation guard pass), số đúng 100%, latency p50, cost per case.
 - Judge khác model sinh. Người kiểm 10 case, ghi vào `eval/REVIEW.md`.
@@ -28,4 +31,4 @@ Case A đến E trong `docs/Riverbank-BRD.md` mục 9 phải có đủ ở đây
 
 ## Không làm
 
-Không sửa `expected` cho khớp code. Code sai thì sửa code. Nếu docs sai thì sửa docs, code và golden cùng PR.
+Không sửa `expected` cho khớp slide (90 triệu, 11,25 triệu, 45 triệu) hoặc cho khớp một bản engine đang làm tròn khác `parameters.yaml`. Công thức đổi thì sửa file tham số, worked example, và golden trong cùng một PR.

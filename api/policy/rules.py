@@ -50,9 +50,10 @@ def r04_tenor(p: PolicyInput, c: PolicyConfig) -> RuleResult:
 
 def r05_docs_when_over_platform(p: PolicyInput, c: PolicyConfig) -> RuleResult:
     threshold = int(p.platform_supported_amount * c.doc_required_multiple)
-    if p.amount <= threshold:
+    requested = p.requested_amount if p.requested_amount is not None else p.amount
+    if requested <= threshold:
         return _result(
-            "R05", True, True, f"{p.amount:,} trong mức sàn hỗ trợ x{c.doc_required_multiple}"
+            "R05", True, True, f"{requested:,} trong mức sàn hỗ trợ x{c.doc_required_multiple}"
         )
     if p.docs_verified is None:
         return _missing("R05", True, "kết quả Document Verifier")

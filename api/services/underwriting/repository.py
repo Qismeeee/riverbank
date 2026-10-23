@@ -1,0 +1,226 @@
+from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from copy import deepcopy
+from dataclasses import asdict
+from threading import RLock
+from typing import Iterator
+
+from .models import Case, WorkflowError
+
+
+def case_header(case: Case) -> dict:
+    header = asdict(case)
+    for key in ("runs", "evidence", "documents", "events", "decision", "handoff"):
+        header.pop(key)
+    return header
+
+
+class CaseRepository(ABC):
+    @abstractmethod
+    def create(self, case: Case, key: str, request_hash: str) -> Case: ...
+
+    @abstractmethod
+    def find_request(self, seller_id: str, key: str, request_hash: str) -> Case | None: ...
+
+    @abstractmethod
+    def get(self, case_id: str) -> Case: ...
+
+    @abstractmethod
+    def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]: ...
+
+    @abstractmethod
+    def transaction(self, case_id: str, version: int): ...
+
+
+class MemoryCaseRepository(CaseRepository):
+    def __init__(self) -> None:
+        self._cases: dict[str, Case] = {}
+        self._requests: dict[tuple[str, str], tuple[str, str]] = {}
+        self._lock = RLock()
+
+    def find_request(self, seller_id: str, key: str, request_hash: str) -> Case | None:
+        with self._lock:
+            item = self._requests.get((seller_id, key))
+            if not item:
+                return None
+            if item[0] != request_hash:
+                raise WorkflowError("IDEMPOTENCY_KEY_REUSED")
+            return self.get(item[1])
+
+    def create(self, case: Case, key: str, request_hash: str) -> Case:
+        with self._lock:
+            existing = self.find_request(case.seller_id, key, request_hash)
+            if existing:
+                return existing
+            self._cases[case.case_id] = deepcopy(case)
+            self._requests[(case.seller_id, key)] = (request_hash, case.case_id)
+            return deepcopy(case)
+
+    def get(self, case_id: str) -> Case:
+        with self._lock:
+            if case_id not in self._cases:
+                raise WorkflowError("CASE_NOT_FOUND", 404)
+            return deepcopy(self._cases[case_id])
+
+    def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]:
+        states = {"PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT"}
+        with self._lock:
+            cases = sorted(self._cases.values(), key=lambda c: (c.created_at, c.case_id))
+            return deepcopy(
+                [c for c in cases if c.status in states and (status is None or c.status == status)][
+                    offset : offset + limit
+                ]
+            )
+
+    @contextmanager
+    def transaction(self, case_id: str, version: int) -> Iterator[Case]:
+        with self._lock:
+            case = self.get(case_id)
+            if case.version != version:
+                raise WorkflowError("CASE_VERSION_CONFLICT")
+            yield case
+            case.version += 1
+            self._cases[case_id] = deepcopy(case)
+
+
+class PostgresCaseRepository(CaseRepository):
+    def __init__(self, database_url: str):
+        self.database_url = database_url
+
+    def _connect(self):
+        import psycopg
+
+        return psycopg.connect(self.database_url)
+
+    @staticmethod
+    def _load(conn, case_id: str, lock: bool = False) -> Case:
+        row = conn.execute(
+            "select header from cases where case_id=%s" + (" for update" if lock else ""),
+            (case_id,),
+        ).fetchone()
+        if row is None:
+            raise WorkflowError("CASE_NOT_FOUND", 404)
+        case = Case(**row[0])
+        for table, attr in (
+            ("assessment_runs", "runs"),
+            ("evidence", "evidence"),
+            ("generated_documents", "documents"),
+            ("case_events", "events"),
+        ):
+            rows = conn.execute(
+                f"select payload from {table} where case_id=%s order by ordinal",
+                (case_id,),
+            ).fetchall()
+            setattr(case, attr, [r[0] for r in rows])
+        for table, attr in (("decisions", "decision"), ("handoffs", "handoff")):
+            row = conn.execute(
+                f"select payload from {table} where case_id=%s", (case_id,)
+            ).fetchone()
+            setattr(case, attr, row[0] if row else None)
+        return case
+
+    @staticmethod
+    def _save(conn, case: Case) -> None:
+        from psycopg.types.json import Jsonb
+
+        header = case_header(case)
+        conn.execute(
+            "update cases set status=%s, version=%s, header=%s where case_id=%s",
+            (case.status, case.version, Jsonb(header), case.case_id),
+        )
+        for table, items, id_key in (
+            ("assessment_runs", case.runs, "run_id"),
+            ("evidence", case.evidence, "evidence_id"),
+            ("generated_documents", case.documents, "document_id"),
+            ("case_events", case.events, "event_id"),
+        ):
+            for ordinal, item in enumerate(items):
+                conn.execute(
+                    f"insert into {table} (id,case_id,ordinal,payload) values (%s,%s,%s,%s) "
+                    "on conflict (id) do nothing",
+                    (item[id_key], case.case_id, ordinal, Jsonb(item)),
+                )
+        if case.decision:
+            conn.execute(
+                "insert into decisions (case_id,payload) values (%s,%s) "
+                "on conflict (case_id) do nothing",
+                (case.case_id, Jsonb(case.decision)),
+            )
+        if case.handoff:
+            conn.execute(
+                "insert into handoffs (case_id,payload) values (%s,%s) "
+                "on conflict (case_id) do update set payload=excluded.payload",
+                (case.case_id, Jsonb(case.handoff)),
+            )
+
+    def find_request(self, seller_id: str, key: str, request_hash: str) -> Case | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "select case_id,request_hash from cases where seller_id=%s and request_key=%s",
+                (seller_id, key),
+            ).fetchone()
+            if not row:
+                return None
+            if row[1] != request_hash:
+                raise WorkflowError("IDEMPOTENCY_KEY_REUSED")
+            return self._load(conn, row[0])
+
+    def create(self, case: Case, key: str, request_hash: str) -> Case:
+        from psycopg.types.json import Jsonb
+
+        with self._connect() as conn:
+            inserted = conn.execute(
+                "insert into cases (case_id,seller_id,shop_id,status,version,created_at,"
+                "request_key,request_hash,header) values (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "on conflict (seller_id,request_key) do nothing returning case_id",
+                (
+                    case.case_id,
+                    case.seller_id,
+                    case.shop_id,
+                    case.status,
+                    case.version,
+                    case.created_at,
+                    key,
+                    request_hash,
+                    Jsonb(case_header(case)),
+                ),
+            ).fetchone()
+            if inserted:
+                self._save(conn, case)
+                return deepcopy(case)
+            row = conn.execute(
+                "select case_id,request_hash from cases where seller_id=%s and request_key=%s",
+                (case.seller_id, key),
+            ).fetchone()
+            if row[1] != request_hash:
+                raise WorkflowError("IDEMPOTENCY_KEY_REUSED")
+            return self._load(conn, row[0])
+
+    def get(self, case_id: str) -> Case:
+        with self._connect() as conn:
+            return self._load(conn, case_id)
+
+    def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "select case_id from cases where status = any(%s) "
+                "order by created_at,case_id limit %s offset %s",
+                (
+                    [status]
+                    if status
+                    else ["PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT"],
+                    limit,
+                    offset,
+                ),
+            ).fetchall()
+            return [self._load(conn, row[0]) for row in rows]
+
+    @contextmanager
+    def transaction(self, case_id: str, version: int) -> Iterator[Case]:
+        with self._connect() as conn:
+            case = self._load(conn, case_id, lock=True)
+            if case.version != version:
+                raise WorkflowError("CASE_VERSION_CONFLICT")
+            yield case
+            case.version += 1
+            self._save(conn, case)

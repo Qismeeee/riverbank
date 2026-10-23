@@ -1,0 +1,59 @@
+{
+  "case_id": "FX-E",
+  "title": "Rule cứng chuyển người, không tự từ chối",
+  "source": "policy/worked-examples.md",
+  "base_input": {
+    "cash_on_hand": 120000000,
+    "supplier_schedule": [{"week": 0, "amount": 200000000}],
+    "sell_weeks": 6,
+    "payout_weekly_history": [70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000],
+    "requested_amount": 150000000,
+    "platform_support_limit": 120000000,
+    "shop_age_months": 6,
+    "return_rate_90d": 0.08,
+    "cic_group": 1
+  },
+  "variants": [
+    {
+      "variant_id": "cic",
+      "input": {"cic_group": 2},
+      "expected": {
+        "gap": 80000000,
+        "amount_proposed": 88000000,
+        "status": "ESCALATED",
+        "is_fast_track": false,
+        "failed_rules": ["R07"],
+        "reason_codes": ["R07_CIC_GROUP"],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08"]
+      }
+    },
+    {
+      "variant_id": "shop_age",
+      "input": {"shop_age_months": 5},
+      "expected": {
+        "amount_proposed": 88000000,
+        "status": "ESCALATED",
+        "is_fast_track": false,
+        "failed_rules": ["R02"],
+        "reason_codes": ["R02_SHOP_TOO_YOUNG"],
+        "cic_called": true,
+        "auto_rejected": false
+      }
+    },
+    {
+      "variant_id": "return_rate",
+      "input": {"return_rate_90d": 0.09},
+      "expected": {
+        "amount_proposed": 88000000,
+        "status": "ESCALATED",
+        "is_fast_track": false,
+        "failed_rules": ["R03"],
+        "reason_codes": ["R03_RETURN_RATE"],
+        "auto_rejected": false
+      }
+    }
+  ]
+}
