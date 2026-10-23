@@ -87,6 +87,19 @@ jobs:
           docker compose up -d --remove-orphans
           docker image prune -f >/dev/null
           REMOTE
+      - name: provision demo access
+        env:
+          DEMO_AUTH_JSON: ${{ secrets.WORKFLOW_DEMO_AUTH_JSON }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEMO_AUTH_JSON" ]; then
+            echo "WORKFLOW_DEMO_AUTH_JSON must contain the demo credential hash manifest."
+            exit 1
+          fi
+          printf '%s' "$DEMO_AUTH_JSON" | ssh -i ~/.ssh/deploy "$EC2_USER@$EC2_HOST" \
+            'cd /opt/riverbank && docker compose exec -T api python -m scripts.demo_auth provision'
       - name: smoke test
         run: |
           for i in $(seq 1 12); do

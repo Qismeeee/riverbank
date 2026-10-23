@@ -1,10 +1,11 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Path, Query
 
 import config
+from services.underwriting.auth import Actor, get_actor, require_demo_configuration
 from services.underwriting.evidence import read_evidence
 from services.underwriting.models import (
     Case,
@@ -35,25 +36,6 @@ from services.underwriting.sources import (
 router = APIRouter(prefix="/v1", tags=["underwriting"])
 
 
-@dataclass(frozen=True)
-class Actor:
-    subject: str
-    role: str
-
-
-def get_actor(
-    actor_id: Annotated[str | None, Header(alias="X-Actor-ID")] = None,
-    actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
-) -> Actor:
-    if config.WORKFLOW_MODE != "demo" or config.ENV != "local":
-        raise WorkflowError("VERIFIED_IDENTITY_ADAPTER_REQUIRED", 503)
-    if not actor_id or not actor_id.strip():
-        raise WorkflowError("AUTHENTICATION_REQUIRED", 401)
-    if actor_role not in {"seller", "underwriter"}:
-        raise WorkflowError("ROLE_NOT_ALLOWED", 403)
-    return Actor(actor_id, actor_role)
-
-
 def underwriter(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
     if actor.role != "underwriter":
         raise WorkflowError("UNDERWRITER_REQUIRED", 403)
@@ -62,13 +44,16 @@ def underwriter(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
 
 @lru_cache
 def get_service() -> UnderwritingService:
-    if config.WORKFLOW_MODE != "demo" or config.ENV != "local":
-        raise WorkflowError("WORKFLOW_DEMO_DISABLED", 503)
+    require_demo_configuration()
     if config.WORKFLOW_STORAGE not in {"memory", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_STORAGE", 503)
     if config.WORKFLOW_FEATURES not in {"demo", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_FEATURES", 503)
-    url = config.database_url()
+    url = (
+        config.database_url()
+        if "postgres" in {config.WORKFLOW_STORAGE, config.WORKFLOW_FEATURES}
+        else ""
+    )
     if "postgres" in {config.WORKFLOW_STORAGE, config.WORKFLOW_FEATURES} and not url:
         raise WorkflowError("DATABASE_REQUIRED", 503)
     repository = (
