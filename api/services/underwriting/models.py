@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Money = Annotated[int, Field(strict=True, ge=0, le=10**15)]
 PositiveMoney = Annotated[int, Field(strict=True, gt=0, le=10**15)]
+PartyId = Annotated[str, Field(min_length=1, max_length=100)]
+FreeText = Annotated[str, Field(max_length=2000)]
 
 
 class Status(StrEnum):
@@ -29,14 +31,14 @@ class Payment(InputModel):
 
 
 class Plan(InputModel):
-    seller_id: Annotated[str, Field(min_length=1, max_length=100)]
-    shop_id: Annotated[str, Field(min_length=1, max_length=100)]
+    seller_id: PartyId
+    shop_id: PartyId
     lot_value: PositiveMoney
     cash_on_hand: Money
     supplier_schedule: Annotated[list[Payment], Field(min_length=1, max_length=100)]
     sell_weeks: Annotated[int, Field(strict=True, ge=1, le=26)]
     requested_amount: Annotated[int, Field(strict=True, gt=0, le=300_000_000)]
-    note: Annotated[str, Field(max_length=2000)] = ""
+    note: FreeText = ""
 
     @model_validator(mode="after")
     def schedule_matches_lot(self) -> "Plan":
