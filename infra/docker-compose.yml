@@ -43,6 +43,7 @@ services:
       RIVERBANK_WORKFLOW_FEATURES: demo
       RIVERBANK_WORKFLOW_RISK: lightgbm
       RIVERBANK_WORKFLOW_CIC_GATE: jev
+      RIVERBANK_MEMO_WRITER: llm
     deploy:
       resources:
         limits:
