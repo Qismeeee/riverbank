@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import config
 from policy.engine import PolicyConfig
 from policy.rules import RULES
 from services.cashflow import ROUND_UNIT, CashFlowConfig
@@ -107,6 +108,7 @@ def test_parameters_mirror_code():
     assert cap["max_supplier_rows"] == _field_bound(Plan, "supplier_schedule", "max_length")
     assert cap["max_note_chars"] == _field_bound(Plan, "note", "max_length")
     assert cfg["memo"]["max_attempts"] == MemoConfig().max_attempts
+    assert float(cfg["guardrail"]["block_probability"]) == config.GUARD_BLOCK_PROBABILITY
 
 
 def test_rule_ids_match_policy_doc():

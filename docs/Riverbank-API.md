@@ -147,7 +147,7 @@ POST /cases ──> NO_LOAN_NEEDED
 | `POST` | `/v1/cases/{case_id}/statements` | underwriter | Có | FR-21..FR-23 |
 | `POST` | `/v1/cases/{case_id}/decisions` | underwriter | Có | FR-31..FR-34 |
 | `POST` | `/v1/cases/{case_id}/handoff` | underwriter | Có | FR-35, FR-36 |
-| `POST` | `/v1/copilot/extract-plan` | seller | Chưa có | FR-02, FR-03 |
+| `POST` | `/v1/copilot/extract-plan` | seller | Có | FR-02, FR-03 |
 | `POST` | `/v1/cases/{case_id}/copilot/ask` | seller | Chưa có | FR-27 |
 | `POST` | `/v1/cases/{case_id}/statements/presign` | seller | Chưa có | FR-22 |
 | `POST` | `/v1/cases/{case_id}/statements/confirm` | seller | Chưa có | FR-22 |
@@ -582,7 +582,7 @@ Các đầu dưới đây là kế hoạch, chưa có code. Hợp đồng dướ
 
 ### 6.1 `POST /v1/copilot/extract-plan`
 
-Seller chat tự do, nhận lại năm trường để xác nhận trên thẻ. Không tạo hồ sơ (FR-02).
+Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1/cases`. Không tạo hồ sơ (FR-02). Header như `POST /v1/cases`, `X-Actor-ID` phải bằng `seller_id`.
 
 ```json
 { "seller_id": "demo-b", "shop_id": "demo-b", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
@@ -591,21 +591,29 @@ Seller chat tự do, nhận lại năm trường để xác nhận trên thẻ. 
 ```json
 {
   "draft": {
+    "seller_id": "demo-b",
+    "shop_id": "demo-b",
     "lot_value": 200000000,
     "cash_on_hand": 120000000,
     "supplier_schedule": [{ "week": 0, "amount": 200000000 }],
     "sell_weeks": 6,
     "requested_amount": 150000000
   },
+  "ready": true,
   "missing_fields": [],
-  "sanitized_message": "..."
+  "issues": [],
+  "clarifying_question": null,
+  "sanitized_message": "...",
+  "prompt_version": "copilot-extract@<sha8>",
+  "model": "..."
 }
 ```
 
-- Che SĐT, CCCD, số tài khoản trên `message` trước khi gọi Jev hoặc OpenRouter (FR-03).
-- Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`.
-- Prompt `copilot-extract` chỉ trích đúng số seller nói. Không tính Gap, không đề xuất số.
-- Seller bấm xác nhận thì client gọi `POST /v1/cases` với `draft`.
+- Che SĐT, CCCD, số tài khoản trên `message` trước khi gọi Jev hoặc LLM (FR-03).
+- Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`, `details` liệt kê nhãn và xác suất. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
+- Prompt `copilot-extract` trả JSON theo schema cố định. Code kiểm lại: số tiền và số tuần phải có trong câu đã che, lịch xưởng phải cộng đúng `lot_value`. Sai thì trường đó về `null`, vào `missing_fields`, kèm `clarifying_question`.
+- Đủ năm trường thì code chạy validator của `Plan`. Lỗi (ví dụ xin quá 300 triệu) nằm ở `issues` dạng `{field, code}`, số seller nói vẫn giữ nguyên.
+- `ready = true` thì client gửi nguyên `draft` vào `POST /v1/cases`. LLM lỗi hoặc trả sai dạng thì `503 EXTRACTION_UNAVAILABLE`.
 
 ### 6.2 `POST /v1/cases/{case_id}/copilot/ask`
 
