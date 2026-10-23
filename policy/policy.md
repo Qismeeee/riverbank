@@ -1,143 +1,141 @@
-# Chính sách tín dụng ezXRiverbank (bản demo)
+# Chính sách tín dụng Riverbank (bản demo)
 
-Nguồn số: `parameters.yaml`. Ví dụ tính tay: `worked-examples.md`. Người của ngân hàng sửa hai file đó khi đổi khẩu vị. Bộ rule chỉ được nạp sau khi bản dịch `rules.py` qua pytest và được người duyệt policy xác nhận.
+Bản này mô tả đúng bộ rule đang chạy trên prod: `api/policy/rules.py` (`policy_version = riverbank-demo-r01-r09-v2`). Ngưỡng ở `parameters.yaml`, ví dụ tính tay ở `worked-examples.md`. Bảng tóm tắt cho dev nằm ở `api/policy/policy.md`.
 
-Chính sách này trả lời: hồ sơ có được đi tiếp, phải bổ sung sao kê, hay phải chuyển người. Chính sách không tính Gap, không chọn số tiền, không duyệt vay, không viết hợp đồng.
+Đổi khẩu vị thì sửa `PolicyConfig` trong `api/policy/engine.py`, `parameters.yaml` và file này trong cùng một PR. `api/tests/test_golden.py` kiểm `parameters.yaml` khớp code và mỗi rule trong code có mục ở đây.
+
+Chính sách trả lời: hồ sơ được đi tiếp, phải bổ sung sao kê, hay phải chuyển người. Chính sách không tính Gap, không chọn số tiền, không duyệt vay, không viết hợp đồng.
 
 ## 1. Ai được quyết định
 
 | Việc | Ai làm |
 |---|---|
-| Gap, số đề xuất, kỳ hạn, lịch trích, PD | Code và LightGBM |
-| Pass/fail từng rule | Policy Engine |
-| Chấp nhận, sửa số, từ chối, duyệt giãn nợ | Người có thẩm quyền của ngân hàng |
-| Điền hợp đồng, OTP, giải ngân, sổ cái | LOS và Core ngân hàng |
-| Câu chữ tờ trình và giải thích | LLM, trên số đã khóa |
+| Gap, số đề xuất, kỳ hạn, lịch trích | `CashFlowEngine` |
+| PD và yếu tố giải thích | `RiskModel`. Bản prod hiện là `DemoRiskModel`, xem mục 3 |
+| Pass/fail từng rule | `PolicyEngine` |
+| Chấp nhận, sửa số, từ chối | Người có vai trò `underwriter` |
+| Hợp đồng, OTP, giải ngân, sổ cái | LOS và Core ngân hàng |
+| Câu chữ tờ trình và bản seller | Template có sẵn, điền số từ bằng chứng |
 
-Không có `ACCEPTED`, `REJECTED`, hay lịch trả mới nào phát sinh khi chưa có bản ghi `human_decisions`.
+Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST /v1/cases/{id}/decisions`.
 
-## 2. Thứ tự xử lý
+## 2. Thứ tự xử lý trong `POST /v1/cases`
 
-1. Che PII trên chữ tự do. Số vượt trần cứng hoặc chữ vi phạm guardrail → `BLOCKED_INPUT`. Dừng.
-2. Thiếu consent hiệu lực (`D01`) → dừng, không đọc dữ liệu sàn.
-3. Tính Gap trên kịch bản cơ sở.
-4. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule dưới đây.
-5. Gap > 0 → tra CIC qua cổng ngân hàng, chấm PD, chạy toàn bộ rule đang hiệu lực.
-6. Có rule cứng fail → `ESCALATED`. Không đòi sao kê để "cứu" hồ sơ.
-7. Không rule cứng nào fail, và R05 fail → `AWAITING_STATEMENT`.
-8. Không rule nào fail → `PENDING_REVIEW` và `is_fast_track = true`.
-9. Viết `D09`/`D10`. Guardrail đầu ra fail quá số lần cho phép → `ESCALATED`, nhãn `UNVERIFIED_DRAFT`.
-10. Dừng chờ người bấm.
+1. Pydantic kiểm kiểu và trần cổng nhập. Sai thì `422`, không tạo hồ sơ.
+2. Regex quét `note`: lệnh bỏ qua chính sách hoặc ép duyệt, SĐT, CCCD 12 số, số tài khoản, thuộc tính nhạy cảm. Có thì `422 BLOCKED_INPUT`, không tạo hồ sơ.
+3. Thiếu consent hiệu lực → `422 CONSENT_REQUIRED`, không đọc dữ liệu sàn. Snapshot feature sai → lỗi `422` hoặc `403` tương ứng.
+4. Tính Gap trên kịch bản cơ sở.
+5. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule.
+6. Gap > 0 → chấm PD (E6), tra CIC (E6a), chạy đủ chín rule (E7).
+7. Rule cứng duy nhất fail là R05 vì thiếu kết quả sao kê → `AWAITING_STATEMENT`, lý do `STATEMENT_REQUIRED`.
+8. Có rule cứng khác fail → `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
+9. Không rule cứng nào fail → `PENDING_REVIEW`. Rule mềm fail chỉ hiện trong kết quả rule.
+10. Sinh tờ trình và bản seller từ template, kiểm từng câu với bằng chứng, tối đa 3 lần. Không qua → `ESCALATED`, lý do `MEMO_VALIDATION_FAILED`.
+11. Dừng chờ người bấm.
 
 ## 3. Việc không nằm trong rule
 
 - Số seller xin không bao giờ là số đề xuất. Số đề xuất là đầu ra CashFlow Engine.
-- PD và SHAP là giải thích cho người duyệt. Không có ngưỡng PD để tự từ chối.
-- Giới tính, tôn giáo, dân tộc, tình trạng sức khỏe không có mặt trong snapshot đưa vào rule hay model.
-- Lãi và phí chỉ hiện khi có biểu phí ngân hàng. Thiếu biểu phí thì ghi là đang chờ, không ước tính.
-- LLM không được viết điều khoản hợp đồng, khế ước, ủy nhiệm chi.
+- PD là thông tin cho người duyệt. Không có ngưỡng PD để tự chuyển trạng thái. Bản prod dùng `DemoRiskModel` trả cố định 500 bps (5%) với một yếu tố `demo_baseline`. Model LightGBM ở `api/services/risk.py` đã train nhưng chưa nối vào luồng.
+- Giới tính, tôn giáo, dân tộc, sức khỏe không có trong feature hay rule. Nhắc tới trong `note` thì chặn cả hồ sơ.
+- Lãi và phí không có trong bản seller vì chưa có biểu phí ngân hàng.
+- Tờ trình không viết điều khoản hợp đồng, khế ước, ủy nhiệm chi.
 
 ## 4. Bộ rule
 
-Mỗi rule đọc snapshot đã tính. Rule trả `passed`, `hard`, `effect`, `reason_code`. Rule không sửa `proposed_amount`, `tenor_weeks`, hay `weekly_deduction`.
+Mỗi rule là hàm thuần nhận `PolicyInput`, trả `rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`. Rule không sửa số tiền, kỳ hạn hay kỳ trích.
 
-`effect` chỉ là một trong: `NONE`, `ESCALATE`, `REQUIRE_STATEMENT`, `NOT_APPLICABLE`.
+`PolicyInput` lấy từ lần chạy engine: `amount` là số đề xuất (hoặc số người duyệt sửa), `weekly_deduction` là kỳ trích lớn nhất của lịch, `requested_amount = max(số seller xin, amount)`, `platform_supported_amount`, `shop_age_months`, `return_rate` từ E4, `cic_group`, `cic_outstanding` từ E6a, `docs_verified` từ kết quả sao kê.
 
-### R01 — Hạn mức dữ liệu sàn
+Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07.
 
-- Cứng: có. Chạy khi Gap > 0.
-- Đạt khi `proposed_amount <= platform_support_limit`.
-- Fail → `ESCALATE`, `R01_ABOVE_PLATFORM_LIMIT`.
-- `platform_support_limit` là trường bằng chứng E4 do Feature Service cung cấp. Bản demo của shop mẫu là 120.000.000. Policy không tự bịa hạn mức.
+### R01 Hạn mức sản phẩm
 
-### R02 — Tuổi shop
+- Cứng. Đạt khi `amount <= max_amount_vnd` (300.000.000).
+- Bằng chứng E5.
 
-- Cứng: có. Chạy khi Gap > 0.
-- Đạt khi `shop_age_months >= min_shop_age_months` (6).
-- Fail → `ESCALATE`, `R02_SHOP_TOO_YOUNG`.
+### R02 Tuổi shop
 
-### R03 — Tỷ lệ hoàn
+- Cứng. Đạt khi `shop_age_months >= min_shop_age_months` (6).
+- Thiếu tuổi shop → fail, `missing_data`.
+- Bằng chứng E4.
 
-- Cứng: có. Chạy khi Gap > 0.
-- Đạt khi `return_rate_90d <= max_return_rate_90d` (0,08).
-- Fail → `ESCALATE`, `R03_RETURN_RATE`.
+### R03 Tỷ lệ hoàn hàng
 
-### R04 — Trần kỳ hạn
+- **Mềm.** Đạt khi `return_rate <= max_return_rate` (0,15).
+- Fail không đổi trạng thái. Người duyệt thấy cảnh báo trong kết quả rule.
+- Bằng chứng E4.
 
-- Cứng: có. Chạy khi Gap > 0.
-- Đạt khi `1 <= tenor_weeks <= max_tenor_weeks` (24).
-- Fail → `ESCALATE`, `R04_TENOR_CAP`.
-- Việc cộng tuần để đưa khoản trích xuống trần 25% là việc của engine, trước khi rule này chạy.
+### R04 Khung kỳ hạn
 
-### R05 — Chứng từ khi xin vượt mức
+- Cứng. Đạt khi `min_tenor_weeks <= tenor_weeks <= max_tenor_weeks` (2 đến 26).
+- Engine đã cộng tuần để kỳ trích xuống dưới trần trước khi rule này chạy. Rule chỉ fail khi engine chạm trần 26 tuần.
+- Bằng chứng E5.
 
-- Cứng: không. Chạy khi Gap > 0 và chưa có rule cứng nào fail.
-- Đạt khi `amount_requested < statement_request_multiple × platform_support_limit`.
-- So sánh là `>=`. Mốc demo: 300.000.000 so với 2,5 × 120.000.000.
-- Fail → `REQUIRE_STATEMENT`, `R05_STATEMENT_REQUIRED`, trạng thái `AWAITING_STATEMENT`.
-- Fail R05 không phải từ chối và không phải `ESCALATED`.
+### R05 Sao kê khi xin vượt mức sàn
 
-### R06 — Đối chiếu sao kê
+- Cứng. Ngưỡng `threshold = int(platform_supported_amount × 2,5)`.
+- `requested_amount <= threshold` → đạt. **Bằng đúng mốc thì không đòi sao kê.**
+- Vượt mốc và chưa có sao kê → fail, `missing_data`. Đây là trường hợp duy nhất đưa hồ sơ sang `AWAITING_STATEMENT`.
+- Vượt mốc và đã có sao kê → đạt khi sao kê khớp, fail khi lệch. Lệch thì `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
+- Sao kê khớp khi `|payout sàn trong kỳ − tổng tiền sàn trên sao kê| ≤ 15% payout sàn` (`statement.mismatch_ratio`). Lời văn: "không khớp; cần xác minh".
+- Bằng chứng E4, hoặc E8 khi đã có sao kê.
 
-- Cứng: có khi hồ sơ đã vào nhánh sao kê. Hồ sơ không phải nộp sao kê thì `NOT_APPLICABLE` và coi như đạt.
-- `mismatch = abs(tong_dong_san - payout_san) / payout_san` trên cùng một kỳ. `payout_san = 0` mà sao kê vẫn có dòng sàn → mismatch = 1.
-- Đạt khi đồng thời:
-  1. `mismatch <= statement_mismatch_ratio` (0,15).
-  2. Phần tiền xin vượt `platform_support_limit` không phụ thuộc các dòng ngoài sàn.
-- Dòng ngoài sàn được liệt kê trong D08 và không được cộng vào hạn mức, Gap, hay khả năng trả.
-- Fail lệch → `ESCALATE`, `R06_MISMATCH`.
-- Fail vì tiền ngoài sàn → `ESCALATE`, `R06_OFF_PLATFORM_NOT_EVIDENCE`.
-- Khớp trong ngưỡng, đề xuất gốc vẫn trong hạn mức sàn → `PENDING_REVIEW`, `is_fast_track = false`.
+### R06 Nhóm nợ CIC
 
-### R07 — Nhóm nợ CIC
+- Cứng. Đạt khi `cic_group <= max_cic_group` (2).
+- Thiếu kết quả CIC → fail, `missing_data`.
+- Chỉ chạy khi Gap > 0. Bằng chứng E6a.
 
-- Cứng: có. Chỉ chạy khi đã có `D04`.
-- Đạt khi `cic_group <= max_cic_group_pass` (1).
-- Fail → `ESCALATE`, `R07_CIC_GROUP`.
-- Không có bản ghi CIC vì Gap = 0 thì rule này không được gọi.
+### R07 Dư nợ CIC hiện hữu
 
-### R08 — Trần trích payout
+- **Mềm.** Đạt khi `cic_outstanding <= payout_stress × 4 × 3,0`.
+- Thiếu dữ liệu → fail mềm, `missing_data`.
+- Bằng chứng E6a.
 
-- Cứng: có ở thẩm định. Ở giám sát sau giải ngân, fail tạo đề xuất giãn nợ chứ không tự đổi lịch.
-- Thẩm định: đạt khi `weekly_deduction <= deduction_cap_ratio × stress_weekly_payout`.
-- Giám sát: đạt khi khoản trích của version đang `ACTIVE` `<= deduction_cap_ratio × payout_tuan_hien_tai`.
-- Fail lúc thẩm định → `ESCALATE`, `R08_DEDUCTION_CAP`. Engine không được âm thầm hạ số tiền để rule này trở thành đạt.
-- Fail lúc giám sát → tạo `D22`, trạng thái `RESTRUCTURE_PROPOSED`. Version đang chạy vẫn `ACTIVE` cho đến khi người duyệt.
+### R08 Trần trích payout
+
+- Cứng. Đạt khi `weekly_deduction <= int(payout_stress × 0,25)`.
+- Engine giãn kỳ hạn trước, không hạ số tiền để rule này đạt.
+- Bằng chứng E5.
+
+### R09 Trần cho vay điện tử
+
+- Cứng. Áp cho người vay cá nhân (`borrower_is_individual`, bản demo luôn là cá nhân).
+- Đạt khi `amount <= e_lending_cap_vnd` (100.000.000), theo Thông tư 06/2023/TT-NHNN.
+- Pháp chế còn phải xác nhận cách áp khi đứng tên hộ kinh doanh.
+- Bằng chứng E5.
 
 ## 5. Nhánh trạng thái sau rule
 
-| Điều kiện | Trạng thái | Fast-track |
+| Điều kiện | Trạng thái | `reason` |
 |---|---|---|
-| Gap = 0 | `NO_LOAN_NEEDED` | không |
-| Rule cứng fail, hoặc R06 fail, hoặc memo fail lần 3 | `ESCALATED` | không |
-| Chỉ R05 fail | `AWAITING_STATEMENT` | không |
-| Mọi rule áp dụng đều đạt, không qua sao kê | `PENDING_REVIEW` | có |
-| R06 đạt sau sao kê | `PENDING_REVIEW` | không |
+| Gap = 0 | `NO_LOAN_NEEDED` | `null` |
+| Rule cứng duy nhất fail là R05 thiếu sao kê | `AWAITING_STATEMENT` | `STATEMENT_REQUIRED` |
+| Rule cứng khác fail, hoặc sao kê lệch | `ESCALATED` | `HARD_POLICY_FAILURE` |
+| Tờ trình không qua kiểm tra sau 3 lần | `ESCALATED` | `MEMO_VALIDATION_FAILED` |
+| Không rule cứng nào fail | `PENDING_REVIEW` | `null` |
 
-`ESCALATED` chỉ sang `ACCEPTED` khi quyết định có `verification_note`. `NO_LOAN_NEEDED` không biến thành khoản vay trên cùng một kế hoạch.
+`ESCALATED` chỉ sang `ACCEPTED` khi quyết định có `verification_note`. `NO_LOAN_NEEDED` không nhận quyết định chấp nhận.
 
 ## 6. Quyết định của người
 
-Người gọi API quyết định phải có vai trò thẩm quyền ngân hàng. Tài khoản seller và tác nhân hệ thống bị từ chối.
+Chỉ vai trò `underwriter`. Seller và tác nhân hệ thống bị từ chối.
 
 | Quyết định | Hệ quả |
 |---|---|
-| `ACCEPT_PROPOSAL` | Giữ version đang đề xuất. Sang `ACCEPTED`. |
-| `ACCEPT_MODIFIED` | Tính lại trần trích 25%. Thêm version mới `HUMAN_MODIFIED` / `ACTIVE`. Version trước thành `SUPERSEDED`. |
-| `REJECT` | Sang `REJECTED`. Gói sang LOS không có số tiền giải ngân. |
-| `APPROVE_RESTRUCTURE` | Thêm version `RESTRUCTURED_P7` / `ACTIVE`. Không ghi đè lịch cũ. |
+| `ACCEPT_PROPOSAL` | Chạy lại chín rule trên số đề xuất với bộ rule hiện tại. Bộ rule đổi từ lúc thẩm định → `409 POLICY_CHANGED_REASSESSMENT_REQUIRED`. Đạt thì `ACCEPTED` |
+| `ACCEPT_COUNTER` | Người nhập số tiền và kỳ hạn 2 đến 26 tuần. Engine giãn kỳ hạn 2 tuần một lần đến khi kỳ trích không vượt trần. Tạo lần chạy mới `trigger = COUNTER`, chạy lại chín rule. Rule cứng fail → `409 HARD_POLICY_FAILURE` kèm mã rule, không lưu |
+| `REJECT` | `REJECTED`. Gói bàn giao có `final_amount = null` |
 
-Sửa số tiền hoặc kỳ hạn luôn là bản ghi mới. Nhật ký `case_events` chỉ thêm, không sửa và không xóa.
+Quyết định chấp nhận hết hiệu lực sau 14 ngày. Hết hạn thì `POST /handoff` trả `409 DECISION_EXPIRED_REASSESSMENT_REQUIRED`. Nhật ký `case_events` chỉ thêm, không sửa, không xóa.
 
-## 7. Hợp đồng để dịch sang code
+## 7. Chưa có trong code
 
-Mỗi rule là một hàm thuần, cùng snapshot cho ra cùng kết quả. Lời văn không được ghi vào input của hàm này.
+Các ý dưới đây có trong bản chính sách trước (ezXRiverbank) nhưng code chưa làm. Giữ ở đây để không mất ý, không coi là hành vi hiện tại.
 
-```python
-def evaluate_all_rules(snapshot: CaseSnapshot) -> PolicyEvaluation:
-    """Mỗi phần tử: rule_id, passed, hard, effect, reason_code."""
-```
-
-`effect = ESCALATE` chỉ đặt cờ đích cho người duyệt. Hàm này không ghi `REJECTED`.
-
-Bộ rule chưa có pytest pass và chưa có người xác nhận phiên bản thì Policy Engine từ chối nạp.
+- Cờ `is_fast_track` và lọc hàng đợi theo cờ.
+- Tách đối chiếu sao kê thành rule riêng với lý do `R06_MISMATCH` và `R06_OFF_PLATFORM_NOT_EVIDENCE` (case D: tiền ngoài sàn không chứng minh khả năng trả).
+- Bảng `loan_terms_versions` với `SYSTEM_PROPOSED`, `HUMAN_MODIFIED`, `SUPERSEDED`.
+- Giám sát sau giải ngân: R08 trên payout tuần hiện tại, đề xuất giãn nợ D22, trạng thái `RESTRUCTURE_PROPOSED`.
+- Che PII rồi lưu `sanitized_note` thay vì chặn cả hồ sơ.

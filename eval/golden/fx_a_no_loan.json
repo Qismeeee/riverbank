@@ -5,11 +5,36 @@
   "input": {
     "cash_on_hand": 120000000,
     "supplier_schedule": [
-      {"week": 0, "amount": 100000000},
-      {"week": 4, "amount": 100000000}
+      {
+        "week": 0,
+        "amount": 100000000
+      },
+      {
+        "week": 4,
+        "amount": 100000000
+      }
     ],
     "sell_weeks": 6,
-    "payout_weekly_history": [70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000]
+    "payout_weekly_history": [
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000
+    ],
+    "requested_amount": 150000000,
+    "platform_support_limit": 120000000,
+    "shop_age_months": 12,
+    "return_rate_90d": 0.05,
+    "cic_group": 1,
+    "cic_outstanding": 0
   },
   "expected": {
     "payout_base": 70000000,
@@ -23,14 +48,25 @@
     "warning_at_threshold_min_end": 0,
     "warning_below_has_gap": true,
     "status": "NO_LOAN_NEEDED",
-    "is_fast_track": false,
     "cic_called": false,
     "pd_scored": false,
     "rules_evaluated": [],
-    "underwriting_started": false,
+    "memo_validated": true,
     "balances": [
-      {"week": 0, "start": 120000000, "inflow": 0, "outflow": 100000000, "end": 20000000},
-      {"week": 4, "start": 230000000, "inflow": 70000000, "outflow": 100000000, "end": 200000000}
+      {
+        "week": 0,
+        "bal_start": 120000000,
+        "payout": 0,
+        "outflow": 100000000,
+        "bal_end": 20000000
+      },
+      {
+        "week": 4,
+        "bal_start": 230000000,
+        "payout": 70000000,
+        "outflow": 100000000,
+        "bal_end": 200000000
+      }
     ]
   },
   "wording": "Dòng tiền không âm. Payout tuần xuống dưới 20.000.000 thì tuần 4 bắt đầu âm."

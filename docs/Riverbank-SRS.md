@@ -4,10 +4,12 @@
 |---|---|
 | Sản phẩm | Riverbank |
 | Loại tài liệu | Software Requirements Specification |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | Bản làm việc cho team |
 | Bám theo | `Riverbank-BRD.md` phiên bản 1.0 |
 | Không nằm ở đây | Lựa chọn model, thư viện, số agent. Xem `riverbank-architecture.md` |
+
+**Thay đổi 1.1 so với 1.0:** thêm mục 11 ghi mức đáp ứng của code ngày 23/10/2026. Số và rule lấy theo code đang chạy (R01 đến R09 trong `api/policy/rules.py`, đề xuất case B 90 triệu). Bảng mã trạng thái mục 7 ghi rõ trạng thái nào code lưu.
 
 **Thay đổi 1.0 so với 0.9:** sửa ví dụ nghiệm thu FR-12, FR-13, FR-14 theo công thức; thêm FR-16b (CIC), FR-19b (trần cho vay điện tử), FR-31b (hiệu lực quyết định); FR-32 chạy lại rule khi duyệt số khác; bảng mã trạng thái chuẩn ở mục 7.
 
@@ -278,6 +280,8 @@ Mã trạng thái dùng trong code và tên hiển thị, dùng thống nhất �
 | REJECTED | Đã từ chối | Declined |
 | HANDOFF_OK, HANDOFF_ERROR | Đã bàn giao, Bàn giao lỗi | Offer_Sent trở đi (mô hình A) |
 
+Code ngày 23/10/2026 lưu hồ sơ ở `NO_LOAN_NEEDED`, `AWAITING_STATEMENT`, `PENDING_REVIEW`, `ESCALATED`, `ACCEPTED`, `REJECTED`. `DRAFT` và `ANALYZING` chỉ có trong nhật ký vì thẩm định chạy xong trong một yêu cầu. `BLOCKED_INPUT` trả `422` và không lưu hồ sơ. `VERIFYING` chưa có, nhập sao kê chạy lại thẩm định ngay. Bàn giao ghi ở `handoff.status` (`SUCCEEDED`, `FAILED`) chứ không đổi trạng thái hồ sơ.
+
 Các trạng thái sau ACCEPTED (Offer_Sent, Contract_Signed, Disbursed) thuộc mô hình A trong tài liệu luồng nghiệp vụ, ngoài phạm vi SRS lõi, bản demo mô phỏng.
 
 ## 8. Yêu cầu phi chức năng
@@ -320,3 +324,38 @@ NFR-01 và NFR-06 là mục tiêu bản demo trong tài liệu kiến trúc, ch�
 | BR-19 | FR-35, FR-36, FR-37 |
 | BR-20 | FR-38 |
 | BR-21 | FR-16b |
+
+## 11. Mức đáp ứng của code
+
+Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingService` thật. Chi tiết và số ở `docs/Riverbank-spec-vs-code.md`.
+
+| FR | Mức | Ghi chú |
+|---|---|---|
+| FR-01, FR-02 | Đạt | `POST /v1/cases`, Pydantic báo đúng trường thiếu |
+| FR-03 | Đạt một phần | Regex chặn cả hồ sơ khi có lệnh ép duyệt, SĐT, CCCD, số tài khoản, thuộc tính nhạy cảm. Chưa che PII rồi cho đi tiếp |
+| FR-04 | Đạt | Trần `requested_amount` 300.000.000, `sell_weeks` 26, trả `422` |
+| FR-05, FR-07 | Đạt | Snapshot đúng `seller_id` và `shop_id`, thiếu consent thì `422 CONSENT_REQUIRED` |
+| FR-06 | Đạt | Mã E4, E5, E6, E6a, E7, E8, băm lại mỗi lần đọc |
+| FR-08 đến FR-15 | Đạt | Case B: gap 80.000.000, đề xuất 90.000.000, 8 tuần, 11.250.000. Case A: gap 0, cảnh báo 20.000.000 |
+| FR-16 | Đạt hình thức | PD luôn 500 bps từ `DemoRiskModel`, một yếu tố. Model LightGBM chưa nối |
+| FR-16b | Đạt với nguồn mock | `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0 |
+| FR-17 | Đạt | Chín rule R01 đến R09, mỗi rule có `evidence_id` |
+| FR-18 | Đạt một phần | Không có bước nạp bộ rule đã ký. Có `policy_hash`, đổi rule sau thẩm định thì chặn `ACCEPT_PROPOSAL` |
+| FR-19, FR-19b | Đạt | Rule cứng fail thì `ESCALATED`. R09 trần 100.000.000 |
+| FR-20 | Đạt | Văn bản là template điền từ bằng chứng, không ghi ngược vào kết quả rule |
+| FR-21 | Đạt | Đòi sao kê khi `max(xin, đề xuất) > 2,5 ×` mức sàn. Bằng đúng mốc thì không đòi |
+| FR-22 | Đạt một phần | Người thẩm định nhập tổng tiền sàn trên sao kê, chưa đọc file. Lệch trên 15% thì `ESCALATED` |
+| FR-23 | Đạt | Thông điệp "không khớp; cần xác minh" |
+| FR-24, FR-25 | Đạt | Hai bản từ cùng bằng chứng, mỗi câu có `evidence_id`, số khớp payload |
+| FR-26 | Đạt hình thức | Thử 3 lần nhưng template sinh lại giống nhau, nên lần 2 và 3 không đổi kết quả |
+| FR-27, FR-28 | Đạt | Bản seller không có lãi, phí, PD, CIC. Không vay thì nêu ngưỡng cảnh báo |
+| FR-29, FR-30 | Đạt | `GET /v1/queue`, `GET /v1/cases/{id}`, `GET /v1/cases/{id}/evidence/{evidence_id}` |
+| FR-31, FR-32 | Đạt | `ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT`. Counter giãn kỳ hạn và chạy lại chín rule |
+| FR-31b | Đạt một phần | `expires_at` 14 ngày, chặn ở bàn giao. Chưa có job quét đưa hồ sơ về thẩm định lại |
+| FR-33, FR-34 | Đạt | Thiếu `verification_note` hoặc gap 0 thì `409` |
+| FR-35, FR-36 | Đạt | Gói bàn giao tạo khi quyết định, người bấm `POST /handoff`, `MockLosAdapter`. Lỗi LOS không mất quyết định |
+| FR-37 | Đạt | Không có lệnh sang core |
+| FR-38 | Đạt | `case_events` chỉ thêm, có tác nhân và mã bằng chứng |
+| NFR-01 | Đạt | Thẩm định chạy xong trong yêu cầu, dưới 1 giây trên bộ demo |
+| NFR-02 | Đạt | Engine và rule thuần, golden khóa số |
+| NFR-06 | Đạt | 0 USD vì chưa gọi model nào |

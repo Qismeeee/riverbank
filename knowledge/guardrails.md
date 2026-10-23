@@ -1,6 +1,8 @@
 # Guardrail ezXRiverbank
 
-Hai chiều: chặn trước khi model đọc, và chặn trước khi người đọc. Ngưỡng xác suất nằm ở `policy/parameters.yaml` (`guardrail.block_probability` = 0,5).
+Hai chiều: chặn trước khi model đọc, và chặn trước khi người đọc.
+
+Trạng thái code (23/10/2026): chiều vào là một regex trong `api/services/underwriting/service.py`, gặp lệnh ép duyệt, SĐT, CCCD, số tài khoản hay thuộc tính nhạy cảm thì `422 BLOCKED_INPUT` cả hồ sơ, chưa che rồi cho đi tiếp, chưa gọi Jev. Chiều ra là `validate_sentences` so từng câu template với payload bằng chứng. Phần còn lại của file này là thiết kế cho bước nối LLM. Ngưỡng xác suất nằm ở `policy/parameters.yaml` (`guardrail.block_probability` = 0,5).
 
 ## Chiều vào
 
@@ -54,14 +56,12 @@ Mã bằng chứng khóa:
 
 | Mã | Nội dung |
 |---|---|
-| E1 | Payout theo tuần |
-| E2 | GMV và độ biến động |
-| E3 | Hoàn hàng, giao trễ, rating |
-| E4 | Tuổi shop và `platform_support_limit` |
-| E5 | Dòng tiền, Gap, đề xuất |
-| E6 | PD và SHAP. Chỉ khi Gap > 0 |
+| E4 | Snapshot feature: payout tuần, tuổi shop, tỷ lệ hoàn, `platform_supported_amount`, nguồn dữ liệu. Code gộp E1 đến E4 cũ vào đây |
+| E5 | Dòng tiền, Gap, đề xuất, lịch trích |
+| E6 | PD và yếu tố giải thích. Chỉ khi Gap > 0 |
+| E6a | Kết quả CIC qua cổng ngân hàng. Chỉ khi Gap > 0 |
 | E7 | Kết quả từng rule |
-| E8 | Đối chiếu sao kê. Chỉ khi đã nộp sao kê |
+| E8 | Đối chiếu sao kê. Chỉ khi đã nhập sao kê |
 
 `D09` gắn mã trong câu. `D10` và Copilot nói tiếng thường, không đọc mã `E*` / `D*` / `SHAP` cho seller, nhưng số vẫn phải lấy từ cùng các bảng đó.
 

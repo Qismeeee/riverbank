@@ -4,12 +4,14 @@
 |---|---|
 | Sản phẩm | Riverbank |
 | Loại tài liệu | Technical Design Document |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.3 |
 | Trạng thái | Bản làm việc cho team |
 | Bám theo | `Riverbank-BRD.md` 1.0, `Riverbank-SRS.md` 1.0 |
 | Tham chiếu | `riverbank-architecture.md` |
 | Đối tượng đọc | Dev Lead, Dev, QA, presenter kỹ thuật |
 | Mục tiêu chi phí | ≤ **0,10 USD / hồ sơ** (NFR-06); latency ≤ **90 giây** (NFR-01) |
+
+**Thay đổi 1.3 so với 1.2:** thêm mục 0 trạng thái triển khai theo code ngày 23/10/2026; FLOW-05 ghi đúng chín rule R01 đến R09 đang chạy; mục 7 ghi đúng API đang chạy, chi tiết ở `Riverbank-API.md`; mục 9 cấu trúc repo theo repo thật; thêm pgweb ở mục 9b.
 
 **Thay đổi 1.2 so với 1.1:** bỏ DuckDB, một DB Postgres; thêm ETL dữ liệu công khai (`api/etl/`, nguồn data.addlivetag.com) với raw trên S3, bảng snapshot và view `v_shop_features`; nguồn dữ liệu xem `Riverbank-data.md`.
 
@@ -18,6 +20,28 @@
 Tài liệu này ghi **cách hệ thống được xây**: stack, từng luồng kỹ thuật, hợp đồng API, mô hình dữ liệu, và cách cắt chi phí model mà vẫn giữ kỷ luật thẩm định.
 
 Nguyên tắc cứng (từ kiến trúc): **LLM chỉ điều phối, lập luận và viết. Mọi con số về gap, rủi ro, rule và hạn mức do code deterministic tính.**
+
+## 0. Trạng thái triển khai (23/10/2026)
+
+Kiểm trên `main` commit `68588f2`. Số và rule theo code là chuẩn. Phần ghi "kế hoạch" là thiết kế chưa có code. Chi tiết lệch ở `Riverbank-spec-vs-code.md`.
+
+| Luồng | Trạng thái | Code |
+|---|---|---|
+| FLOW-01 Tiếp nhận | Có. Regex chặn cả hồ sơ, chưa che PII, chưa có Jev | `routers/underwriting.py`, `services/underwriting/service.py` |
+| FLOW-02 Consent, dữ liệu sàn | Có. `demo_source` hoặc `PostgresFeatureSource`. Không có Data Analyst LLM | `services/underwriting/sources.py` |
+| FLOW-03, FLOW-03a Dòng tiền | Có, đúng số mục này | `services/cashflow.py` |
+| FLOW-04 PD, CIC | Có khung. PD là `DemoRiskModel` 500 bps cố định, CIC là `DemoCicSource`. LightGBM có trong `services/risk.py`, chưa nối. Chưa có Jev gate | `services/underwriting/sources.py` |
+| FLOW-05 Policy | Có, chín rule | `policy/engine.py`, `policy/rules.py` |
+| FLOW-06 Sao kê | Có một phần. Người thẩm định nhập tổng tiền sàn, so ngưỡng 15%. Chưa upload, chưa OCR | `service.submit_statement` |
+| FLOW-07 Tờ trình | Có bằng template, kiểm từng câu với bằng chứng. Chưa có Memo Writer LLM | `services/underwriting/evidence.py` |
+| FLOW-08 Quyết định | Có. `ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT`. Chưa có job quét hồ sơ quá 14 ngày | `service.decide` |
+| FLOW-09 Bàn giao | Có. Người bấm, `MockLosAdapter` | `service.handoff` |
+| FLOW-10 Audit | Có. `case_events` chỉ thêm | `service._event` |
+| FLOW-11 Eval | Có golden chạy qua service thật. Chưa có metric latency, cost, LLM judge | `eval/score.py`, `api/tests/test_golden.py` |
+| FLOW-12 Monitor | Kế hoạch | |
+| Mục 6 Orchestrator FSM | Kế hoạch. Luồng hiện là hàm tuần tự `_assess` | |
+| Agent LLM (mục 2.2, mục 3) | Kế hoạch. Chưa có `api/agents/`, luồng `/v1` không gọi model nào | |
+| `web/` Lender Portal | Chưa có trong repo | |
 
 ---
 
@@ -415,7 +439,21 @@ Policy Agent → PE.evaluate(case_snapshot) → [{rule_id, pass, hard, clause_re
 Fail hard → status ESCALATED (không PENDING_REVIEW duyệt thẳng)
 ```
 
-**Rule demo tối thiểu:** R01 hạn mức theo chính sách, R02 tuổi shop, R03 tỷ lệ hoàn, R04 kỳ hạn, R05 chứng từ khi xin &gt; 2.5× mức hỗ trợ sàn, R09 trần 100 triệu cho vay điện tử (BL-09, rule cứng). Bản đầy đủ thêm R06 nhóm nợ CIC, R07 dư nợ hiện hữu, R08 trần trích 25% (dùng ở Monitor).
+**Rule đang chạy** (`api/policy/rules.py`, thứ tự chạy R09, R01, R04, R08, R02, R03, R05, R06, R07):
+
+| Mã | Loại | Đạt khi |
+|---|---|---|
+| R01 | Cứng | Số tiền ≤ 300.000.000 |
+| R02 | Cứng | Tuổi shop ≥ 6 tháng |
+| R03 | Mềm | Tỷ lệ hoàn ≤ 15% |
+| R04 | Cứng | Kỳ hạn 2 đến 26 tuần |
+| R05 | Cứng | `max(xin, đề xuất) ≤ 2,5 ×` mức sàn, hoặc sao kê khớp. Thiếu sao kê → `AWAITING_STATEMENT` |
+| R06 | Cứng | Nhóm nợ CIC ≤ 2 |
+| R07 | Mềm | Dư nợ CIC ≤ 3 × payout xấu tháng |
+| R08 | Cứng | Kỳ trích ≤ 25% payout xấu |
+| R09 | Cứng | Số tiền ≤ 100.000.000 với người vay cá nhân (TT 06/2023) |
+
+Ý nghĩa đầy đủ ở `policy/policy.md`. Hiện chưa có bước Codex sinh `rules.py` từ `policy.md` rồi ký, `rules.py` viết tay có test.
 
 **Cost:** 0 USD runtime; Policy Agent chỉ dùng cheap model để **trích clause** (có thể thay bằng BM25 → 0 token).
 
@@ -526,7 +564,7 @@ On ACCEPTED | REJECTED
   "memo_ref": "...",
   "evidence_ids": ["E1", "E5", "E6", "E7"],
   "policy_results": [],
-  "risk": {"pd": 0.031},
+  "risk": {"pd_bps": 500, "model_version": "demo-fixed-v1"},
   "decided_by": "uw_01",
   "decided_at": "ISO-8601"
 }
@@ -589,41 +627,38 @@ transitions (rút gọn):
 
 ## 7. Hợp đồng API (tóm tắt)
 
-### 7.1 Seller
+Hợp đồng đầy đủ, mã lỗi và phần API trong kế hoạch ở `Riverbank-API.md`. Tóm tắt API đang chạy:
 
-```http
-POST /v1/cases
-Content-Type: application/json
+| Phương thức | Đường dẫn | Vai trò |
+|---|---|---|
+| `POST` | `/v1/cases` | seller. Chạy hết thẩm định trong yêu cầu, trả trạng thái cuối |
+| `GET` | `/v1/cases/{case_id}/seller-view` | seller |
+| `GET` | `/v1/queue` | underwriter |
+| `GET` | `/v1/cases/{case_id}` | underwriter |
+| `GET` | `/v1/cases/{case_id}/evidence/{evidence_id}` | underwriter |
+| `POST` | `/v1/cases/{case_id}/statements` | underwriter, nhập tổng tiền sàn, JSON |
+| `POST` | `/v1/cases/{case_id}/decisions` | underwriter |
+| `POST` | `/v1/cases/{case_id}/handoff` | underwriter |
+| `GET` | `/health`, `/` | không cần |
 
+Danh tính đọc từ header `X-Actor-ID`, `X-Actor-Role`, chỉ khi `RIVERBANK_ENV=local` và `RIVERBANK_WORKFLOW_MODE=demo`. `POST /v1/cases` và `POST /decisions` cần `Idempotency-Key`. Lệnh ghi cần `expected_version`.
+
+```json
 {
-  "seller_id": "S001",
+  "seller_id": "demo-b",
+  "shop_id": "demo-b",
   "lot_value": 200000000,
   "cash_on_hand": 120000000,
   "supplier_schedule": [{"week": 0, "amount": 200000000}],
   "sell_weeks": 6,
-  "amount_requested": 150000000,
-  "note": "optional"
+  "requested_amount": 150000000,
+  "note": ""
 }
-→ 201 { "case_id": "...", "status": "ANALYZING" }
 ```
 
-```http
-GET /v1/cases/{case_id}/seller-view
-→ explainer + status (không lộ PD nội bộ nếu policy bank yêu cầu ẩn)
-```
+Trả `201` với `status = PENDING_REVIEW`, `version = 1`.
 
-### 7.2 Underwriter
-
-```http
-GET /v1/queue?status=PENDING_REVIEW
-GET /v1/cases/{case_id}
-GET /v1/evidence/{evidence_id}
-POST /v1/cases/{case_id}/decisions
-POST /v1/cases/{case_id}/statements  (multipart)
-POST /v1/cases/{case_id}/handoff
-```
-
-### 7.3 Internal tools (agent)
+### 7.3 Internal tools (agent, kế hoạch)
 
 | Tool | Side effect | Deterministic |
 |---|---|---|
@@ -639,13 +674,13 @@ POST /v1/cases/{case_id}/handoff
 
 ## 8. Ánh xạ kịch bản demo → flow
 
-| Case BRD | Nhánh kỹ thuật | Model calls kỳ vọng |
-|---|---|---|
-| A — không vay | F01→F02→F03→F03a→F07→F08 | 1–2 |
-| B — gap 80tr, đề xuất ~90tr | F01→…→F03→F04→F05→F07→F08→F09 | 2–4 |
-| C — vượt mức, lệch sao kê | …→F05 fail R05→F06→F07 escalate | 3–5 (+vision optional) |
-| E — fail rule cứng | F05 → ESCALATED | 2–3 |
-| F — chặn đầu vào | F01 only | 0 |
+| Case BRD | Nhánh kỹ thuật | Model calls kế hoạch | Kết quả code hiện tại |
+|---|---|---|---|
+| A, không vay | F01→F02→F03→F03a→F07→F08 | 1–2 | `NO_LOAN_NEEDED`, cảnh báo 20tr, 0 model call |
+| B, gap 80tr, đề xuất 90tr | F01→…→F03→F04→F05→F07→F08→F09 | 2–4 | `PENDING_REVIEW`, 90tr, 8 tuần, 11,25tr |
+| C, vượt mức, lệch sao kê | …→F05 fail R05→F06→F07 escalate | 3–5 (+vision optional) | `AWAITING_STATEMENT`, sao kê lệch thì `ESCALATED` |
+| E, fail rule cứng | F05 → ESCALATED | 2–3 | `ESCALATED`, `HARD_POLICY_FAILURE` |
+| F, chặn đầu vào | F01 only | 0 | `422 BLOCKED_INPUT`, không lưu hồ sơ |
 
 ---
 
@@ -655,30 +690,31 @@ Repo thật: `github.com/Qismeeee/riverbank`, nhánh `main` được bảo vệ,
 
 ```text
 riverbank/
-  AGENTS.md                 # quy ước Codex chung
-  README.md                 # chạy local bằng uv, quy trình PR
-  .env.example
+  AGENTS.md, CLAUDE.md, KNOWLEDGE_BASE.md   # quy ước cho Codex và Claude Code
+  Makefile                  # setup, db-up, dev, test, train-pd ...
   api/                      # FastAPI, một image Docker
-    main.py                 # app, /health, include routers
-    config.py               # local đọc .env, prod đọc Secrets Manager
-    jev.py                  # client Jev qua OpenRouter
-    routers/                # cases, queue, decisions, statements, handoff
-    services/               # guardrail, features, cashflow, risk, policy_engine, retrieval, evidence
-    agents/                 # orchestrator, data_analyst, cashflow_agent, policy_agent, memo_writer, doc_verifier, monitor
-    policy/                 # policy.md, rules.py (Codex sinh), test_rules.py
+    main.py, config.py, jev.py
+    routers/underwriting.py # 8 đầu /v1
+    services/cashflow.py    # CashFlowEngine
+    services/features.py, services/risk.py   # FeatureBuilder, RiskModel LightGBM (chưa nối vào luồng)
+    services/underwriting/  # service, models, repository, evidence (template), sources (demo, Postgres), shopee_features
+    services/shopee/        # schemas, seller_export, openapi_client, weekly
+    policy/                 # engine.py, rules.py (R01 đến R09), policy.md tóm tắt
+    etl/                    # ETL addlivetag vào Postgres
+    db/                     # schema.sql, migrations/001_underwriting.sql, migrate.py, seed
+    models/                 # pd_lgbm.txt, pd_meta.json, pd_calibrator.json
     tests/
-    Dockerfile, requirements.txt, pyproject.toml
-  web/                      # Next.js, deploy Vercel
-  eval/                     # golden/*.jsonl, runner, metrics
-  data/                     # synthetic generator, DuckDB build
-  infra/                    # docker-compose.yml, Caddyfile, .env.prod
+  policy/                   # policy.md, parameters.yaml, worked-examples.md
+  knowledge/                # glossary, guardrails, prompts/ (chưa được gọi)
+  eval/                     # score.py, golden/*.json, golden/llm, golden/planned, train_pd.py, pdlib.py
+  data/synth/               # generate.py, train.py, oracle.py
+  infra/                    # docker-compose.yml, Caddyfile
+  .agents/skills/           # 7 skill dùng chung
   .github/workflows/        # ci.yml, deploy.yml
-  docs/
-    Riverbank-BRD.md
-    Riverbank-SRS.md
-    Riverbank-TDD.md
-    Riverbank-business-flows.html
+  docs/                     # BRD, SRS, TDD, API, spec-vs-code, business-flows, risk-model, data, kiến trúc AWS
 ```
+
+Chưa có: `api/agents/`, `web/`.
 
 ---
 
@@ -692,6 +728,7 @@ riverbank/
 | S3 `riverbank-data-424016506356` | versioning, private | Raw JSON ETL `raw/addlivetag/{ngày}/`, sao kê, memo xuất, `pg_dump` hằng đêm |
 | Secrets Manager | `riverbank/openai`, `riverbank/anthropic`, `riverbank/openrouter`, `rds!...` | `config.py` đọc một lần lúc start qua IAM role `riverbank-ec2-role` |
 | IAM | role EC2 least privilege; user `riverbank-dev` cho laptop (S3 + secrets) | Không access key admin trên laptop |
+| pgweb | `/db` sau Basic Auth của Caddy, role `riverbank_dev` | Team xem và sửa dữ liệu RDS |
 | SNS + CloudWatch | topic `riverbank-alerts`, alarm EC2 status, RDS storage, CPU; log group `/riverbank/app` | Mail khi máy chết, đĩa đầy |
 | CI (`ci.yml`) | mỗi PR: `ruff check`, `pytest` với `RIVERBANK_ENV=local`, không chạm AWS | Code đúng |
 | CD (`deploy.yml`) | merge main: test → build arm64 push GHCR (tag SHA) → ssh EC2 `compose pull && up` → curl `/health` 200 | Code sống trên prod. Rollback: đổi `IMAGE_TAG` |

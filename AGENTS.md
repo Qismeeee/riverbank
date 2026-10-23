@@ -6,7 +6,8 @@ Hướng dẫn cho Codex, Claude Code và người mới vào repo. Đọc file 
 
 Riverbank: cho vay vốn lưu động cho seller Shopee dựa trên dòng tiền payout.
 Tài liệu chuẩn nằm trong `docs/`: BRD (nghiệp vụ), SRS (yêu cầu), TDD (thiết kế), business-flows.html (luồng LOS và core).
-Khi code mâu thuẫn với docs thì docs thắng. Khi docs mâu thuẫn nhau thì TDD thắng, rồi báo lại trong PR.
+Số và rule: code đang chạy là chuẩn (chốt 23/10/2026). `policy/parameters.yaml` là bản chép của `CashFlowConfig` và `PolicyConfig`, có test kiểm khớp. Đổi ngưỡng thì đổi code, `parameters.yaml`, `policy/policy.md` trong cùng PR.
+Hành vi chưa có code (agent LLM, Monitor, upload sao kê) thì docs là kế hoạch. Danh sách lệch ở `docs/Riverbank-spec-vs-code.md`.
 
 ## Ba nguyên tắc không được phá
 
@@ -16,8 +17,8 @@ Khi code mâu thuẫn với docs thì docs thắng. Khi docs mâu thuẫn nhau t
 
 ## Số vàng (test khóa, đổi là CI đỏ)
 
-Nhãn `eval/golden/` theo `policy/worked-examples.md` và `policy/parameters.yaml`.
-FX-B: gap 80 triệu, đề xuất 88 triệu, 8 tuần, trích 11 triệu/tuần, payout xấu 49 triệu.
+Nhãn `eval/golden/` theo `policy/worked-examples.md`. `test_golden.py` chạy từng nhãn qua `UnderwritingService` thật.
+FX-B: gap 80 triệu, đề xuất 90 triệu (88 làm tròn lên bội 5 triệu), 8 tuần, trích 11,25 triệu/tuần, payout xấu 49 triệu.
 FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 
 ## Cấu trúc
@@ -25,16 +26,16 @@ FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 ```
 api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client)
 api/services/   engine code thuần: cashflow.py, features.py (FeatureBuilder, một nguồn feature cho train và serving), risk.py (RiskModel từ api/models/); shopee/ (schemas, weekly, seller_export, openapi_client)
-api/policy/     policy.md là nguồn, engine.py là PolicyEngine, rules.py là bộ rule, test_rules.py là bằng chứng
+api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R09, policy.md tóm tắt; bản đầy đủ ở policy/policy.md
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
 api/db/         schema.sql, một DB Postgres cho feature lẫn trạng thái app
 api/routers/    HTTP endpoint, mỏng, gọi services
-api/agents/     orchestrator, data_analyst, memo_writer, doc_verifier, monitor (LLM facade)
+api/services/underwriting/  luồng hồ sơ: service.py, models.py, repository.py, evidence.py (tờ trình template), sources.py
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động
 eval/pdlib.py, train_pd.py, train_pd.ipynb   metric, trainer, calibration dùng chung; train headless; notebook đầy đủ (xem docs/Riverbank-risk-model.md)
 data/synth/     generate.py (shop demo theo schema Shopee), train.py (data huấn luyện có nhãn), oracle.py (PD thật của tập test, trần AUC), calibration.json (60 shop thật); out/, train/, test/ không commit
-web/            Next.js, deploy Vercel
+web/            Next.js, deploy Vercel (chưa có trong repo)
 infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 .agents/skills/ skill cho Codex và Claude Code, đọc skill đúng việc trước khi code
 ```

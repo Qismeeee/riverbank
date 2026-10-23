@@ -6,13 +6,21 @@ Cập nhật 22/10/2026. Đọc file này trước, rồi đọc AGENTS.md, BRD,
 
 Sea x OpenAI Codex Hackathon Vietnam, thi ngày 31/10/2026 tại Shopee HCM. Team Riverbank 4 người, Le Anh Quan là admin, DevOps và tích hợp. Sản phẩm: cho vay vốn lưu động cho seller Shopee dựa trên dòng tiền payout tuần. Lõi là CashFlow Engine tính gap, Policy Engine chạy rule, risk model PD + SHAP, memo có bằng chứng, người duyệt quyết định. Mô hình tích hợp A: Riverbank là LOS, ngân hàng duyệt trên Lender Portal.
 
+## Luật và tiêu chí chấm (codexhackathon.sea.com, đọc 23/10/2026)
+
+- Hacking 10:00 đến 17:00 ngày 31/10, chấm 17:00 đến 21:00. Đội 3 đến 4 người có mặt.
+- Ba hướng: Autonomous & Adaptive AI, AI-Native Products & Operations, Deep Domain AI. Đề do đội tự chọn, BTC cho thêm bối cảnh trong ngày.
+- Luật: "all building must take place on the day. Pre-built code or existing projects shall not be submitted." Không nói về model train sẵn. Cần hỏi BTC trước khi mang repo này vào.
+- Tiêu chí: problem framing, quality of build, depth of thinking, mức dùng Codex trong lúc build. Không có trọng số.
+- Đối chiếu Riverbank với từng tiêu chí: `docs/Riverbank-spec-vs-code.md` mục 6.
+
 ## Cách làm việc
 
 Tiếng Việt, ngắn, thẳng, không vòng vo. Không dùng dấu gạch ngang hay chấm phẩy trong văn bản. Nói thật kể cả tin xấu, số liệu phải kiểm chứng. Hackathon nên không strict quá, nhưng không bịa số và không hứa thứ chưa chạy. Mọi lệnh phân biệt rõ ba nơi: WSL (`loq@Qismeeee`, repo `/mnt/e/riverbank`, git chạy ở đây), EC2 (`ubuntu@ip-172-31-44-176`, chỉ docker compose), AWS console (user quanla6). Key, mật khẩu không dán vào chat.
 
 ## Số vàng, test khóa
 
-Case B: gap 80 triệu, đề xuất 90 triệu, 8 tuần, 11,25 triệu/tuần, payout xấu 49 triệu. Case A: gap 0, cảnh báo payout dưới 20 triệu/tuần.
+Case B: gap 80 triệu, đề xuất 90 triệu, 8 tuần, 11,25 triệu/tuần, payout xấu 49 triệu. Code đang chạy là chuẩn cho số và rule (chốt 23/10). Case A: gap 0, cảnh báo payout dưới 20 triệu/tuần.
 
 ## Repo
 

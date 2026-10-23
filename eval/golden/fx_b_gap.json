@@ -1,46 +1,114 @@
 {
   "case_id": "FX-B",
-  "title": "Trả 100% tuần 0, gap 80 triệu, đề xuất 88 triệu trong 8 tuần",
+  "title": "Trả 100% tuần 0, gap 80 triệu, đề xuất 90 triệu trong 8 tuần",
   "source": "policy/worked-examples.md",
   "input": {
     "cash_on_hand": 120000000,
-    "supplier_schedule": [{"week": 0, "amount": 200000000}],
+    "supplier_schedule": [
+      {
+        "week": 0,
+        "amount": 200000000
+      }
+    ],
     "sell_weeks": 6,
-    "payout_weekly_history": [70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000],
+    "payout_weekly_history": [
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000,
+      70000000
+    ],
     "requested_amount": 150000000,
     "platform_support_limit": 120000000,
-    "shop_age_months": 6,
-    "return_rate_90d": 0.08,
-    "cic_group": 1
+    "shop_age_months": 12,
+    "return_rate_90d": 0.05,
+    "cic_group": 1,
+    "cic_outstanding": 0
   },
   "expected": {
     "payout_base": 70000000,
     "payout_stress": 49000000,
     "gap": 80000000,
-    "negative_weeks": [0, 1],
-    "amount_proposed": 88000000,
+    "amount_proposed": 90000000,
     "tenor_weeks": 8,
-    "weekly_deduction": 11000000,
-    "deduction_cap": 12250000,
+    "weekly_deduction": 11250000,
+    "negative_weeks": [
+      0,
+      1
+    ],
+    "weekly_deductions": [
+      11250000,
+      11250000,
+      11250000,
+      11250000,
+      11250000,
+      11250000,
+      11250000,
+      11250000
+    ],
     "tenor_trace": [
-      {"tenor_weeks": 4, "weekly_deduction": 22000000},
-      {"tenor_weeks": 6, "weekly_deduction": 14666667},
-      {"tenor_weeks": 8, "weekly_deduction": 11000000}
+      {
+        "tenor_weeks": 4,
+        "weekly_deduction": 22500000
+      },
+      {
+        "tenor_weeks": 6,
+        "weekly_deduction": 15000000
+      },
+      {
+        "tenor_weeks": 8,
+        "weekly_deduction": 11250000
+      }
     ],
     "status": "PENDING_REVIEW",
-    "is_fast_track": true,
+    "reason": null,
     "cic_called": true,
     "pd_scored": true,
+    "pd_bps": 500,
     "statement_required": false,
-    "rules_evaluated": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08"],
+    "rules_evaluated": [
+      "R09",
+      "R01",
+      "R04",
+      "R08",
+      "R02",
+      "R03",
+      "R05",
+      "R06",
+      "R07"
+    ],
     "failed_rules": [],
-    "reason_codes": [],
-    "underwriting_started": true,
+    "memo_validated": true,
     "auto_rejected": false,
     "balances": [
-      {"week": 0, "start": 120000000, "inflow": 0, "outflow": 200000000, "end": -80000000},
-      {"week": 1, "start": -80000000, "inflow": 70000000, "outflow": 0, "end": -10000000},
-      {"week": 2, "start": -10000000, "inflow": 70000000, "outflow": 0, "end": 60000000}
+      {
+        "week": 0,
+        "bal_start": 120000000,
+        "payout": 0,
+        "outflow": 200000000,
+        "bal_end": -80000000
+      },
+      {
+        "week": 1,
+        "bal_start": -80000000,
+        "payout": 70000000,
+        "outflow": 0,
+        "bal_end": -10000000
+      },
+      {
+        "week": 2,
+        "bal_start": -10000000,
+        "payout": 70000000,
+        "outflow": 0,
+        "bal_end": 60000000
+      }
     ]
   }
 }
