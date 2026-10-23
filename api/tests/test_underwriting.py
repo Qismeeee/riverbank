@@ -10,10 +10,10 @@ from routers import underwriting as routes
 from services.underwriting.evidence import read_evidence, validate_sentences
 from services.underwriting.models import DecisionInput, Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
+from services.underwriting.risk import DemoRiskModel
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
     DemoCicSource,
-    DemoRiskModel,
     MockLosAdapter,
     demo_source,
 )

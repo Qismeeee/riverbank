@@ -23,16 +23,18 @@ from services.underwriting.models import (
     WorkflowError,
 )
 from services.underwriting.repository import MemoryCaseRepository, PostgresCaseRepository
+from services.underwriting.risk import DemoRiskModel, LightGbmRiskModel, RiskModel
 from services.underwriting.service import UnderwritingService, utc_now
 from services.underwriting.sources import (
     DemoCicSource,
-    DemoRiskModel,
     MockLosAdapter,
     PostgresFeatureSource,
     demo_source,
 )
 
 router = APIRouter(prefix="/v1", tags=["underwriting"])
+
+RISK_MODELS: dict[str, type[RiskModel]] = {"demo": DemoRiskModel, "lightgbm": LightGbmRiskModel}
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,8 @@ def get_service() -> UnderwritingService:
         raise WorkflowError("INVALID_WORKFLOW_STORAGE", 503)
     if config.WORKFLOW_FEATURES not in {"demo", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_FEATURES", 503)
+    if config.WORKFLOW_RISK not in RISK_MODELS:
+        raise WorkflowError("INVALID_WORKFLOW_RISK", 503)
     url = config.database_url()
     if "postgres" in {config.WORKFLOW_STORAGE, config.WORKFLOW_FEATURES} and not url:
         raise WorkflowError("DATABASE_REQUIRED", 503)
@@ -82,7 +86,7 @@ def get_service() -> UnderwritingService:
         else demo_source(utc_now())
     )
     return UnderwritingService(
-        repository, features, DemoRiskModel(), DemoCicSource(), MockLosAdapter()
+        repository, features, RISK_MODELS[config.WORKFLOW_RISK](), DemoCicSource(), MockLosAdapter()
     )
 
 

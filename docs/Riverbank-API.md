@@ -204,9 +204,10 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 5. Chạy CashFlow Engine. Lưu bằng chứng `E4` (feature) và `E5` (dòng tiền).
 6. Gap = 0: trạng thái `NO_LOAN_NEEDED`. Dừng ở đây, không gọi CIC.
 7. Gap > 0: chấm PD (`E6`), tra CIC (`E6a`), chạy Policy Engine (`E7`).
+   - Có hard fail khác R05 thiếu chứng từ, hoặc sao kê lệch: `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
+   - Snapshot thiếu hồ sơ shop nên không chấm được PD: `ESCALATED`, lý do `RISK_DATA_MISSING`. E6 ghi `missing_fields`.
    - Hard fail duy nhất là R05 thiếu chứng từ: `AWAITING_STATEMENT`.
-   - Có hard fail khác: `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
-   - Không fail: `PENDING_REVIEW`.
+   - Còn lại: `PENDING_REVIEW`.
 8. Sinh tờ trình và bản seller từ template, kiểm từng câu với bằng chứng. Thử tối đa 3 lần. Không qua thì `ESCALATED`, lý do `MEMO_VALIDATION_FAILED`.
 
 **Phản hồi `201`** (`CaseSummary`):
@@ -224,7 +225,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 }
 ```
 
-`reason` là `null`, `STATEMENT_REQUIRED`, `HARD_POLICY_FAILURE`, hoặc `MEMO_VALIDATION_FAILED`.
+`reason` là `null`, `STATEMENT_REQUIRED`, `HARD_POLICY_FAILURE`, `RISK_DATA_MISSING`, hoặc `MEMO_VALIDATION_FAILED`.
 
 **Lỗi:** `403 SELLER_SCOPE_MISMATCH`, `403 SELLER_SHOP_SCOPE_NOT_FOUND`, `403 FEATURE_SCOPE_MISMATCH`, `403 CIC_SCOPE_MISMATCH`, `409 IDEMPOTENCY_KEY_REUSED`, `422 BLOCKED_INPUT`, `422 CONSENT_REQUIRED`, `422 PAYOUT_HISTORY_REQUIRED`, `422 INVALID_PAYOUT_HISTORY`, và các lỗi snapshot ở mục 5.
 
@@ -303,7 +304,7 @@ Một phần tử `runs`:
 | `engine_version`, `config` | Phiên bản và cấu hình CashFlow Engine |
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
 | `cashflow` | `payout_base`, `payout_stress`, `weeks`, `stress_weeks`, `gap`, `negative_weeks`, `amount_proposed`, `tenor_weeks`, `weekly_deduction`, `weekly_deductions`, `tenor_trace`, `payout_warning_threshold` |
-| `risk` | `pd_bps`, `model_version`, `factors[]`. `null` khi Gap = 0 |
+| `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `demo`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
 | `cic` | `bureau_group`, `outstanding`, `queried_at`. `null` khi Gap = 0 |
 | `policy` | `results[]` (`rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`), `hard_fail`, `summary` |
 | `policy_input` | Snapshot đưa vào Policy Engine |
@@ -525,14 +526,14 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `UNAPPROVED_FEATURE_FIELDS` | 422 | Tạo hồ sơ | Snapshot có trường ngoài danh sách cho phép |
 | `PAYOUT_PROVENANCE_REQUIRED` | 422 | Tạo hồ sơ | Thiếu nguồn gốc payout |
 | `SIMULATION_MUST_BE_LABELLED` | 422 | Tạo hồ sơ | Dữ liệu synthetic không gắn nhãn mô phỏng |
-| `INVALID_FEATURE_SNAPSHOT` | 422 | Tạo hồ sơ | Thiếu mức dữ liệu sàn hỗ trợ hoặc lời công bố nguồn |
+| `INVALID_FEATURE_SNAPSHOT` | 422 | Tạo hồ sơ | Thiếu mức dữ liệu sàn hỗ trợ hoặc lời công bố nguồn, hoặc hồ sơ shop sai kiểu, ngoài khoảng |
 | `UNSUPPORTED_SHOPEE_SOURCE` | 422 | Tạo hồ sơ | Nguồn Shopee chưa hỗ trợ |
-| `INVALID_RISK_RESULT` | 422 | Tạo hồ sơ | PD ngoài khoảng hoặc thiếu yếu tố |
+| `INVALID_RISK_RESULT` | 422 | Tạo hồ sơ | PD ngoài khoảng, thiếu yếu tố, hoặc báo thiếu dữ liệu mà vẫn có PD |
 | `INVALID_STATEMENT_PERIOD` | 422 | Sao kê | Ngày sai định dạng |
 | `STATEMENT_PERIOD_NOT_COVERED` | 422 | Sao kê | Kỳ không trùng trọn các tuần payout |
 | `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
 | `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
-| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES` | 503 | `/v1/*` | Cấu hình sai |
+| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
 
 ---
@@ -695,5 +696,4 @@ Ngày 23/10/2026 team chốt: số và rule theo code đang chạy. `policy/poli
 | Cờ fast-track | `is_fast_track`, hàng đợi lọc được | Chưa có |
 | Sao kê | Seller upload file lên S3, mục 6.3 | Người thẩm định nhập tổng |
 | Tiền ngoài sàn | `R06_OFF_PLATFORM_NOT_EVIDENCE` | Chưa phân biệt |
-| PD | LightGBM `pd-lgbm-v2` và SHAP | `DemoRiskModel` 500 bps |
 | Copilot, Monitor, Studio | Mục 6 | Chưa có |

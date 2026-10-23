@@ -47,8 +47,12 @@ TEMPLATES = {
     ),
     "deduction": ("Kỳ trích tối đa là {weekly_deduction} VND mỗi tuần.", ["weekly_deduction"]),
     "risk": (
-        "Điểm PD demo là {pd_bps} điểm cơ bản; model {model_version}.",
-        ["pd_bps", "model_version"],
+        "{disclosure}: {pd_bps} điểm cơ bản, model {model_version}.",
+        ["disclosure", "pd_bps", "model_version"],
+    ),
+    "risk_missing": (
+        "Chưa chấm được PD, thiếu dữ liệu: {missing_fields}.",
+        ["missing_fields"],
     ),
     "policy": ("Kết quả chính sách: {summary}.", ["summary"]),
     "source": ("Nguồn dữ liệu: {disclosure}.", ["disclosure"]),
@@ -59,9 +63,10 @@ TEMPLATES = {
 def sentence(template: str, evidence: dict) -> dict:
     text, keys = TEMPLATES[template]
     claims = {key: evidence["payload"][key] for key in keys}
+    rendered = {k: ", ".join(v) if isinstance(v, list) else v for k, v in claims.items()}
     return {
         "template": template,
-        "text": text.format(**claims),
+        "text": text.format(**rendered),
         "claims": claims,
         "evidence_id": evidence["evidence_id"],
     }
@@ -82,7 +87,10 @@ def build_document(case: Case, run: dict, refs: dict, now: str) -> dict:
     else:
         common.extend(sentence(t, refs["E5"]) for t in ("proposal", "deduction"))
     internal = list(common)
-    for code, template in (("E6", "risk"), ("E7", "policy"), ("E8", "statement")):
+    if "E6" in refs:
+        missing = refs["E6"]["payload"].get("missing_fields")
+        internal.append(sentence("risk_missing" if missing else "risk", refs["E6"]))
+    for code, template in (("E7", "policy"), ("E8", "statement")):
         if code in refs:
             internal.append(sentence(template, refs[code]))
     return {

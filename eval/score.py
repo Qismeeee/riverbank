@@ -10,10 +10,10 @@ from pydantic import ValidationError
 from services.cashflow import CashFlowEngine, CashFlowInput
 from services.underwriting.models import Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
+from services.underwriting.risk import DemoRiskModel, RiskAssessment, RiskInput
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
     CicSource,
-    DemoRiskModel,
     MappingFeatureSource,
     MockLosAdapter,
 )
@@ -78,9 +78,9 @@ class _GoldenRisk(DemoRiskModel):
     def __init__(self):
         self.calls = 0
 
-    def predict(self, features: dict) -> dict:
+    def assess(self, inp: RiskInput) -> RiskAssessment:
         self.calls += 1
-        return super().predict(features)
+        return super().assess(inp)
 
 
 def _features(inp: dict) -> MappingFeatureSource:

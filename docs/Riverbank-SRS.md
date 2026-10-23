@@ -337,7 +337,7 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-05, FR-07 | Đạt | Snapshot đúng `seller_id` và `shop_id`, thiếu consent thì `422 CONSENT_REQUIRED` |
 | FR-06 | Đạt | Mã E4, E5, E6, E6a, E7, E8, băm lại mỗi lần đọc |
 | FR-08 đến FR-15 | Đạt | Case B: gap 80.000.000, đề xuất 90.000.000, 8 tuần, 11.250.000. Case A: gap 0, cảnh báo 20.000.000 |
-| FR-16 | Đạt hình thức | PD luôn 500 bps từ `DemoRiskModel`, một yếu tố. Model LightGBM chưa nối |
+| FR-16 | Đạt | LightGBM `pd-lgbm-v2`, tối đa 5 yếu tố SHAP. Thiếu hồ sơ shop thì `ESCALATED`, `RISK_DATA_MISSING` |
 | FR-16b | Đạt với nguồn mock | `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0 |
 | FR-17 | Đạt | Chín rule R01 đến R09, mỗi rule có `evidence_id` |
 | FR-18 | Đạt một phần | Không có bước nạp bộ rule đã ký. Có `policy_hash`, đổi rule sau thẩm định thì chặn `ACCEPT_PROPOSAL` |

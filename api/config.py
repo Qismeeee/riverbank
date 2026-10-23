@@ -13,6 +13,7 @@ S3_BUCKET = os.getenv("S3_BUCKET", "")
 WORKFLOW_MODE = os.getenv("RIVERBANK_WORKFLOW_MODE", "disabled")
 WORKFLOW_STORAGE = os.getenv("RIVERBANK_WORKFLOW_STORAGE", "memory")
 WORKFLOW_FEATURES = os.getenv("RIVERBANK_WORKFLOW_FEATURES", "demo")
+WORKFLOW_RISK = os.getenv("RIVERBANK_WORKFLOW_RISK", "lightgbm")
 WORKFLOW_TEST_DATABASE_URL = os.getenv("WORKFLOW_TEST_DATABASE_URL", "")
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")

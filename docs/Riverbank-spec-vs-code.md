@@ -66,7 +66,6 @@ Ghi chú: case C trong `worked-examples.md` dùng mức sàn 120.000.000, nên `
 
 | Đặc tả | Code hiện tại |
 |---|---|
-| PD bằng LightGBM và SHAP (FR-16, FLOW-04) | `DemoRiskModel` luôn trả `pd_bps = 500` với một yếu tố `demo_baseline`. `services/risk.py` có model thật nhưng chưa nối vào router |
 | Orchestrator, Data Analyst, Memo Writer, Doc Verifier dùng LLM (TDD mục 3) | Không có thư mục `api/agents/`. Tờ trình sinh từ template (`generator: TEMPLATE`). Không có lời gọi LLM nào trong luồng `/v1` |
 | Jev gate CIC, gate sao kê, chấm memo | `api/jev.py` có client, chưa được gọi trong luồng |
 | Guardrail input bằng Jev, che PII rồi lưu | Một regex trong `service.py`. Có PII thì chặn cả hồ sơ |

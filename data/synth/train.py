@@ -8,12 +8,13 @@ import random
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from statistics import mean, median, pstdev
+from statistics import mean, median
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "api"))
 
 from services.cashflow import CashFlowEngine, CashFlowInput  # noqa: E402
+from services.features import payout_profile  # noqa: E402
 
 FEE_RATE = 0.125
 HISTORY_WEEKS = 12
@@ -125,7 +126,7 @@ class TrainingSetGenerator:
             result.payout_stress,
         )
         repay, shock_weeks, short_paid = self._repayment(payout_mean, cv, result, risk, rng)
-        trend = mean(history[-4:]) / max(1, mean(history[:4]))
+        profile = payout_profile(history)
         shop = TrainShop(
             shop_id=shop_id,
             archetype=arch,
@@ -136,9 +137,9 @@ class TrainingSetGenerator:
             return_rate_12w=round(return_rate, 4),
             gmv_30d=gmv_30d,
             aov=aov,
-            payout_mean_12w=int(mean(history)),
-            payout_cv_12w=round(pstdev(history) / max(1, mean(history)), 4),
-            payout_trend=round(trend, 4),
+            payout_mean_12w=int(profile["payout_mean_12w"]),
+            payout_cv_12w=profile["payout_cv_12w"],
+            payout_trend=profile["payout_trend"],
             cash_on_hand=cash,
             supplier_amount=supplier,
             gap=result.gap,
