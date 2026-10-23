@@ -36,7 +36,13 @@ services:
       DB_HOST: riverbank-db.cdcgq4mmivnf.ap-southeast-1.rds.amazonaws.com
       DB_SECRET_ID: "rds!db-1893a3d4-b65e-47a7-bb55-2134b3deaff7"
       S3_BUCKET: riverbank-data-424016506356
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://ezxriverbank.vercel.app}
+      RIVERBANK_WORKFLOW_MODE: demo
+      RIVERBANK_WORKFLOW_IDENTITY: token
+      RIVERBANK_WORKFLOW_STORAGE: postgres
+      RIVERBANK_WORKFLOW_FEATURES: demo
+      RIVERBANK_WORKFLOW_RISK: lightgbm
+      RIVERBANK_WORKFLOW_CIC_GATE: jev
     deploy:
       resources:
         limits:
