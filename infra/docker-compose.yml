@@ -32,6 +32,11 @@ services:
       - "8000"
     environment:
       RIVERBANK_ENV: prod
+      RIVERBANK_WORKFLOW_MODE: ${RIVERBANK_WORKFLOW_MODE:-disabled}
+      RIVERBANK_WORKFLOW_AUTH: bearer
+      RIVERBANK_WORKFLOW_STORAGE: memory
+      RIVERBANK_WORKFLOW_FEATURES: demo
+      RIVERBANK_WORKFLOW_AUTH_SECRET_ID: riverbank/workflow-demo-auth
       AWS_REGION: ap-southeast-1
       DB_HOST: riverbank-db.cdcgq4mmivnf.ap-southeast-1.rds.amazonaws.com
       DB_SECRET_ID: "rds!db-1893a3d4-b65e-47a7-bb55-2134b3deaff7"

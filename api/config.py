@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,6 +14,10 @@ S3_BUCKET = os.getenv("S3_BUCKET", "")
 WORKFLOW_MODE = os.getenv("RIVERBANK_WORKFLOW_MODE", "disabled")
 WORKFLOW_STORAGE = os.getenv("RIVERBANK_WORKFLOW_STORAGE", "memory")
 WORKFLOW_FEATURES = os.getenv("RIVERBANK_WORKFLOW_FEATURES", "demo")
+WORKFLOW_AUTH = os.getenv("RIVERBANK_WORKFLOW_AUTH", "local_headers")
+WORKFLOW_AUTH_SECRET_ID = os.getenv(
+    "RIVERBANK_WORKFLOW_AUTH_SECRET_ID", "riverbank/workflow-demo-auth"
+)
 WORKFLOW_TEST_DATABASE_URL = os.getenv("WORKFLOW_TEST_DATABASE_URL", "")
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
@@ -59,3 +64,18 @@ def database_url() -> str:
     host = os.environ["DB_HOST"]
     db = os.getenv("DB_NAME", "riverbank")
     return f"postgresql://{creds['username']}:{creds['password']}@{host}:5432/{db}"
+
+
+@lru_cache(maxsize=1)
+def _workflow_auth_secret(refresh_bucket: int) -> dict:
+    import boto3
+
+    client = boto3.client("secretsmanager", region_name=AWS_REGION)
+    value = client.get_secret_value(SecretId=WORKFLOW_AUTH_SECRET_ID)
+    return json.loads(value["SecretString"])
+
+
+def workflow_demo_credentials() -> dict:
+    if ENV == "local":
+        return json.loads(os.getenv("RIVERBANK_DEMO_AUTH_JSON", "{}"))
+    return _workflow_auth_secret(int(time.monotonic() // 60))
