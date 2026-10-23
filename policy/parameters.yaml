@@ -75,7 +75,7 @@ decision:
   counter_max_tenor_weeks: 26
 
 memo:
-  # BL-07. Sinh tờ trình từ template, kiểm từng câu với bằng chứng, tối đa 3 lần. Lần 3 fail → ESCALATED.
+  # BL-07. Lần 1 đến 2 do LLM viết khi bật RIVERBANK_MEMO_WRITER=llm, lần cuối luôn là template. Validator kiểm từng câu với bằng chứng. Lần 3 fail → ESCALATED.
   max_attempts: 3
 
 handoff:

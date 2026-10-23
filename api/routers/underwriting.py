@@ -9,6 +9,7 @@ from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
+from services.underwriting.memo import build_composer
 from services.underwriting.models import (
     Case,
     CaseDetail,
@@ -77,6 +78,7 @@ def get_service() -> UnderwritingService:
         DemoCicSource(),
         MockLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
+        memo=build_composer(config.MEMO_WRITER),
     )
 
 

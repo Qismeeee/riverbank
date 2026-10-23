@@ -2,7 +2,7 @@
 
 Hai chiều: chặn trước khi model đọc, và chặn trước khi người đọc.
 
-Trạng thái code (23/10/2026): chiều vào là một regex trong `api/services/underwriting/service.py`, gặp lệnh ép duyệt, SĐT, CCCD, số tài khoản hay thuộc tính nhạy cảm thì `422 BLOCKED_INPUT` cả hồ sơ, chưa che rồi cho đi tiếp, chưa gọi Jev. Chiều ra là `validate_sentences` so từng câu template với payload bằng chứng. Phần còn lại của file này là thiết kế cho bước nối LLM. Ngưỡng xác suất nằm ở `policy/parameters.yaml` (`guardrail.block_probability` = 0,5).
+Trạng thái code (23/10/2026): chiều vào là một regex trong `api/services/underwriting/service.py`, gặp lệnh ép duyệt, SĐT, CCCD, số tài khoản hay thuộc tính nhạy cảm thì `422 BLOCKED_INPUT` cả hồ sơ, chưa che rồi cho đi tiếp, chưa gọi Jev. Chiều ra là `MemoValidator` (`api/services/underwriting/memo.py`) dùng `OutputGuard` (`api/services/guard.py`): claims phải đúng payload bằng chứng, số trong câu phải nằm trong claims, đủ mọi số nguyên của claims, không từ cấm, không nói ngược trạng thái. Bước Jev chưa có. Phần còn lại của file này là thiết kế cho bước nối LLM. Ngưỡng xác suất nằm ở `policy/parameters.yaml` (`guardrail.block_probability` = 0,5).
 
 ## Chiều vào
 

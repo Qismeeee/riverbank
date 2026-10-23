@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+COPY --from=knowledge . ./knowledge
+ENV RIVERBANK_KNOWLEDGE_DIR=/app/knowledge
 
 RUN useradd -m app && chown -R app:app /app
 USER app

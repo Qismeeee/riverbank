@@ -70,39 +70,3 @@ def sentence(template: str, evidence: dict) -> dict:
         "claims": claims,
         "evidence_id": evidence["evidence_id"],
     }
-
-
-def validate_sentences(case: Case, sentences: list[dict]) -> None:
-    for item in sentences:
-        evidence = read_evidence(case, item["evidence_id"])
-        expected = sentence(item["template"], evidence)
-        if item != expected:
-            raise WorkflowError("MEMO_EVIDENCE_MISMATCH")
-
-
-def build_document(case: Case, run: dict, refs: dict, now: str) -> dict:
-    common = [sentence("source", refs["E4"]), sentence("gap", refs["E5"])]
-    if run["cashflow"]["gap"] == 0:
-        common.append(sentence("no_loan", refs["E5"]))
-    else:
-        common.extend(sentence(t, refs["E5"]) for t in ("proposal", "deduction"))
-    internal = list(common)
-    if "E6" in refs:
-        missing = refs["E6"]["payload"].get("missing_fields")
-        internal.append(sentence("risk_missing" if missing else "risk", refs["E6"]))
-    for code, template in (("E7", "policy"), ("E8", "statement")):
-        if code in refs:
-            internal.append(sentence(template, refs[code]))
-    return {
-        "document_id": str(uuid4()),
-        "run_id": run["run_id"],
-        "attempt": 1,
-        "underwriter_memo": internal,
-        "seller_explanation": common,
-        "validated": False,
-        "unfinished": True,
-        "validation_errors": [],
-        "generator": "TEMPLATE",
-        "prompt_version": "templates-v1",
-        "created_at": now,
-    }

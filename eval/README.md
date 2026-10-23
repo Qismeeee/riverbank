@@ -15,6 +15,8 @@ Nhãn lấy từ `policy/worked-examples.md`, tức là hành vi của code đan
 | `fx_f_input_gate.json` | Ép duyệt, thuộc tính nhạy cảm, SĐT → `BLOCKED_INPUT`. Xin trên 300.000.000 → `INVALID_INPUT` (422 Pydantic). |
 | `planned/` | FX-D tiền ngoài sàn, FX-L giám sát. Chưa có code, test không đọc. |
 
+`make memo-llm` chạy Memo Writer LLM thật qua các case trên, in từng lần viết, lỗi validator và câu cuối. Thêm `ARGS="--case FX-B"` để chạy một case. Kết quả cache theo hash input ở `eval/.cache/llm`, xóa thư mục đó để gọi lại model.
+
 `golden/llm/` khóa validator chữ: số phải có trong bằng chứng, không dùng từ trong `knowledge/guardrails.md`, không viết đã duyệt khi trạng thái chưa phải `ACCEPTED`. Jev chấm ngữ nghĩa ở ngoài CI, theo `knowledge/prompts/jev-eval-judge.md`.
 
 ## Thêm case

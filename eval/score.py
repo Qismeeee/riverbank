@@ -8,8 +8,11 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from services import guard
 from services.cashflow import CashFlowEngine, CashFlowInput
+from services.guard import OutputGuard
 from services.underwriting.evidence import digest
+from services.underwriting.memo import MemoComposer
 from services.underwriting.models import Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import DemoRiskModel, RiskAssessment, RiskInput
@@ -120,7 +123,7 @@ def _features(inp: dict) -> MappingFeatureSource:
     return MappingFeatureSource({(SELLER, SELLER): (consent, features)})
 
 
-def _plan(inp: dict) -> Plan:
+def golden_plan(inp: dict) -> Plan:
     schedule = inp["supplier_schedule"]
     return Plan(
         seller_id=SELLER,
@@ -222,14 +225,24 @@ def _read(case, out: dict) -> dict:
     return out
 
 
+def golden_service(inp: dict, memo: MemoComposer | None = None) -> UnderwritingService:
+    return UnderwritingService(
+        MemoryCaseRepository(),
+        _features(inp),
+        _GoldenRisk(),
+        _GoldenCic(inp),
+        MockLosAdapter(),
+        clock=lambda: NOW,
+        memo=memo,
+    )
+
+
 def score_case(inp: dict) -> dict:
     out = _blank()
-    cic, risk = _GoldenCic(inp), _GoldenRisk()
-    service = UnderwritingService(
-        MemoryCaseRepository(), _features(inp), risk, cic, MockLosAdapter(), clock=lambda: NOW
-    )
+    service = golden_service(inp)
+    cic, risk = service.cic, service.risk
     try:
-        plan = _plan(inp)
+        plan = golden_plan(inp)
     except ValidationError:
         out["status"] = "INVALID_INPUT"
         return out
@@ -329,70 +342,21 @@ def write_report(path: Path = REPORT) -> None:
 
 
 def forbidden_words() -> tuple[str, ...]:
-    text = GUARDRAILS.read_text(encoding="utf-8")
-    section = text.split("### Từ cấm", 1)[1].split("###", 1)[0]
-    return tuple(word.casefold() for word in re.findall(r"`([^`]+)`", section))
+    return guard.forbidden_words(GUARDRAILS)
 
 
 def lexicon_hits(text: str) -> list[str]:
-    folded = text.casefold()
-    return [word for word in forbidden_words() if word in folded]
-
-
-def _ints(node: object, found: set[int]) -> None:
-    if isinstance(node, bool) or node is None:
-        return
-    if isinstance(node, int):
-        found.add(node)
-    elif isinstance(node, float) and node.is_integer():
-        found.add(int(node))
-    elif isinstance(node, dict):
-        for value in node.values():
-            _ints(value, found)
-    elif isinstance(node, list):
-        for value in node:
-            _ints(value, found)
-
-
-def _numbers(text: str) -> list[int]:
-    found = []
-    for match in re.finditer(r"\d{1,3}(?:\.\d{3})+|\d+", text):
-        found.append(int(match.group().replace(".", "")))
-    return found
-
-
-def _contradicts(sentence: str, status: str) -> bool:
-    folded = sentence.casefold()
-    approved = ("đã duyệt", "được duyệt", "accepted")
-    if status != "ACCEPTED" and any(token in folded for token in approved):
-        return True
-    rejected = ("đã từ chối", "rejected")
-    if status != "REJECTED" and any(token in folded for token in rejected):
-        return True
-    if "không cần vay" in folded and status != "NO_LOAN_NEEDED":
-        return True
-    needs_loan = "cần vay" in folded and "không cần vay" not in folded
-    return needs_loan and status == "NO_LOAN_NEEDED"
+    return OutputGuard(forbidden_words()).lexicon_hits(text)
 
 
 def score_memo(case: dict) -> dict:
-    sentence = case["sentence"]
     evidence_ids = list(case.get("evidence_ids") or [])
     evidence = case.get("evidence") or {}
-    numbers = _numbers(sentence)
-    known: set[int] = set()
-    for evidence_id in evidence_ids:
-        _ints(evidence.get(evidence_id), known)
-    reasons: list[str] = []
-    if lexicon_hits(sentence):
-        reasons.append("lexicon")
-    cited = [evidence_id for evidence_id in evidence_ids if evidence_id not in evidence]
-    if numbers and (not evidence_ids or cited):
-        reasons.append("missing_evidence")
-    elif numbers and not set(numbers) <= known:
-        reasons.append("number")
-    if _contradicts(sentence, case.get("status_target", "")):
-        reasons.append("contradicts_status")
+    cited = evidence_ids and all(evidence_id in evidence for evidence_id in evidence_ids)
+    allowed = guard.ints([evidence[e] for e in evidence_ids]) if cited else None
+    reasons = OutputGuard(forbidden_words()).check(
+        case["sentence"], allowed, case.get("status_target", "")
+    )
     return {"passed": not reasons, "reasons": reasons}
 
 

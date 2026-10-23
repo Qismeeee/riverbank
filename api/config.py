@@ -20,6 +20,16 @@ AUTH_TOKEN_TTL_SECONDS = int(os.getenv("RIVERBANK_AUTH_TOKEN_TTL_SECONDS", "2880
 AUTH_MAX_FAILURES = int(os.getenv("RIVERBANK_AUTH_MAX_FAILURES", "5"))
 AUTH_FAILURE_WINDOW_SECONDS = int(os.getenv("RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS", "300"))
 WORKFLOW_TEST_DATABASE_URL = os.getenv("WORKFLOW_TEST_DATABASE_URL", "")
+KNOWLEDGE_DIR = Path(
+    os.getenv("RIVERBANK_KNOWLEDGE_DIR", Path(__file__).resolve().parent.parent / "knowledge")
+)
+MEMO_WRITER = os.getenv("RIVERBANK_MEMO_WRITER", "template")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+LLM_CACHE_DIR = os.getenv("LLM_CACHE_DIR", "")
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 ]

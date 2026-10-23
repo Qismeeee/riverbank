@@ -117,6 +117,7 @@ class DocumentResponse(BaseModel):
     validation_errors: list[str]
     generator: str
     prompt_version: str
+    model: str | None = None
     created_at: str
 
 
