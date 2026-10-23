@@ -15,9 +15,11 @@ Không có endpoint update hay delete. Sửa là tạo evidence mới.
 
 ## Memo Writer
 
-Model: gpt-4.1-mini hoặc gpt-5-mini qua `OPENAI_API_KEY`. Prompt dùng template slot, không freeform:
+Code: `api/services/underwriting/memo.py`. `plan_slots` chọn câu và evidence, `LlmMemoWriter` chỉ viết lại `text` của từng slot, `claims` và `evidence_id` luôn do code điền. `FallbackMemoWriter` cho LLM lần 1 và 2, lần cuối luôn là template. `MemoValidator` kiểm cả hai. Client chung `api/llm.py`, prompt `knowledge/prompts/memo-writer.md`.
+
+Model: `LLM_MODEL` (mặc định gpt-4.1-mini) qua `LLM_PROVIDER` openai hoặc openrouter. Model dòng gpt-5 không nhận temperature, khi đó bỏ dòng temperature trong front matter của prompt. Prompt dùng template slot, không freeform:
 - Đầu vào: số từ engine (`CashFlowResult`, `PolicyOutcome.results`, PD, factors) kèm `evidence_id`.
-- Đầu ra: JSON `{"sections": [{"title", "sentences": [{"text", "evidence_id"}]}]}` qua JSON Schema validator.
+- Đầu ra: JSON `{"sentences": [{"slot_id", "text"}]}` qua structured output strict. Thiếu hoặc thừa slot là lỗi giao thức, rơi về template ngay lần đó.
 - Mọi số trong `text` phải xuất hiện trong payload evidence tương ứng. Citation guard so chuỗi số, lệch thì loại câu và log drift.
 - Tối đa 2 lần sửa. Lần 3 vẫn lỗi thì Escalated kèm memo thô.
 

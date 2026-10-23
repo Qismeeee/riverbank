@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from routers import underwriting as routes
-from services.underwriting.evidence import read_evidence, validate_sentences
+from services.underwriting.evidence import read_evidence
 from services.underwriting.models import DecisionInput, Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import DemoRiskModel
@@ -361,7 +361,9 @@ def test_citations_require_correct_fields_and_snapshot_is_isolated(service):
     sentence["text"] = "Khoảng thiếu vốn là 90000000 VND."
     sentence["claims"]["gap"] = 90_000_000
     with pytest.raises(WorkflowError, match="MEMO_EVIDENCE_MISMATCH"):
-        validate_sentences(case, [sentence])
+        service.memo.validator.validate(
+            case, {"underwriter_memo": [], "seller_explanation": [sentence]}
+        )
     case.evidence[0]["payload"]["disclosure"] = "tampered"
     with pytest.raises(WorkflowError, match="EVIDENCE_HASH_MISMATCH"):
         read_evidence(case, case.evidence[0]["evidence_id"])
@@ -373,12 +375,10 @@ def test_citations_require_correct_fields_and_snapshot_is_isolated(service):
 
 
 def test_memo_third_failure_escalates_and_hides_raw_draft(client, service, monkeypatch):
-    from services.underwriting import service as workflow
+    def reject(case, sentences):
+        return [{"slot_id": "seller_explanation.0", "text": "", "errors": ["MEMO_CLAIM_MISSING"]}]
 
-    def reject(*args):
-        raise WorkflowError("MEMO_EVIDENCE_MISMATCH")
-
-    monkeypatch.setattr(workflow, "validate_sentences", reject)
+    monkeypatch.setattr(service.memo.validator, "errors", reject)
     created = create(client)
     case = service.repository.get(created["case_id"])
     assert case.status == "ESCALATED" and case.reason == "MEMO_VALIDATION_FAILED"
@@ -412,12 +412,10 @@ def test_policy_change_requires_new_assessment_before_original_accept(service):
 
 
 def test_no_loan_memo_failure_cannot_enter_statement_flow(client, service, monkeypatch):
-    from services.underwriting import service as workflow
+    def reject(case, sentences):
+        return [{"slot_id": "seller_explanation.0", "text": "", "errors": ["MEMO_CLAIM_MISSING"]}]
 
-    def reject(*args):
-        raise WorkflowError("MEMO_EVIDENCE_MISMATCH")
-
-    monkeypatch.setattr(workflow, "validate_sentences", reject)
+    monkeypatch.setattr(service.memo.validator, "errors", reject)
     created = create(client, "demo-a", cash_on_hand=200_000_000)
     case = service.repository.get(created["case_id"])
     assert case.status == "ESCALATED" and case.runs[0]["policy"] is None

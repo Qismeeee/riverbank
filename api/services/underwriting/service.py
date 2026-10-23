@@ -9,8 +9,9 @@ from uuid import uuid4
 from policy import PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
 
-from .evidence import build_document, digest, emit, validate_sentences
+from .evidence import digest, emit
 from .gates import CicGate, GateInput, OpenCicGate
+from .memo import MemoComposer, TemplateMemoWriter, default_validator
 from .models import Case, DecisionInput, Plan, Statement, WorkflowError
 from .repository import CaseRepository
 from .risk import RiskInput, RiskModel
@@ -63,7 +64,9 @@ class UnderwritingService:
         los: LosAdapter,
         clock: Callable[[], datetime] = utc_now,
         cic_gate: CicGate | None = None,
+        memo: MemoComposer | None = None,
     ):
+        self.memo = memo or MemoComposer(TemplateMemoWriter(), default_validator())
         self.repository, self.features = repository, features
         self.risk, self.cic, self.los, self.clock = risk, cic, los, clock
         self.cic_gate = cic_gate or OpenCicGate()
@@ -247,18 +250,7 @@ class UnderwritingService:
         else:
             case.status = "NO_LOAN_NEEDED"
         case.runs.append(run)
-        for attempt in range(1, 4):
-            document = build_document(case, run, refs, now.isoformat())
-            document["attempt"] = attempt
-            try:
-                validate_sentences(case, document["underwriter_memo"])
-                validate_sentences(case, document["seller_explanation"])
-                document.update(validated=True, unfinished=False)
-            except WorkflowError as exc:
-                document["validation_errors"] = [exc.code]
-            case.documents.append(document)
-            if document["validated"]:
-                break
+        case.documents.extend(self.memo.compose(case, run, refs, now.isoformat()))
         if not case.documents[-1]["validated"]:
             case.status, case.reason = "ESCALATED", "MEMO_VALIDATION_FAILED"
         self._event(
@@ -352,8 +344,7 @@ class UnderwritingService:
                 doc = case.documents[-1]
                 if not doc["validated"] or doc["run_id"] != run["run_id"]:
                     raise WorkflowError("MEMO_NOT_VALIDATED")
-                validate_sentences(case, doc["underwriter_memo"])
-                validate_sentences(case, doc["seller_explanation"])
+                self.memo.validator.validate(case, doc)
                 final_policy = [asdict(r) for r in outcome.results]
             else:
                 final_policy = None

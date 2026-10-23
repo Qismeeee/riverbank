@@ -26,7 +26,7 @@ Hai số khóa:
 
 `rules.py` đã có và chạy trên prod. Prompt nào nhắc ngưỡng phải lấy đúng số trong `parameters.yaml`.
 
-Trạng thái hiện tại: luồng `/v1` chưa gọi prompt nào trong thư mục này. Tờ trình sinh từ template trong `api/services/underwriting/evidence.py`. Các prompt là kế hoạch cho bước nối LLM.
+Trạng thái hiện tại: `memo-writer.md` được `api/prompts.py` nạp khi `RIVERBANK_MEMO_WRITER=llm`. Các prompt khác là kế hoạch. Thư mục này được đóng vào image API tại `/app/knowledge`, đổi prompt là đổi `prompt_version` trong tờ trình.
 
 ## Prompt
 

@@ -66,7 +66,7 @@ Ghi chú: case C trong `worked-examples.md` dùng mức sàn 120.000.000, nên `
 
 | Đặc tả | Code hiện tại |
 |---|---|
-| Orchestrator, Data Analyst, Memo Writer, Doc Verifier dùng LLM (TDD mục 3) | Không có thư mục `api/agents/`. Tờ trình sinh từ template (`generator: TEMPLATE`). Không có lời gọi LLM nào trong luồng `/v1` |
+| Orchestrator, Data Analyst, Doc Verifier dùng LLM (TDD mục 3) | Chưa có. Memo Writer LLM đã có trong `services/underwriting/memo.py`, bật bằng `RIVERBANK_MEMO_WRITER=llm`, mặc định vẫn là template |
 | Jev gate sao kê, chấm chéo memo | Chưa có. Jev mới dùng cho gate CIC (`services/underwriting/gates.py`) |
 | Che PII rồi lưu `sanitized_note` | Regex trong `service.py` chặn cả hồ sơ. TDD chọn regex miễn phí cho guardrail input, FR-03 cho phép chặn |
 | R06 đối chiếu sao kê, lý do `R06_MISMATCH` | Sao kê đi qua R05 (`docs_verified`). Lệch thì lý do `HARD_POLICY_FAILURE` |

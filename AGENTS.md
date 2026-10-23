@@ -24,13 +24,14 @@ FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 ## Cấu trúc
 
 ```
-api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client)
+api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client), llm.py (LlmClient, một cửa gọi OpenAI hoặc OpenRouter, cache khi eval), prompts.py (nạp knowledge/prompts)
 api/services/   engine code thuần: cashflow.py, features.py (FeatureBuilder, một nguồn feature cho train và serving), risk.py (RiskModel từ api/models/); shopee/ (schemas, weekly, seller_export, openapi_client)
 api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R09, policy.md tóm tắt; bản đầy đủ ở policy/policy.md
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
 api/db/         schema.sql, một DB Postgres cho feature lẫn trạng thái app
 api/routers/    HTTP endpoint, mỏng, gọi services
-api/services/underwriting/  luồng hồ sơ: service.py, models.py, repository.py, evidence.py (tờ trình template), sources.py
+api/services/underwriting/  luồng hồ sơ: service.py, models.py, repository.py, evidence.py (evidence và template câu), memo.py (MemoWriter template hoặc LLM, MemoValidator, MemoComposer), sources.py
+api/services/guard.py       OutputGuard: số phải có trong bằng chứng, từ cấm, câu nói ngược trạng thái. Dùng cho memo, eval và Copilot
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động
 eval/pdlib.py, train_pd.py, train_pd.ipynb   metric, trainer, calibration dùng chung; train headless; notebook đầy đủ (xem docs/Riverbank-risk-model.md)
@@ -49,6 +50,7 @@ make dev        uvicorn reload tại :8000
 make test       ruff check + ruff format --check (api, eval, data/synth) + pytest
 make fmt        ruff format
 make eval-report  sinh lại api/studio/eval_report.json từ eval/golden (Studio API đọc)
+make memo-llm   chạy Memo Writer LLM thật trên golden case, cần key trong .env, có cache ở eval/.cache/llm
 ```
 
 Chỉ dùng `make test` để xác nhận trước khi mở PR. CI chạy đúng lệnh đó.

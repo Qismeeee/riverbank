@@ -7,6 +7,7 @@ import pytest
 from policy.engine import PolicyConfig
 from policy.rules import RULES
 from services.cashflow import ROUND_UNIT, CashFlowConfig
+from services.underwriting.memo import MemoConfig
 from services.underwriting.models import Plan
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -105,6 +106,7 @@ def test_parameters_mirror_code():
     assert cap["max_sell_weeks"] == _field_bound(Plan, "sell_weeks", "le")
     assert cap["max_supplier_rows"] == _field_bound(Plan, "supplier_schedule", "max_length")
     assert cap["max_note_chars"] == _field_bound(Plan, "note", "max_length")
+    assert cfg["memo"]["max_attempts"] == MemoConfig().max_attempts
 
 
 def test_rule_ids_match_policy_doc():

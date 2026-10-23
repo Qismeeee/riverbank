@@ -54,6 +54,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: api
+          build-contexts: knowledge=knowledge
           platforms: linux/arm64
           push: true
           tags: |
