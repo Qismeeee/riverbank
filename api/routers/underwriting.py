@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query
 
 import config
 from services.underwriting.evidence import read_evidence
+from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.models import (
     Case,
     CaseDetail,
@@ -35,6 +36,7 @@ from services.underwriting.sources import (
 router = APIRouter(prefix="/v1", tags=["underwriting"])
 
 RISK_MODELS: dict[str, type[RiskModel]] = {"demo": DemoRiskModel, "lightgbm": LightGbmRiskModel}
+CIC_GATES: dict[str, type[CicGate]] = {"open": OpenCicGate, "jev": JevCicGate}
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,10 @@ def get_service() -> UnderwritingService:
         raise WorkflowError("INVALID_WORKFLOW_FEATURES", 503)
     if config.WORKFLOW_RISK not in RISK_MODELS:
         raise WorkflowError("INVALID_WORKFLOW_RISK", 503)
+    if config.WORKFLOW_CIC_GATE not in CIC_GATES:
+        raise WorkflowError("INVALID_WORKFLOW_CIC_GATE", 503)
+    if config.WORKFLOW_CIC_GATE == "jev" and not config.OPENROUTER_API_KEY:
+        raise WorkflowError("OPENROUTER_KEY_REQUIRED", 503)
     url = config.database_url()
     if "postgres" in {config.WORKFLOW_STORAGE, config.WORKFLOW_FEATURES} and not url:
         raise WorkflowError("DATABASE_REQUIRED", 503)
@@ -86,7 +92,12 @@ def get_service() -> UnderwritingService:
         else demo_source(utc_now())
     )
     return UnderwritingService(
-        repository, features, RISK_MODELS[config.WORKFLOW_RISK](), DemoCicSource(), MockLosAdapter()
+        repository,
+        features,
+        RISK_MODELS[config.WORKFLOW_RISK](),
+        DemoCicSource(),
+        MockLosAdapter(),
+        cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
     )
 
 

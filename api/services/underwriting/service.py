@@ -10,6 +10,7 @@ from policy import PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
 
 from .evidence import build_document, digest, emit, validate_sentences
+from .gates import CicGate, GateInput, OpenCicGate
 from .models import Case, DecisionInput, Plan, Statement, WorkflowError
 from .repository import CaseRepository
 from .risk import RiskInput, RiskModel
@@ -58,9 +59,11 @@ class UnderwritingService:
         cic: CicSource,
         los: LosAdapter,
         clock: Callable[[], datetime] = utc_now,
+        cic_gate: CicGate | None = None,
     ):
         self.repository, self.features = repository, features
         self.risk, self.cic, self.los, self.clock = risk, cic, los, clock
+        self.cic_gate = cic_gate or OpenCicGate()
         self.engine = CashFlowEngine()
         self.policy = default_engine()
         policy_dir = Path(__file__).resolve().parents[2] / "policy"
@@ -122,6 +125,19 @@ class UnderwritingService:
             cic_outstanding=cic.get("outstanding"),
             requested_amount=max(case.plan["requested_amount"], cf["amount_proposed"]),
         )
+
+    def _inquire_cic(self, case: Case, inp: GateInput, now: datetime) -> dict:
+        gate = self.cic_gate.evaluate(inp)
+        if not gate.eligible:
+            return {
+                "seller_id": case.seller_id,
+                "source": "not_queried",
+                "bureau_group": None,
+                "outstanding": None,
+                "queried_at": None,
+                "gate": gate.payload(),
+            }
+        return {**self.cic.inquire(case.seller_id, now), "gate": gate.payload()}
 
     def _assess(
         self,
@@ -187,11 +203,11 @@ class UnderwritingService:
                 cic = deepcopy(case.runs[-1]["cic"])
             else:
                 risk = self.risk.predict(RiskInput(features, case.plan, cf))
-                cic = self.cic.inquire(case.seller_id, now)
+                if not _valid_risk(risk):
+                    raise WorkflowError("INVALID_RISK_RESULT", 422)
+                cic = self._inquire_cic(case, GateInput(features, cf, risk), now)
             if cic.get("seller_id") != case.seller_id:
                 raise WorkflowError("CIC_SCOPE_MISMATCH", 403)
-            if not _valid_risk(risk):
-                raise WorkflowError("INVALID_RISK_RESULT", 422)
             run["risk"], run["cic"] = risk, cic
             refs["E6"] = emit(case, run_id, "E6", risk, now.isoformat())
             refs["E6a"] = emit(case, run_id, "E6a", cic, now.isoformat())

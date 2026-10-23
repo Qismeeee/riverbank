@@ -30,7 +30,7 @@ Kiểm trên `main` commit `68588f2`. Số và rule theo code là chuẩn. Phầ
 | FLOW-01 Tiếp nhận | Có. Regex chặn cả hồ sơ, chưa che PII, chưa có Jev | `routers/underwriting.py`, `services/underwriting/service.py` |
 | FLOW-02 Consent, dữ liệu sàn | Có. `demo_source` hoặc `PostgresFeatureSource`. Không có Data Analyst LLM | `services/underwriting/sources.py` |
 | FLOW-03, FLOW-03a Dòng tiền | Có, đúng số mục này | `services/cashflow.py` |
-| FLOW-04 PD, CIC | PD là `LightGbmRiskModel`, thiếu hồ sơ shop thì `RISK_DATA_MISSING`. CIC là `DemoCicSource`. Chưa có Jev gate | `services/underwriting/risk.py`, `sources.py` |
+| FLOW-04 PD, CIC | PD là `LightGbmRiskModel`, thiếu hồ sơ shop thì `RISK_DATA_MISSING`. Jev gate ngưỡng 0,6 rồi mới gọi `DemoCicSource` | `services/underwriting/risk.py`, `gates.py`, `sources.py` |
 | FLOW-05 Policy | Có, chín rule | `policy/engine.py`, `policy/rules.py` |
 | FLOW-06 Sao kê | Có một phần. Người thẩm định nhập tổng tiền sàn, so ngưỡng 15%. Chưa upload, chưa OCR | `service.submit_statement` |
 | FLOW-07 Tờ trình | Có bằng template, kiểm từng câu với bằng chứng. Chưa có Memo Writer LLM | `services/underwriting/evidence.py` |

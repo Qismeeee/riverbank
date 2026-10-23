@@ -26,7 +26,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 3. Thiếu consent hiệu lực → `422 CONSENT_REQUIRED`, không đọc dữ liệu sàn. Snapshot feature sai → lỗi `422` hoặc `403` tương ứng.
 4. Tính Gap trên kịch bản cơ sở.
 5. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule.
-6. Gap > 0 → chấm PD (E6), tra CIC (E6a), chạy đủ chín rule (E7).
+6. Gap > 0 → chấm PD (E6), qua Jev gate rồi mới tra CIC (E6a, xem mục 3), chạy đủ chín rule (E7).
 7. Có rule cứng fail khác R05 thiếu sao kê, hoặc sao kê lệch → `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
 8. Thiếu dữ liệu hồ sơ shop nên không chấm được PD → `ESCALATED`, lý do `RISK_DATA_MISSING`.
 9. Rule cứng duy nhất fail là R05 vì thiếu kết quả sao kê → `AWAITING_STATEMENT`, lý do `STATEMENT_REQUIRED`.
@@ -38,6 +38,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 
 - Số seller xin không bao giờ là số đề xuất. Số đề xuất là đầu ra CashFlow Engine.
 - PD là thông tin cho người duyệt. Không có ngưỡng PD để tự chuyển trạng thái. Bản prod dùng `LightGbmRiskModel` (`api/services/underwriting/risk.py`) bọc model `api/services/risk.py`. Đầu vào gồm hồ sơ shop trong snapshot (`archetype`, `shop_age_months`, `n_products`, `top3_share`, `rating`, `return_rate`), payout 12 tuần gần nhất (`payout_profile`, dùng chung với lúc train) và số của CashFlow Engine. Kết quả E6 có `pd_bps`, tối đa 5 yếu tố SHAP và lời công bố "PD ước lượng trên dữ liệu mô phỏng". Thiếu một trường hồ sơ shop thì không chấm, E6 ghi `missing_fields`, hồ sơ sang `ESCALATED` lý do `RISK_DATA_MISSING`. `RIVERBANK_WORKFLOW_RISK=demo` chuyển về `DemoRiskModel` 500 bps cố định, bộ golden dùng bản này để số không đổi theo model.
+- Jev gate trước CIC: hỏi Jev (`typesafe/jev-1.14`) câu noul "đủ điều kiện tra CIC?" với state chỉ gồm số đã tính (gap, đề xuất, kỳ trích, payout, tuổi shop, hoàn hàng, rating, PD), không có định danh. Xác suất ≥ 0,6 mới gọi CIC. Dưới ngưỡng, lỗi mạng hoặc Jev trả sai định dạng thì không gọi CIC và không mặc định cho qua: E6a ghi `source = not_queried`, R06 fail thiếu dữ liệu, hồ sơ `ESCALATED` lý do `HARD_POLICY_FAILURE`. Quyết định gate (`probability`, `threshold`, `eligible`, `model`, `error`) lưu trong E6a. Lần chạy lại sau sao kê hoặc duyệt số khác dùng lại E6a cũ, không hỏi Jev lại.
 - Giới tính, tôn giáo, dân tộc, sức khỏe không có trong feature hay rule. Nhắc tới trong `note` thì chặn cả hồ sơ.
 - Lãi và phí không có trong bản seller vì chưa có biểu phí ngân hàng.
 - Tờ trình không viết điều khoản hợp đồng, khế ước, ủy nhiệm chi.

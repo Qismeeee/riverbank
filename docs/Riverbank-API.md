@@ -203,7 +203,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `simulated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
 5. Chạy CashFlow Engine. Lưu bằng chứng `E4` (feature) và `E5` (dòng tiền).
 6. Gap = 0: trạng thái `NO_LOAN_NEEDED`. Dừng ở đây, không gọi CIC.
-7. Gap > 0: chấm PD (`E6`), tra CIC (`E6a`), chạy Policy Engine (`E7`).
+7. Gap > 0: chấm PD (`E6`), hỏi Jev gate, đủ điều kiện mới tra CIC (`E6a`), chạy Policy Engine (`E7`). Gate từ chối hoặc lỗi thì không tra CIC, R06 fail thiếu dữ liệu.
    - Có hard fail khác R05 thiếu chứng từ, hoặc sao kê lệch: `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
    - Snapshot thiếu hồ sơ shop nên không chấm được PD: `ESCALATED`, lý do `RISK_DATA_MISSING`. E6 ghi `missing_fields`.
    - Hard fail duy nhất là R05 thiếu chứng từ: `AWAITING_STATEMENT`.
@@ -305,7 +305,7 @@ Một phần tử `runs`:
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
 | `cashflow` | `payout_base`, `payout_stress`, `weeks`, `stress_weeks`, `gap`, `negative_weeks`, `amount_proposed`, `tenor_weeks`, `weekly_deduction`, `weekly_deductions`, `tenor_trace`, `payout_warning_threshold` |
 | `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `demo`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
-| `cic` | `bureau_group`, `outstanding`, `queried_at`. `null` khi Gap = 0 |
+| `cic` | `source` (`mock` hoặc `not_queried`), `bureau_group`, `outstanding`, `queried_at` (`null` khi không tra), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
 | `policy` | `results[]` (`rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`), `hard_fail`, `summary` |
 | `policy_input` | Snapshot đưa vào Policy Engine |
 | `statement` | Kết quả đối chiếu sao kê, hoặc `null` |
@@ -533,8 +533,9 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `STATEMENT_PERIOD_NOT_COVERED` | 422 | Sao kê | Kỳ không trùng trọn các tuần payout |
 | `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
 | `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
-| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK` | 503 | `/v1/*` | Cấu hình sai |
+| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
+| `OPENROUTER_KEY_REQUIRED` | 503 | `/v1/*` | Bật Jev gate CIC nhưng thiếu `OPENROUTER_API_KEY` |
 
 ---
 

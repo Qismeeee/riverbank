@@ -67,8 +67,8 @@ Ghi chú: case C trong `worked-examples.md` dùng mức sàn 120.000.000, nên `
 | Đặc tả | Code hiện tại |
 |---|---|
 | Orchestrator, Data Analyst, Memo Writer, Doc Verifier dùng LLM (TDD mục 3) | Không có thư mục `api/agents/`. Tờ trình sinh từ template (`generator: TEMPLATE`). Không có lời gọi LLM nào trong luồng `/v1` |
-| Jev gate CIC, gate sao kê, chấm memo | `api/jev.py` có client, chưa được gọi trong luồng |
-| Guardrail input bằng Jev, che PII rồi lưu | Một regex trong `service.py`. Có PII thì chặn cả hồ sơ |
+| Jev gate sao kê, chấm chéo memo | Chưa có. Jev mới dùng cho gate CIC (`services/underwriting/gates.py`) |
+| Che PII rồi lưu `sanitized_note` | Regex trong `service.py` chặn cả hồ sơ. TDD chọn regex miễn phí cho guardrail input, FR-03 cho phép chặn |
 | R06 đối chiếu sao kê, lý do `R06_MISMATCH` | Sao kê đi qua R05 (`docs_verified`). Lệch thì lý do `HARD_POLICY_FAILURE` |
 | Seller upload file sao kê lên S3 | Người thẩm định nhập tổng tiền |
 | Trạng thái `DRAFT`, `ANALYZING`, `VERIFYING`, `HANDOFF_OK`, `HANDOFF_ERROR` | Enum có `ANALYZING`, `BLOCKED_INPUT` nhưng không lưu hồ sơ ở hai trạng thái đó. Bàn giao nằm ở `handoff.status` |

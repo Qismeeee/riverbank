@@ -332,13 +332,13 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR | Mức | Ghi chú |
 |---|---|---|
 | FR-01, FR-02 | Đạt | `POST /v1/cases`, Pydantic báo đúng trường thiếu |
-| FR-03 | Đạt một phần | Regex chặn cả hồ sơ khi có lệnh ép duyệt, SĐT, CCCD, số tài khoản, thuộc tính nhạy cảm. Chưa che PII rồi cho đi tiếp |
+| FR-03 | Đạt | Regex chặn cả hồ sơ khi có lệnh ép duyệt, SĐT, CCCD, số tài khoản, thuộc tính nhạy cảm. FR-03 cho phép chặn hoặc làm sạch, code chọn chặn. Ngoài regex này không bước nào đọc `note` |
 | FR-04 | Đạt | Trần `requested_amount` 300.000.000, `sell_weeks` 26, trả `422` |
 | FR-05, FR-07 | Đạt | Snapshot đúng `seller_id` và `shop_id`, thiếu consent thì `422 CONSENT_REQUIRED` |
 | FR-06 | Đạt | Mã E4, E5, E6, E6a, E7, E8, băm lại mỗi lần đọc |
 | FR-08 đến FR-15 | Đạt | Case B: gap 80.000.000, đề xuất 90.000.000, 8 tuần, 11.250.000. Case A: gap 0, cảnh báo 20.000.000 |
 | FR-16 | Đạt | LightGBM `pd-lgbm-v2`, tối đa 5 yếu tố SHAP. Thiếu hồ sơ shop thì `ESCALATED`, `RISK_DATA_MISSING` |
-| FR-16b | Đạt với nguồn mock | `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0 |
+| FR-16b | Đạt với nguồn mock | Jev gate ngưỡng 0,6 trước CIC. `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0. Gate từ chối hoặc lỗi thì R06 thiếu dữ liệu, chuyển người |
 | FR-17 | Đạt | Chín rule R01 đến R09, mỗi rule có `evidence_id` |
 | FR-18 | Đạt một phần | Không có bước nạp bộ rule đã ký. Có `policy_hash`, đổi rule sau thẩm định thì chặn `ACCEPT_PROPOSAL` |
 | FR-19, FR-19b | Đạt | Rule cứng fail thì `ESCALATED`. R09 trần 100.000.000 |
