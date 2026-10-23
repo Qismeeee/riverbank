@@ -28,21 +28,30 @@ def score(instructions: str, levels: list[str]) -> dict:
     return {"type": "score", "instructions": instructions, "criteria": levels}
 
 
-def decide(state: list[Any], questions: dict[str, dict], timeout: float = 30.0) -> dict:
+def decide(
+    state: list[Any], questions: dict[str, dict], timeout: float = 30.0, retries: int = 2
+) -> dict:
     if not config.OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY chưa cấu hình (.env local hoặc Secrets Manager)")
-    r = httpx.post(
-        URL,
-        headers={
-            "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://github.com/Qismeeee/riverbank",
-            "X-OpenRouter-Title": "Riverbank",
-        },
-        json={"model": MODEL, "state": state, "questions": questions},
-        timeout=timeout,
-    )
+    with httpx.Client(transport=httpx.HTTPTransport(retries=retries), timeout=timeout) as client:
+        r = client.post(
+            URL,
+            headers={
+                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://github.com/Qismeeee/riverbank",
+                "X-OpenRouter-Title": "Riverbank",
+            },
+            json={"model": MODEL, "state": state, "questions": questions},
+        )
     r.raise_for_status()
     return r.json()["answers"]
+
+
+def noul_probability(answers: dict, name: str) -> float:
+    value = answers[name]["noul"]
+    if type(value) not in (int, float) or not 0 <= value <= 1:
+        raise ValueError(f"Jev trả xác suất không hợp lệ cho {name}")
+    return float(value)
 
 
 if __name__ == "__main__":
