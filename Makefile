@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export
+.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -16,13 +16,13 @@ dev:
 	cd api && .venv/bin/uvicorn main:app --reload --port 8000
 
 lint:
-	cd api && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+	cd api && .venv/bin/ruff check . ../eval ../data/synth && .venv/bin/ruff format --check . ../eval ../data/synth
 
 test: lint
 	cd api && RIVERBANK_ENV=local .venv/bin/pytest -q
 
 fmt:
-	cd api && .venv/bin/ruff format . && .venv/bin/ruff check --fix .
+	cd api && .venv/bin/ruff format . ../eval ../data/synth && .venv/bin/ruff check --fix . ../eval ../data/synth
 
 jev:
 	cd api && .venv/bin/python jev.py
@@ -35,3 +35,18 @@ etl:
 
 export:
 	cd api && .venv/bin/python -m etl.export --run-date $$(date +%F)
+
+train-data:
+	cd api && .venv/bin/python ../data/synth/train.py --n 20000 --seed 7 --out ../data/synth/train
+
+test-data:
+	cd api && .venv/bin/python ../data/synth/train.py --n 5000 --seed 11 --out ../data/synth/test
+
+oracle:
+	cd api && .venv/bin/python ../data/synth/oracle.py --n 5000 --seed 11 --out ../data/synth/test/oracle.csv
+
+train-pd:
+	cd api && .venv/bin/python ../eval/train_pd.py
+
+notebook:
+	cd api && .venv/bin/jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 ../eval/train_pd.ipynb

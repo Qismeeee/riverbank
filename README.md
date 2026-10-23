@@ -31,6 +31,7 @@ make test        # ruff + pytest, đúng lệnh CI chạy
 make jev         # thử Jev, cần OPENROUTER_API_KEY
 make etl         # kéo dữ liệu công khai -> S3 raw -> Postgres (ADDLIVETAG_API_KEY trong .env)
 make export      # CSV các bảng feature -> data/exports và S3 exports/
+make train-data  # sinh data huấn luyện risk model (nhãn mô phỏng, xem docs/Riverbank-risk-model.md)
 ```
 
 ## Quy trình

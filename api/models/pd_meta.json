@@ -1,0 +1,227 @@
+{
+  "trained_on": "2026-10-22",
+  "model_version": "pd-lgbm-v2",
+  "git_sha": "unknown",
+  "features": [
+    "shop_age_months",
+    "n_products",
+    "top3_share",
+    "rating",
+    "return_rate_12w",
+    "payout_mean_12w",
+    "payout_cv_12w",
+    "payout_trend",
+    "amount",
+    "tenor_weeks",
+    "deduction_to_stress",
+    "age_decay",
+    "dts_excess",
+    "log_amount",
+    "log_payout",
+    "loan_to_monthly_payout",
+    "deduction_to_payout",
+    "cash_weeks_of_deduction",
+    "cash_cover_ratio",
+    "tenor_x_cv",
+    "payout_trend_down",
+    "arch_fashion",
+    "arch_electronics",
+    "arch_fmcg",
+    "arch_home"
+  ],
+  "raw_fields": [
+    "archetype",
+    "shop_age_months",
+    "n_products",
+    "top3_share",
+    "rating",
+    "return_rate_12w",
+    "payout_mean_12w",
+    "payout_cv_12w",
+    "payout_trend",
+    "cash_on_hand",
+    "supplier_amount",
+    "amount",
+    "tenor_weeks",
+    "deduction_to_stress"
+  ],
+  "excluded_leak_fields": [
+    "shock_weeks",
+    "short_paid_periods",
+    "label_default"
+  ],
+  "params": {
+    "num_leaves": 4,
+    "max_depth": 4,
+    "min_child_samples": 200,
+    "colsample_bytree": 0.8,
+    "reg_lambda": 0.0,
+    "n_estimators": 435
+  },
+  "data": {
+    "train": {
+      "path": "data/synth/train/train_shops.csv",
+      "sha256": "7b9ad07dc1a8ef70",
+      "rows": 20000,
+      "default_rate": 0.1896
+    },
+    "test": {
+      "path": "data/synth/test/train_shops.csv",
+      "sha256": "24133dbbc8f24ec2",
+      "rows": 5000,
+      "default_rate": 0.1922
+    }
+  },
+  "metrics": {
+    "oracle_test": {
+      "auc": 0.8104,
+      "auc_ci95": [
+        0.7947,
+        0.8256
+      ],
+      "gini": 0.6208,
+      "ks": 0.4769,
+      "pr_auc": 0.532,
+      "brier": 0.1209,
+      "ece": 0.0105,
+      "cal_slope": 0.95,
+      "cal_intercept": -0.079
+    },
+    "brier_floor": 0.1215,
+    "logistic_test": {
+      "auc": 0.774,
+      "auc_ci95": [
+        0.7563,
+        0.7899
+      ],
+      "gini": 0.5481,
+      "ks": 0.4172,
+      "pr_auc": 0.4784,
+      "brier": 0.1283,
+      "ece": 0.0129,
+      "cal_slope": 1.074,
+      "cal_intercept": 0.086
+    },
+    "lightgbm_test_raw": {
+      "auc": 0.7723,
+      "auc_ci95": [
+        0.7557,
+        0.7891
+      ],
+      "gini": 0.5446,
+      "ks": 0.4163,
+      "pr_auc": 0.487,
+      "brier": 0.1282,
+      "ece": 0.0217,
+      "cal_slope": 1.146,
+      "cal_intercept": 0.177
+    },
+    "lightgbm_test_calibrated": {
+      "auc": 0.7723,
+      "auc_ci95": [
+        0.7557,
+        0.7891
+      ],
+      "gini": 0.5446,
+      "ks": 0.4163,
+      "pr_auc": 0.487,
+      "brier": 0.1282,
+      "ece": 0.0217,
+      "cal_slope": 1.146,
+      "cal_intercept": 0.177
+    },
+    "lightgbm_oof_auc": 0.7565,
+    "stability_test_seeds": [
+      {
+        "test_seed": 11,
+        "default_rate": 0.1922,
+        "logistic_auc": 0.774,
+        "lightgbm_auc": 0.7723,
+        "lightgbm_brier": 0.1282
+      },
+      {
+        "test_seed": 12,
+        "default_rate": 0.1874,
+        "logistic_auc": 0.7842,
+        "lightgbm_auc": 0.7826,
+        "lightgbm_brier": 0.1263
+      },
+      {
+        "test_seed": 13,
+        "default_rate": 0.1972,
+        "logistic_auc": 0.7679,
+        "lightgbm_auc": 0.768,
+        "lightgbm_brier": 0.1327
+      }
+    ],
+    "learning_curve": [
+      {
+        "train_rows": 2000,
+        "logistic_auc": 0.7685,
+        "lightgbm_auc": 0.7385,
+        "lightgbm_brier": 0.1352
+      },
+      {
+        "train_rows": 5000,
+        "logistic_auc": 0.7737,
+        "lightgbm_auc": 0.7616,
+        "lightgbm_brier": 0.1297
+      },
+      {
+        "train_rows": 10000,
+        "logistic_auc": 0.7744,
+        "lightgbm_auc": 0.7672,
+        "lightgbm_brier": 0.129
+      },
+      {
+        "train_rows": 20000,
+        "logistic_auc": 0.774,
+        "lightgbm_auc": 0.7723,
+        "lightgbm_brier": 0.1282
+      }
+    ]
+  },
+  "calibration": {
+    "method": "none",
+    "holdout": {
+      "brier_holdout": {
+        "none": 0.133,
+        "platt": 0.1331,
+        "isotonic": 0.1333
+      },
+      "ece_holdout": {
+        "none": 0.0062,
+        "platt": 0.009,
+        "isotonic": 0.0129
+      }
+    }
+  },
+  "shap_mean_abs": {
+    "payout_cv_12w": 0.4089,
+    "return_rate_12w": 0.3261,
+    "shop_age_months": 0.3092,
+    "top3_share": 0.2961,
+    "deduction_to_payout": 0.2405,
+    "tenor_x_cv": 0.1166,
+    "cash_weeks_of_deduction": 0.0818,
+    "loan_to_monthly_payout": 0.0404,
+    "age_decay": 0.0389,
+    "arch_fashion": 0.0327,
+    "payout_trend": 0.0215,
+    "payout_mean_12w": 0.0172,
+    "cash_cover_ratio": 0.0169,
+    "arch_electronics": 0.012,
+    "tenor_weeks": 0.0119,
+    "amount": 0.0074,
+    "n_products": 0.0054,
+    "rating": 0.005,
+    "deduction_to_stress": 0.0046,
+    "log_payout": 0.003,
+    "log_amount": 0.0021,
+    "dts_excess": 0.0012,
+    "arch_fmcg": 0.0,
+    "payout_trend_down": 0.0,
+    "arch_home": 0.0
+  },
+  "label": "synthetic, BL-11 (3 kỳ trích thiếu liên tiếp), xem docs/Riverbank-risk-model.md"
+}

@@ -28,3 +28,6 @@ web/.next/
 
 # synthetic output
 data/synth/out/
+data/synth/train/
+data/synth/test/
+data/exports/

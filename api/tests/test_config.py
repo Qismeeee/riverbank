@@ -3,6 +3,9 @@ import sys
 
 
 def _reload(monkeypatch, **env):
+    import dotenv
+
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
     for k in ("RIVERBANK_ENV", "ADDLIVETAG_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
