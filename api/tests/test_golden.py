@@ -20,21 +20,7 @@ LLM = GOLDEN / "llm"
 UNDERWRITING_RULES = [r.rule_id for r in RULES]
 
 
-def _cases() -> list[tuple[str, dict, dict]]:
-    rows = []
-    for path in sorted(GOLDEN.glob("*.json")):
-        case = json.loads(path.read_text(encoding="utf-8"))
-        if "variants" in case:
-            for variant in case["variants"]:
-                merged = {**case.get("base_input", {}), **variant["input"]}
-                case_id = f"{case['case_id']}-{variant['variant_id']}"
-                rows.append((case_id, merged, variant["expected"]))
-        else:
-            rows.append((case["case_id"], case["input"], case["expected"]))
-    return rows
-
-
-CASES = _cases()
+CASES = score.golden_cases(GOLDEN)
 
 
 def _expected_blocks(case: dict) -> list[dict]:
@@ -145,3 +131,8 @@ def test_forbidden_lexicon_comes_from_guardrails():
 def test_memo_guard(path: Path):
     case = json.loads(path.read_text(encoding="utf-8"))
     assert score.score_memo(case) == case["expected"]
+
+
+def test_studio_eval_report_matches_golden():
+    committed = json.loads(score.REPORT.read_text(encoding="utf-8"))
+    assert committed == json.loads(json.dumps(score.build_report())), "chạy make eval-report"

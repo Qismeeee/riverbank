@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query
 
 import config
 from db.migrate import apply as migrate_database
-from routers.auth import BankUser, Principal, seller_of
+from routers.auth import BankUser, Principal, SellerUser, seller_of
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.models import (
@@ -138,6 +138,17 @@ def queue(
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.get("/me/cases", response_model=QueueResponse)
+def my_cases(
+    service: Service,
+    actor: SellerUser,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    cases = service.repository.list_by_seller(actor.subject, limit, offset)
+    return {"items": [summary(c) for c in cases], "limit": limit, "offset": offset}
 
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)

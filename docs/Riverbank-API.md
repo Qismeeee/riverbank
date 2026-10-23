@@ -136,6 +136,9 @@ POST /cases ──> NO_LOAN_NEEDED
 |---|---|---|---|---|
 | `GET` | `/health` | Không cần | Có | Vận hành |
 | `GET` | `/` | Không cần | Có | Vận hành |
+| `POST` | `/v1/auth/token` | Không cần | Có | Đăng nhập demo, mục 1.2 |
+| `GET` | `/v1/auth/me` | seller, underwriter | Có | Mục 1.2 |
+| `GET` | `/v1/me/cases` | seller | Có | FR-27 |
 | `POST` | `/v1/cases` | seller | Có | FR-01..FR-28 |
 | `GET` | `/v1/cases/{case_id}/seller-view` | seller | Có | FR-27, FR-28 |
 | `GET` | `/v1/queue` | underwriter | Có | FR-29 |
@@ -151,8 +154,8 @@ POST /cases ──> NO_LOAN_NEEDED
 | `POST` | `/v1/webhooks/los-status` | LOS ngân hàng | Chưa có | FR-36 |
 | `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter (demo) | Chưa có | FR-37 |
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
-| `GET` | `/v1/studio/policy` | underwriter | Chưa có | FR-18 |
-| `GET` | `/v1/studio/eval-metrics` | underwriter | Chưa có | NFR-01..NFR-06 |
+| `GET` | `/v1/studio/policy` | underwriter | Có | FR-18 |
+| `GET` | `/v1/studio/eval-metrics` | underwriter | Có | NFR-01..NFR-06 |
 
 ---
 
@@ -280,6 +283,10 @@ Số trong `text` lấy từ `claims`, và `claims` lấy nguyên từ payload b
 **Lỗi:** `403 SELLER_SCOPE_MISMATCH`, `404 CASE_NOT_FOUND`.
 
 ---
+
+### 4.4b `GET /v1/me/cases`, Hồ sơ của seller
+
+Vai trò `seller`. Trả hồ sơ của chính `subject`, mới nhất trước, mọi trạng thái. Tham số `limit` (1–100, mặc định 50), `offset` (≥ 0). Phản hồi cùng dạng với hàng đợi: `{ "items": [CaseSummary], "limit": 50, "offset": 0 }`.
 
 ### 4.5 `GET /v1/queue`, Hàng đợi
 
@@ -559,6 +566,9 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |
 | `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
 | `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã demo |
+| `TOO_MANY_ATTEMPTS` | 429 | `/v1/auth/token` | Sai mã quá `RIVERBANK_AUTH_MAX_FAILURES` lần (mặc định 5) trong `RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS` giây (mặc định 300) từ một IP |
+| `SELLER_REQUIRED` | 403 | `/v1/me/cases` | Không phải vai trò seller |
+| `EVAL_REPORT_MISSING` | 503 | `/v1/studio/eval-metrics` | Thiếu `api/studio/eval_report.json` |
 | `TOKEN_LOGIN_DISABLED` | 503 | `/v1/auth/token` | Không ở chế độ `token` |
 | `AUTH_NOT_CONFIGURED` | 503 | `/v1/auth/*`, `/v1/*` | Thiếu `DEMO_PASSCODE` hoặc `AUTH_SIGNING_KEY` ngắn hơn 32 byte |
 | `INVALID_WORKFLOW_IDENTITY` | 503 | `/v1/*` | `RIVERBANK_WORKFLOW_IDENTITY` sai |
@@ -683,10 +693,10 @@ Người ngân hàng duyệt hoặc giữ nguyên đề xuất D22.
 
 ### 6.7 `GET /v1/studio/policy` và `GET /v1/studio/eval-metrics`
 
-Chỉ đọc. Không có đầu sửa rule qua API.
+Đã có, chỉ đọc, vai trò `underwriter`. Không có đầu sửa rule qua API.
 
-- `policy`: nội dung `policy/policy.md`, `policy/parameters.yaml`, mã băm `rules.py` đang nạp, kết quả pytest, người xác nhận phiên bản (FR-18).
-- `eval-metrics`: kết quả chạy `eval/golden/` và chi phí theo case. Số Gap, số tiền, pass/fail lấy từ code, không lấy từ Jev.
+- `policy` đọc thẳng từ service đang chạy: `policy_version`, `policy_hash` (băm `PolicyConfig`, `rules.py`, `engine.py`), `engine_version`, `policy_config`, `cashflow_config`, `rules[]` (`rule_id`, `hard`, `order` theo thứ tự chạy), `risk_model` (nguồn, phiên bản, feature, metric từ `pd_meta.json`), `cic_gate` (`gate`, `model`, `threshold`). Chưa có người xác nhận phiên bản (FR-18).
+- `eval-metrics` trả `api/studio/eval_report.json`: `golden_digest`, `summary` (`total`, `passed`, `failed`), `cases[]` (`case_id`, `passed`, `mismatched_keys`, `expected_status`, `status`, `gap`, `amount_proposed`, `cic_called`, `pd_scored`). File sinh bằng `make eval-report` từ `eval/golden/` qua `UnderwritingService` thật. `test_golden.py` đỏ khi file lệch golden. Chưa có chi phí theo case vì luồng chưa gọi LLM tính tiền. Thiếu file thì `503 EVAL_REPORT_MISSING`.
 
 ---
 

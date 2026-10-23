@@ -96,6 +96,16 @@ def test_postgres_restart_replay_and_append_only(database):
                 conn.execute("delete from decisions where case_id=%s", (created.case_id,))
 
 
+def test_postgres_lists_cases_by_seller(database):
+    service = make_service(database)
+    first = service.create(Plan(**plan()), "create-1")
+    second = service.create(Plan(**plan(requested_amount=140_000_000)), "create-2")
+    service.create(Plan(**plan("demo-a")), "create-3")
+    mine = service.repository.list_by_seller("demo-b", 10, 0)
+    assert {c.case_id for c in mine} == {first.case_id, second.case_id}
+    assert service.repository.list_by_seller("demo-b", 1, 1) == mine[1:]
+
+
 def test_postgres_rejects_cross_case_evidence_fk(database):
     service = make_service(database)
     one = service.create(Plan(**plan()), "one")

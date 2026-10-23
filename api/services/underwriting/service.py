@@ -16,6 +16,9 @@ from .repository import CaseRepository
 from .risk import RiskInput, RiskModel
 from .sources import CicSource, FeatureSource, LosAdapter, validate_features
 
+ENGINE_VERSION = "cashflow-v2-base-int"
+POLICY_VERSION = "riverbank-demo-r01-r09-v2"
+
 _UNSAFE_NOTE = re.compile(
     r"(?:ignore|bỏ\s+qua).*(?:policy|instruction|chính\s+sách|quy\s+tắc)|"
     r"(?:force|ép|tự\s+động)\s*(?:approve|duyệt)|"
@@ -179,9 +182,9 @@ class UnderwritingService:
             "trigger": "COUNTER" if counter else "STATEMENT" if statement else "INITIAL",
             "input_snapshot": deepcopy(snapshot),
             "input_hash": digest(snapshot),
-            "engine_version": "cashflow-v2-base-int",
+            "engine_version": ENGINE_VERSION,
             "config": asdict(self.engine.cfg),
-            "policy_version": "riverbank-demo-r01-r09-v2",
+            "policy_version": POLICY_VERSION,
             "policy_hash": self.policy_hash,
             "cashflow": cf,
             "risk": None,

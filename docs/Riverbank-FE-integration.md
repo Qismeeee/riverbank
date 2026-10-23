@@ -53,6 +53,7 @@ async function call(token, method, path, body, extraHeaders = {}) {
 | Bước | Gọi |
 |---|---|
 | Gửi kế hoạch lô hàng | `POST /v1/cases` với `Idempotency-Key: crypto.randomUUID()` (giữ nguyên khóa khi bấm lại) |
+| Danh sách hồ sơ của mình | `GET /v1/me/cases` |
 | Xem giải thích và quyết định | `GET /v1/cases/{case_id}/seller-view` |
 
 Thân `POST /v1/cases`:
@@ -70,7 +71,7 @@ Thân `POST /v1/cases`:
 }
 ```
 
-Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Lưu `case_id` để mở lại `seller-view`.
+Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau bằng `GET /v1/me/cases`.
 
 ### 02 Lender Cockpit
 
@@ -89,7 +90,12 @@ Nút "Giữ để ký số" gọi `decisions` với `ACCEPT_PROPOSAL` hoặc `AC
 
 ### 03 Policy và Eval Studio
 
-Chưa có API (`docs/Riverbank-API.md` mục 6.7). Trang này dùng số tĩnh từ `policy/parameters.yaml` và kết quả `make test`.
+Đăng nhập vai trò `underwriter`.
+
+| Khối | Gọi |
+|---|---|
+| Bộ rule, ngưỡng, mã băm, model PD, Jev gate | `GET /v1/studio/policy` |
+| Kết quả golden eval | `GET /v1/studio/eval-metrics` |
 
 ## 4. Trạng thái và lý do
 
@@ -110,4 +116,5 @@ Mọi lỗi nghiệp vụ có dạng `{ "detail": { "code": "...", "details": []
 | `401 INVALID_TOKEN`, `401 TOKEN_EXPIRED`, `401 AUTHENTICATION_REQUIRED` | Đưa về màn đăng nhập |
 | `409 CASE_VERSION_CONFLICT` | Đọc lại hồ sơ |
 | `422 BLOCKED_INPUT` | Báo ghi chú chứa nội dung bị chặn, không tạo hồ sơ |
+| `429 TOO_MANY_ATTEMPTS` | Sai mã nhiều lần, chờ 5 phút |
 | `503 AUTH_NOT_CONFIGURED`, `503 OPENROUTER_KEY_REQUIRED` | Báo lỗi cấu hình server |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
@@ -8,6 +9,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from services.cashflow import CashFlowEngine, CashFlowInput
+from services.underwriting.evidence import digest
 from services.underwriting.models import Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import DemoRiskModel, RiskAssessment, RiskInput
@@ -21,6 +23,8 @@ from services.underwriting.sources import (
 ROOT = Path(__file__).resolve().parents[1]
 PARAMETERS = ROOT / "policy" / "parameters.yaml"
 GUARDRAILS = ROOT / "knowledge" / "guardrails.md"
+GOLDEN = ROOT / "eval" / "golden"
+REPORT = ROOT / "api" / "studio" / "eval_report.json"
 NOW = datetime(2026, 10, 22, tzinfo=UTC)
 SELLER = "golden-seller"
 
@@ -263,6 +267,67 @@ def score_case(inp: dict) -> dict:
     return out
 
 
+def golden_cases(directory: Path = GOLDEN) -> list[tuple[str, dict, dict]]:
+    rows = []
+    for path in sorted(directory.glob("*.json")):
+        case = json.loads(path.read_text(encoding="utf-8"))
+        if "variants" in case:
+            for variant in case["variants"]:
+                merged = {**case.get("base_input", {}), **variant["input"]}
+                rows.append(
+                    (f"{case['case_id']}-{variant['variant_id']}", merged, variant["expected"])
+                )
+        else:
+            rows.append((case["case_id"], case["input"], case["expected"]))
+    return rows
+
+
+def mismatches(got: dict, expected: dict) -> list[str]:
+    wrong = []
+    for key, want in expected.items():
+        if key == "balances":
+            by_week = {row["week"]: row for row in got["balances"]}
+            if any(by_week.get(row["week"]) != row for row in want):
+                wrong.append(key)
+        elif got.get(key) != want:
+            wrong.append(key)
+    return wrong
+
+
+def build_report(directory: Path = GOLDEN) -> dict:
+    cases = []
+    for case_id, inp, expected in golden_cases(directory):
+        got = score_case(inp)
+        wrong = mismatches(got, expected)
+        cases.append(
+            {
+                "case_id": case_id,
+                "passed": not wrong,
+                "mismatched_keys": wrong,
+                "expected_status": expected.get("status"),
+                "status": got["status"],
+                "gap": got["gap"],
+                "amount_proposed": got.get("amount_proposed"),
+                "cic_called": got["cic_called"],
+                "pd_scored": got["pd_scored"],
+            }
+        )
+    passed = sum(c["passed"] for c in cases)
+    return {
+        "golden_digest": digest(
+            {p.name: p.read_text(encoding="utf-8") for p in sorted(directory.glob("*.json"))}
+        ),
+        "summary": {"total": len(cases), "passed": passed, "failed": len(cases) - passed},
+        "cases": cases,
+    }
+
+
+def write_report(path: Path = REPORT) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(build_report(), ensure_ascii=False, indent=2, sort_keys=True)
+    path.write_text(text + "\n", encoding="utf-8")
+
+
 def forbidden_words() -> tuple[str, ...]:
     text = GUARDRAILS.read_text(encoding="utf-8")
     section = text.split("### Từ cấm", 1)[1].split("###", 1)[0]
@@ -329,3 +394,7 @@ def score_memo(case: dict) -> dict:
     if _contradicts(sentence, case.get("status_target", "")):
         reasons.append("contradicts_status")
     return {"passed": not reasons, "reasons": reasons}
+
+
+if __name__ == "__main__":
+    write_report()

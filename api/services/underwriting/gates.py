@@ -33,17 +33,24 @@ class GateDecision:
 
 class CicGate(ABC):
     name = "cic"
+    model = "open"
+    threshold = 0.0
 
     @abstractmethod
     def evaluate(self, inp: GateInput) -> GateDecision: ...
 
+    def describe(self) -> dict:
+        return {"gate": self.name, "model": self.model, "threshold": self.threshold}
+
 
 class OpenCicGate(CicGate):
     def evaluate(self, inp: GateInput) -> GateDecision:
-        return GateDecision(self.name, eligible=True, threshold=0.0, model="open")
+        return GateDecision(self.name, True, self.threshold, self.model)
 
 
 class JevCicGate(CicGate):
+    model = jev.MODEL
+
     def __init__(
         self,
         threshold: float = 0.6,
@@ -58,10 +65,10 @@ class JevCicGate(CicGate):
             probability = jev.noul_probability(answers, "eligible")
         except Exception as exc:
             return GateDecision(
-                self.name, False, self.threshold, jev.MODEL, error=type(exc).__name__
+                self.name, False, self.threshold, self.model, error=type(exc).__name__
             )
         return GateDecision(
-            self.name, probability >= self.threshold, self.threshold, jev.MODEL, probability
+            self.name, probability >= self.threshold, self.threshold, self.model, probability
         )
 
 
