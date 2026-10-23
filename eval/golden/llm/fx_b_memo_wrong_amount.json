@@ -1,0 +1,13 @@
+{
+  "case_id": "FX-B-memo-wrong-amount",
+  "sentence": "Hệ thống đề xuất 90.000.000 trong 8 tuần.",
+  "evidence_ids": ["E5"],
+  "status_target": "PENDING_REVIEW",
+  "evidence": {
+    "E5": {
+      "amount_proposed": 88000000,
+      "tenor_weeks": 8
+    }
+  },
+  "expected": {"passed": false, "reasons": ["number"]}
+}

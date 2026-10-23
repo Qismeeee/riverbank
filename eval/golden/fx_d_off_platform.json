@@ -1,0 +1,34 @@
+{
+  "case_id": "FX-D",
+  "title": "Dòng sàn khớp, phần vượt hạn mức chỉ dựa vào tiền ngoài sàn",
+  "source": "policy/worked-examples.md",
+  "input": {
+    "cash_on_hand": 120000000,
+    "supplier_schedule": [{"week": 0, "amount": 200000000}],
+    "sell_weeks": 6,
+    "payout_weekly_history": [70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000],
+    "requested_amount": 300000000,
+    "platform_support_limit": 120000000,
+    "shop_age_months": 6,
+    "return_rate_90d": 0.08,
+    "cic_group": 1,
+    "statement": {
+      "platform_lines_total": 280000000,
+      "platform_payout": 280000000,
+      "excess_depends_on_off_platform": true
+    }
+  },
+  "expected": {
+    "amount_proposed": 88000000,
+    "statement_required": true,
+    "status_before_statement": "AWAITING_STATEMENT",
+    "mismatch_num": 0,
+    "mismatch_den": 280000000,
+    "status": "ESCALATED",
+    "is_fast_track": false,
+    "failed_rules": ["R06"],
+    "reason_codes": ["R06_OFF_PLATFORM_NOT_EVIDENCE"],
+    "auto_rejected": false
+  },
+  "wording": "Dòng ngoài sàn không được cộng vào hạn mức. Số liệu cần xác minh."
+}

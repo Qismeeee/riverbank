@@ -16,8 +16,9 @@ Khi code mâu thuẫn với docs thì docs thắng. Khi docs mâu thuẫn nhau t
 
 ## Số vàng (test khóa, đổi là CI đỏ)
 
-Case B: gap 80 triệu, đề xuất 90 triệu, 8 tuần, 11,25 triệu/tuần, payout xấu 49 triệu.
-Case A: gap 0, cảnh báo khi payout tuần dưới 20 triệu. Xem `eval/golden/`.
+Nhãn `eval/golden/` theo `policy/worked-examples.md` và `policy/parameters.yaml`.
+FX-B: gap 80 triệu, đề xuất 88 triệu, 8 tuần, trích 11 triệu/tuần, payout xấu 49 triệu.
+FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 
 ## Cấu trúc
 

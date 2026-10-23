@@ -1,0 +1,8 @@
+{
+  "case_id": "FX-C-memo-forbidden",
+  "sentence": "Số liệu không khớp, có dấu hiệu gian lận, cần xác minh.",
+  "evidence_ids": [],
+  "status_target": "ESCALATED",
+  "evidence": {},
+  "expected": {"passed": false, "reasons": ["lexicon"]}
+}

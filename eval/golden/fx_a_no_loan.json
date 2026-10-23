@@ -1,0 +1,37 @@
+{
+  "case_id": "FX-A",
+  "title": "Cọc 50% rồi trả nốt tuần 4, gap 0, ngưỡng cảnh báo 20 triệu",
+  "source": "policy/worked-examples.md",
+  "input": {
+    "cash_on_hand": 120000000,
+    "supplier_schedule": [
+      {"week": 0, "amount": 100000000},
+      {"week": 4, "amount": 100000000}
+    ],
+    "sell_weeks": 6,
+    "payout_weekly_history": [70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000, 70000000]
+  },
+  "expected": {
+    "payout_base": 70000000,
+    "payout_stress": 49000000,
+    "gap": 0,
+    "negative_weeks": [],
+    "amount_proposed": 0,
+    "tenor_weeks": 0,
+    "weekly_deduction": 0,
+    "payout_warning_threshold": 20000000,
+    "warning_at_threshold_min_end": 0,
+    "warning_below_has_gap": true,
+    "status": "NO_LOAN_NEEDED",
+    "is_fast_track": false,
+    "cic_called": false,
+    "pd_scored": false,
+    "rules_evaluated": [],
+    "underwriting_started": false,
+    "balances": [
+      {"week": 0, "start": 120000000, "inflow": 0, "outflow": 100000000, "end": 20000000},
+      {"week": 4, "start": 230000000, "inflow": 70000000, "outflow": 100000000, "end": 200000000}
+    ]
+  },
+  "wording": "Dòng tiền không âm. Payout tuần xuống dưới 20.000.000 thì tuần 4 bắt đầu âm."
+}
