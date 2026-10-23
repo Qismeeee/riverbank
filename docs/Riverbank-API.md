@@ -27,19 +27,41 @@ Mục 4 là API đang chạy trong `api/`, viết theo code `main` commit `68588
 
 ### 1.2 Danh tính và vai trò
 
-Bản demo đọc danh tính từ header. Header này chỉ có hiệu lực khi `RIVERBANK_ENV=local` và `RIVERBANK_WORKFLOW_MODE=demo`. Ngoài điều kiện đó mọi đầu `/v1` trả `503 VERIFIED_IDENTITY_ADAPTER_REQUIRED` hoặc `503 WORKFLOW_DEMO_DISABLED`.
+Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DEMO_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
 
-| Header | Giá trị |
-|---|---|
-| `X-Actor-ID` | Định danh người gọi. Với seller phải bằng `seller_id` của hồ sơ |
-| `X-Actor-Role` | `seller` hoặc `underwriter` |
+| Chế độ | Dùng ở | Cách gửi |
+|---|---|---|
+| `token` | Prod, FE Vercel | `Authorization: Bearer <access_token>` lấy từ `POST /v1/auth/token`. Header `X-Actor-*` bị bỏ qua |
+| `header` (mặc định) | Chỉ local (`RIVERBANK_ENV=local`) | `X-Actor-ID`, `X-Actor-Role`. Ngoài local trả `503 VERIFIED_IDENTITY_ADAPTER_REQUIRED` |
+
+**`POST /v1/auth/token`**, đăng nhập demo bằng mã chung:
+
+```json
+{ "subject": "demo-b", "role": "seller", "passcode": "<DEMO_PASSCODE>" }
+```
+
+`subject` gồm chữ, số, `.`, `_`, `-`, tối đa 64 ký tự. Với seller, `subject` là `seller_id`. Phản hồi `200`:
+
+```json
+{
+  "subject": "demo-b",
+  "role": "seller",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_at": "2026-10-24T00:00:00+00:00"
+}
+```
+
+Token là JWT HS256, ký bằng `AUTH_SIGNING_KEY` (tối thiểu 32 byte), sống `RIVERBANK_AUTH_TOKEN_TTL_SECONDS` giây (mặc định 8 giờ). Prod đọc `AUTH_SIGNING_KEY` và `DEMO_PASSCODE` từ secret `riverbank/auth`.
+
+**`GET /v1/auth/me`** trả `{ "subject": "...", "role": "..." }` của token đang dùng.
 
 | Vai trò | Được gọi |
 |---|---|
 | `seller` | Tạo hồ sơ của chính mình, đọc `seller-view` của chính mình |
 | `underwriter` | Hàng đợi, chi tiết hồ sơ, bằng chứng, nhập sao kê, quyết định, bàn giao |
 
-Bản thật thay header bằng adapter danh tính của ngân hàng. Không có vai trò hệ thống nào được gọi đầu quyết định (SRS FR-31).
+Mã chung chỉ hợp với demo. Bản thật thay `TokenIdentity` bằng adapter danh tính của ngân hàng, kế thừa `IdentityProvider` trong `api/routers/auth.py`. Không có vai trò hệ thống nào được gọi đầu quyết định (SRS FR-31).
 
 ### 1.3 Chống ghi trùng và ghi đè
 
@@ -491,8 +513,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 
 | Mã | HTTP | Đầu API | Nghĩa |
 |---|---|---|---|
-| `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu `X-Actor-ID` |
-| `ROLE_NOT_ALLOWED` | 403 | `/v1/*` | `X-Actor-Role` không phải `seller` hay `underwriter` |
+| `ROLE_NOT_ALLOWED` | 403 | `/v1/*` | Vai trò không phải `seller` hay `underwriter` |
 | `UNDERWRITER_REQUIRED` | 403 | Đầu của ngân hàng | Seller gọi đầu của ngân hàng |
 | `SELLER_SCOPE_MISMATCH` | 403 | Tạo hồ sơ, seller-view | Seller đụng hồ sơ hoặc `seller_id` không phải của mình |
 | `SELLER_SHOP_SCOPE_NOT_FOUND` | 403 | Tạo hồ sơ | Shop không thuộc seller |
@@ -535,6 +556,12 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
 | `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
+| `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |
+| `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
+| `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã demo |
+| `TOKEN_LOGIN_DISABLED` | 503 | `/v1/auth/token` | Không ở chế độ `token` |
+| `AUTH_NOT_CONFIGURED` | 503 | `/v1/auth/*`, `/v1/*` | Thiếu `DEMO_PASSCODE` hoặc `AUTH_SIGNING_KEY` ngắn hơn 32 byte |
+| `INVALID_WORKFLOW_IDENTITY` | 503 | `/v1/*` | `RIVERBANK_WORKFLOW_IDENTITY` sai |
 | `OPENROUTER_KEY_REQUIRED` | 503 | `/v1/*` | Bật Jev gate CIC nhưng thiếu `OPENROUTER_API_KEY` |
 
 ---

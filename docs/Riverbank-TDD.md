@@ -641,7 +641,7 @@ Hợp đồng đầy đủ, mã lỗi và phần API trong kế hoạch ở `Riv
 | `POST` | `/v1/cases/{case_id}/handoff` | underwriter |
 | `GET` | `/health`, `/` | không cần |
 
-Danh tính đọc từ header `X-Actor-ID`, `X-Actor-Role`, chỉ khi `RIVERBANK_ENV=local` và `RIVERBANK_WORKFLOW_MODE=demo`. `POST /v1/cases` và `POST /decisions` cần `Idempotency-Key`. Lệnh ghi cần `expected_version`.
+Danh tính chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`: `token` (JWT HS256 từ `POST /v1/auth/token`, dùng trên prod cho FE Vercel) hoặc `header` (`X-Actor-ID`, `X-Actor-Role`, chỉ local). Cả hai cần `RIVERBANK_WORKFLOW_MODE=demo`. Xem `docs/Riverbank-FE-integration.md`. `POST /v1/cases` và `POST /decisions` cần `Idempotency-Key`. Lệnh ghi cần `expected_version`.
 
 ```json
 {
