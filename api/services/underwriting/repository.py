@@ -29,6 +29,9 @@ class CaseRepository(ABC):
     def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]: ...
 
     @abstractmethod
+    def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]: ...
+
+    @abstractmethod
     def transaction(self, case_id: str, version: int): ...
 
 
@@ -71,6 +74,15 @@ class MemoryCaseRepository(CaseRepository):
                     offset : offset + limit
                 ]
             )
+
+    def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
+        with self._lock:
+            cases = sorted(
+                (c for c in self._cases.values() if c.seller_id == seller_id),
+                key=lambda c: (c.created_at, c.case_id),
+                reverse=True,
+            )
+            return deepcopy(cases[offset : offset + limit])
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:
@@ -212,6 +224,15 @@ class PostgresCaseRepository(CaseRepository):
                     limit,
                     offset,
                 ),
+            ).fetchall()
+            return [self._load(conn, row[0]) for row in rows]
+
+    def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "select case_id from cases where seller_id=%s "
+                "order by created_at desc,case_id desc limit %s offset %s",
+                (seller_id, limit, offset),
             ).fetchall()
             return [self._load(conn, row[0]) for row in rows]
 

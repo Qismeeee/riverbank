@@ -9,7 +9,7 @@ description: Thêm golden case, chạy eval offline, đo metric cho engine và m
 
 `eval/golden/fx_*.json` với `input` và `expected`. `api/tests/test_golden.py` chấm bằng `eval/score.py`, không cần mạng.
 Số lấy từ `policy/worked-examples.md`. Ngưỡng lấy từ `policy/parameters.yaml`. Hai file này thắng slide và TDD khi lệch số.
-Thêm case: chép một file FX, đổi `case_id`, điền `expected` đã tính từ file tham số. Chạy `make test`.
+Thêm case: chép một file FX, đổi `case_id`, điền `expected` đã tính từ file tham số. Chạy `make eval-report` để sinh lại `api/studio/eval_report.json` (Studio đọc file này), rồi `make test`.
 Bộ khóa: FX-A, FX-B, FX-C, FX-D, FX-E, FX-F, FX-L.
 
 ## Tầng 2: chữ trên tờ trình

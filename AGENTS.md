@@ -48,6 +48,7 @@ make db-up      Postgres local trong docker
 make dev        uvicorn reload tại :8000
 make test       ruff check + ruff format --check (api, eval, data/synth) + pytest
 make fmt        ruff format
+make eval-report  sinh lại api/studio/eval_report.json từ eval/golden (Studio API đọc)
 ```
 
 Chỉ dùng `make test` để xác nhận trước khi mở PR. CI chạy đúng lệnh đó.

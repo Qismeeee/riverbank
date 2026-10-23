@@ -24,6 +24,7 @@ def token_mode(monkeypatch, service):
     monkeypatch.setattr(auth.config, "WORKFLOW_IDENTITY", "token")
     monkeypatch.setattr(auth.config, "AUTH_SIGNING_KEY", KEY)
     monkeypatch.setattr(auth.config, "DEMO_PASSCODE", PASSCODE)
+    monkeypatch.setattr(auth, "throttle", auth.LoginThrottle(3, 60))
     app.dependency_overrides[routes.get_service] = lambda: service
     with TestClient(app) as client:
         yield client
@@ -124,3 +125,21 @@ def test_header_identity_is_local_only(monkeypatch):
     with pytest.raises(WorkflowError) as error:
         auth.get_actor(None, "uw-1", "underwriter")
     assert error.value.code == "INVALID_WORKFLOW_IDENTITY"
+
+
+def test_repeated_wrong_passcodes_are_throttled(token_mode):
+    for _ in range(3):
+        assert code(login(token_mode, "uw-1", "underwriter", "nope"))[0] == 401
+    assert code(login(token_mode, "uw-1", "underwriter")) == (429, "TOO_MANY_ATTEMPTS")
+
+
+def test_throttle_window_and_reset():
+    throttle, now = auth.LoginThrottle(2, 60), utc_now()
+    throttle.fail("ip", now)
+    throttle.fail("ip", now)
+    with pytest.raises(WorkflowError):
+        throttle.check("ip", now)
+    throttle.check("ip", now + timedelta(seconds=61))
+    throttle.fail("ip", now)
+    throttle.reset("ip")
+    throttle.check("ip", now)

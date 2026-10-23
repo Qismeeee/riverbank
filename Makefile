@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook
+.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -50,3 +50,6 @@ train-pd:
 
 notebook:
 	cd api && .venv/bin/jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 ../eval/train_pd.ipynb
+
+eval-report:
+	cd api && PYTHONPATH=. .venv/bin/python ../eval/score.py

@@ -48,11 +48,19 @@ class RiskModel(ABC):
     def predict(self, inp: RiskInput) -> dict:
         return self.assess(inp).payload()
 
+    @abstractmethod
+    def describe(self) -> dict: ...
+
 
 class DemoRiskModel(RiskModel):
+    model_version = "demo-fixed-v1"
+
+    def describe(self) -> dict:
+        return {"source": "demo", "model_version": self.model_version}
+
     def assess(self, inp: RiskInput) -> RiskAssessment:
         return RiskAssessment(
-            model_version="demo-fixed-v1",
+            model_version=self.model_version,
             source="demo",
             pd_bps=500,
             factors=[RiskFactor("demo_baseline", "increase", 1.0)],
@@ -67,6 +75,16 @@ class LightGbmRiskModel(RiskModel):
     @cached_property
     def scorer(self) -> PdScorer:
         return self._scorer or PdScorer.load()
+
+    def describe(self) -> dict:
+        meta = self.scorer.meta
+        return {
+            "source": "lightgbm",
+            "model_version": meta.get("model_version", "unknown"),
+            "trained_on": meta.get("trained_on"),
+            "features": meta.get("features", []),
+            "metrics": meta.get("metrics", {}),
+        }
 
     def assess(self, inp: RiskInput) -> RiskAssessment:
         version = self.scorer.meta.get("model_version", "unknown")

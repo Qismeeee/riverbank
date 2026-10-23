@@ -1,0 +1,186 @@
+{
+  "cases": [
+    {
+      "amount_proposed": 0,
+      "case_id": "FX-A",
+      "cic_called": false,
+      "expected_status": "NO_LOAN_NEEDED",
+      "gap": 0,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": false,
+      "status": "NO_LOAN_NEEDED"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-B",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-C-awaiting",
+      "cic_called": true,
+      "expected_status": "AWAITING_STATEMENT",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "AWAITING_STATEMENT"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-C-mismatch",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-C-matched",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-C-boundary",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-cic_group_3",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-cic_group_2",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-shop_age",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-return_rate_soft",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-outstanding_soft",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 165000000,
+      "case_id": "FX-E-e_lending_cap",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 150000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
+      "amount_proposed": 0,
+      "case_id": "FX-F-injection",
+      "cic_called": false,
+      "expected_status": "BLOCKED_INPUT",
+      "gap": null,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": false,
+      "status": "BLOCKED_INPUT"
+    },
+    {
+      "amount_proposed": 0,
+      "case_id": "FX-F-sensitive",
+      "cic_called": false,
+      "expected_status": "BLOCKED_INPUT",
+      "gap": null,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": false,
+      "status": "BLOCKED_INPUT"
+    },
+    {
+      "amount_proposed": 0,
+      "case_id": "FX-F-phone",
+      "cic_called": false,
+      "expected_status": "BLOCKED_INPUT",
+      "gap": null,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": false,
+      "status": "BLOCKED_INPUT"
+    },
+    {
+      "amount_proposed": 0,
+      "case_id": "FX-F-amount_cap",
+      "cic_called": false,
+      "expected_status": "INVALID_INPUT",
+      "gap": null,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": false,
+      "status": "INVALID_INPUT"
+    }
+  ],
+  "golden_digest": "7f6f3afe6a594a4c252b7e9b444ad01e86eb0ebccac77ae29742cca9a6b10a9a",
+  "summary": {
+    "failed": 0,
+    "passed": 16,
+    "total": 16
+  }
+}

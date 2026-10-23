@@ -3,11 +3,13 @@ import hashlib
 import hmac
 import json
 from abc import ABC, abstractmethod
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from threading import Lock
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
@@ -134,12 +136,19 @@ def underwriter(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
     return actor
 
 
+def seller(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
+    if actor.role != "seller":
+        raise WorkflowError("SELLER_REQUIRED", 403)
+    return actor
+
+
 def seller_of(actor: Actor, seller_id: str) -> None:
     if actor.role != "seller" or actor.subject != seller_id:
         raise WorkflowError("SELLER_SCOPE_MISMATCH", 403)
 
 
 BankUser = Annotated[Actor, Depends(underwriter)]
+SellerUser = Annotated[Actor, Depends(seller)]
 Principal = Annotated[Actor, Depends(get_actor)]
 
 
@@ -161,17 +170,58 @@ class TokenResponse(ActorResponse):
     expires_at: datetime
 
 
+class LoginThrottle:
+    def __init__(self, max_failures: int, window_seconds: int):
+        self.max_failures, self.window = max_failures, timedelta(seconds=window_seconds)
+        self._failures: dict[str, deque[datetime]] = defaultdict(deque)
+        self._lock = Lock()
+
+    def _recent(self, key: str, now: datetime) -> deque[datetime]:
+        failures = self._failures[key]
+        while failures and failures[0] <= now - self.window:
+            failures.popleft()
+        if not failures:
+            del self._failures[key]
+            return deque()
+        return failures
+
+    def check(self, key: str, now: datetime) -> None:
+        with self._lock:
+            if len(self._recent(key, now)) >= self.max_failures:
+                raise WorkflowError("TOO_MANY_ATTEMPTS", 429)
+
+    def fail(self, key: str, now: datetime) -> None:
+        with self._lock:
+            self._failures[key].append(now)
+
+    def reset(self, key: str) -> None:
+        with self._lock:
+            self._failures.pop(key, None)
+
+
+throttle = LoginThrottle(config.AUTH_MAX_FAILURES, config.AUTH_FAILURE_WINDOW_SECONDS)
+
+
+def client_key(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return forwarded or (request.client.host if request.client else "unknown")
+
+
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 
 @router.post("/token", response_model=TokenResponse)
-def issue_token(request: TokenRequest) -> dict:
+def issue_token(request: TokenRequest, http: Request) -> dict:
     if config.WORKFLOW_MODE != "demo" or config.WORKFLOW_IDENTITY != "token":
         raise WorkflowError("TOKEN_LOGIN_DISABLED", 503)
     if not config.DEMO_PASSCODE:
         raise WorkflowError("AUTH_NOT_CONFIGURED", 503)
+    key, now = client_key(http), utc_now()
+    throttle.check(key, now)
     if not hmac.compare_digest(request.passcode.encode(), config.DEMO_PASSCODE.encode()):
+        throttle.fail(key, now)
         raise WorkflowError("INVALID_CREDENTIALS", 401)
+    throttle.reset(key)
     actor = Actor(request.subject, request.role)
     token, expires = signer().issue(actor, utc_now())
     return {
