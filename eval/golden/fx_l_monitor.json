@@ -1,0 +1,24 @@
+{
+  "case_id": "FX-L",
+  "title": "Sau giải ngân, trích 12 triệu vượt trần payout tuần 42 triệu",
+  "source": "policy/worked-examples.md",
+  "input": {
+    "mode": "monitor",
+    "active_weekly_deduction": 12000000,
+    "current_week_payout": 42000000,
+    "active_version_status": "ACTIVE"
+  },
+  "expected": {
+    "deduction_cap": 10500000,
+    "r08_passed": false,
+    "failed_rules": ["R08"],
+    "reason_codes": ["R08_DEDUCTION_CAP"],
+    "status": "RESTRUCTURE_PROPOSED",
+    "active_version_status": "ACTIVE",
+    "auto_applied": false,
+    "auto_rejected": false,
+    "d22": true,
+    "cic_called": false,
+    "rules_evaluated": ["R08"]
+  }
+}

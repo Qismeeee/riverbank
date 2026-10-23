@@ -36,4 +36,4 @@ Case A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 ```
 make test
 ```
-`test_case_b_numbers_match_docs` và `test_golden_case[case_b_loan_90m]` phải xanh. Nếu đỏ mà bạn không chủ ý đổi công thức thì bạn đã làm sai.
+`test_case_b_numbers_match_docs` phải xanh. Nhãn business của `eval/golden/` nằm ở `policy/worked-examples.md` (88 triệu, trích 11 triệu), không lấy từ phép làm tròn 5 triệu của engine này.

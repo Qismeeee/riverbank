@@ -68,3 +68,19 @@ def test_custom_rule_set_is_pluggable():
     always_fail = Rule("R99", True, lambda p, c: RuleResult("R99", True, False, "test"))
     out = PolicyEngine([always_fail]).evaluate(_case_b(evidence_ids={"R99": "E9"}))
     assert out.hard_fail and out.results[0].evidence_id == "E9"
+
+
+def test_r05_uses_requested_amount_when_provided():
+    from policy.engine import PolicyConfig, PolicyInput
+    from policy.rules import r05_docs_when_over_platform
+
+    inp = PolicyInput(
+        amount=90_000_000,
+        tenor_weeks=8,
+        weekly_deduction=11_250_000,
+        payout_stress=49_000_000,
+        platform_supported_amount=40_000_000,
+        requested_amount=150_000_000,
+    )
+    result = r05_docs_when_over_platform(inp, PolicyConfig())
+    assert not result.passed and result.missing_data

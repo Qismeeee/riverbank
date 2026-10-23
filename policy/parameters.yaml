@@ -1,0 +1,63 @@
+# Tham số bản demo của ezXRiverbank.
+# Ngân hàng sửa file này. Không chép các ngưỡng sang prompt, UI, hay lời văn tờ trình.
+# Khi số ở đây lệch với câu kể trong slide, file này thắng.
+schema_version: 1
+currency: VND
+
+cashflow:
+  # BL-01. Payout kịch bản xấu.
+  stress_factor: 0.7
+  # BL-02. Số đề xuất = min(gap * buffer_factor, gap * buffer_cap), rồi làm tròn.
+  buffer_factor: 1.1
+  buffer_cap: 1.15
+  # Làm tròn đến triệu gần nhất. Gap 80.000.000 → 88.000.000, không phải 90.000.000.
+  amount_rounding_vnd: 1000000
+  # BL-03.
+  tenor_buffer_weeks: 2
+  # BL-04. Mỗi vòng không đủ trần thì cộng thêm bấy nhiêu tuần.
+  tenor_extend_step_weeks: 2
+  max_tenor_weeks: 24
+  # BL-04, R08. Trần trích trên payout tham chiếu.
+  deduction_cap_ratio: 0.25
+  # TDD FLOW-03: tuần 0 chưa có payout của lô.
+  week0_inflow: 0
+  payout_window_weeks: 12
+  payout_statistic: median
+  # int(payout * stress_factor) — cắt phần lẻ, không làm tròn lên.
+  stress_rounding: trunc_toward_zero
+  # math.ceil(proposed_amount / tenor_weeks), đơn vị VND.
+  weekly_deduction_rounding: ceil_vnd
+
+routing:
+  # BL-05, R05. Case C: 300.000.000 >= 2.5 * 120.000.000.
+  statement_request_multiple: 2.5
+  statement_compare: greater_or_equal
+  # BL-06, R06. Vượt ngưỡng này thì ESCALATED. So trên tổng kỳ, không trung bình tỷ lệ từng tháng.
+  statement_mismatch_ratio: 0.15
+  statement_mismatch_compare: greater_than
+
+appetite:
+  # R02. Fail khi shop_age_months < min.
+  min_shop_age_months: 6
+  # R03. Fail khi return_rate_90d > max.
+  max_return_rate_90d: 0.08
+  # R07. Fail khi cic_group >= 2. Chỉ chạy sau khi Gap > 0 và đã có D04.
+  max_cic_group_pass: 1
+
+input_hard_cap:
+  # Trần cổng nhập (FR-04), không phải rule tín dụng. Vượt trần → BLOCKED_INPUT, không gọi model.
+  # Mức demo đặt trên Case C (300 triệu) để Case C vẫn vào được nhánh sao kê.
+  max_amount_requested_vnd: 1000000000
+  max_lot_value_vnd: 5000000000
+  max_cash_on_hand_vnd: 5000000000
+  max_sell_weeks: 52
+  max_supplier_weeks: 52
+  max_note_chars: 2000
+
+memo:
+  # BL-07. Sai lần 1 và 2 thì sinh lại. Lần thứ 3 → ESCALATED + UNVERIFIED_DRAFT.
+  max_regen_attempts: 2
+
+guardrail:
+  # Xác suất Jev từ mức này trở lên thì BLOCKED_INPUT hoặc loại văn bản.
+  block_probability: 0.5

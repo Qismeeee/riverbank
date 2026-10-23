@@ -1,0 +1,160 @@
+Project riverbank_underwriting_v1 {
+  database_type: 'PostgreSQL'
+  Note: 'Implemented local/demo baseline. Executable schema: migrations/001_underwriting.sql. Money is integer VND/BIGINT; snapshot fields inside JSONB have versioned application contracts. ETL tables remain unchanged in schema.sql.'
+}
+
+Table sellers {
+  seller_id text [pk]
+  created_at timestamptz [not null]
+}
+
+Table seller_shops {
+  seller_id text [not null, ref: > sellers.seller_id]
+  shop_id text [not null]
+  platform text [not null, default: 'shopee']
+  external_shop_id bigint [note: 'Logical link to shop_snapshot; ETL reload cannot mutate evidence.']
+  indexes {
+    (seller_id, shop_id) [pk]
+    (platform, shop_id) [unique]
+  }
+}
+
+Table seller_consents {
+  consent_id uuid [pk]
+  seller_id text [not null]
+  shop_id text [not null]
+  recorded_at timestamptz [not null]
+  payload jsonb [not null, note: 'purpose, granted_at, expires_at, revoked_at, reference, source. Append new revocation record; no UPDATE.']
+  indexes {
+    (seller_id, shop_id, recorded_at)
+  }
+}
+
+Table seller_feature_snapshots {
+  snapshot_id uuid [pk]
+  seller_id text [not null]
+  shop_id text [not null]
+  captured_at timestamptz [not null]
+  payload jsonb [not null, note: 'source, payout_origin, weekly_payouts[{week_start,amount}], support amount, shop age/return rate, raw_refs, etl_run_id, optional simulation/version/source_snapshot.']
+  payload_hash text [not null]
+  indexes {
+    (seller_id, shop_id, captured_at)
+  }
+  Note: 'Append-only. v_seller_payout_weekly projects per-snapshot rows with origin labels.'
+}
+
+Table cases {
+  case_id uuid [pk]
+  seller_id text [not null]
+  shop_id text [not null]
+  status text [not null]
+  version bigint [not null]
+  created_at timestamptz [not null]
+  request_key text [not null]
+  request_hash text [not null]
+  header jsonb [not null, note: 'Immutable plan + consent snapshot; mirrored header fields for repository hydration.']
+  requested_amount bigint [not null, note: 'Generated from header.plan.requested_amount.']
+  indexes {
+    (seller_id, request_key) [unique]
+    (status, created_at, case_id)
+    (seller_id, created_at)
+  }
+  Note: 'Source adapter authorizes seller/shop. No registry FK: external verified registries and local fixtures may not be materialized locally. One shop per case; optimistic version + row lock for writes.'
+}
+
+Table assessment_runs {
+  id uuid [pk]
+  case_id uuid [not null, ref: > cases.case_id]
+  ordinal integer [not null]
+  payload jsonb [not null, note: 'run_id/run_no/trigger; input_snapshot/hash; engine/config/policy versions/hash; cashflow/risk/CIC/policy/statement.']
+  gap bigint [not null, note: 'Generated from payload.cashflow.gap.']
+  amount_proposed bigint [not null, note: 'Generated from payload.cashflow.amount_proposed.']
+  indexes {
+    (case_id, ordinal) [unique]
+    (id, case_id) [unique]
+  }
+  Note: 'Append-only. Statement/counter creates a new complete assessment snapshot.'
+}
+
+Table evidence {
+  id uuid [pk]
+  case_id uuid [not null, ref: > cases.case_id]
+  ordinal integer [not null]
+  payload jsonb [not null, note: 'Envelope with evidence_id, case_id, run_id, code, schema_version, payload, payload_hash, created_at.']
+  run_id uuid [not null, note: 'Generated from payload.']
+  code text [not null, note: 'Generated; E4/E5/E6/E6a/E7/E8. UUID is citation key.']
+  indexes {
+    (case_id, ordinal) [unique]
+    (run_id, code) [unique]
+  }
+  Note: 'Append-only trigger; verify hash on read; composite FK prevents cross-case runs.'
+}
+
+Table generated_documents {
+  id uuid [pk]
+  case_id uuid [not null, ref: > cases.case_id]
+  ordinal integer [not null]
+  payload jsonb [not null, note: 'Both audience outputs; field/value citations; validation errors; unfinished; generator/template versions.']
+  run_id uuid [not null, note: 'Generated.']
+  attempt integer [not null, note: 'Generated; CHECK 1..3.']
+  indexes {
+    (case_id, ordinal) [unique]
+    (run_id, attempt) [unique]
+    (id, run_id, case_id) [unique]
+  }
+  Note: 'Append-only, including failed drafts. Seller projection hides unvalidated drafts.'
+}
+
+Table decisions {
+  case_id uuid [pk, ref: - cases.case_id]
+  payload jsonb [not null, note: 'Actor/reason; final schedule/policy; policy_hash; decided_at/expires_at; idempotency key/request hash.']
+  run_id uuid [not null, note: 'Generated.']
+  document_id uuid [not null, note: 'Generated.']
+  decision_type text [not null, note: 'Generated: ACCEPT_PROPOSAL, ACCEPT_COUNTER, REJECT.']
+  final_amount bigint [note: 'Generated; >0 when accepted, NULL when rejected.']
+  final_tenor_weeks integer [note: 'Generated; 2..26 when accepted, NULL when rejected.']
+  Note: 'Immutable final decision; counter must rerun engine + all policies. No hard-fail override.'
+}
+
+Table handoffs {
+  case_id uuid [pk, ref: - decisions.case_id]
+  payload jsonb [not null, note: 'Frozen package/hash/key; attempts; lease_until; last_error; los_reference.']
+  idempotency_key uuid [unique, note: 'Generated.']
+  status text [not null, note: 'Generated: PENDING, SENDING, SUCCEEDED, FAILED.']
+  Note: 'Trigger freezes package/hash/key; delivery state can change. Case decision remains ACCEPTED/REJECTED. No disbursement.'
+}
+
+Table case_events {
+  id uuid [pk]
+  case_id uuid [not null, ref: > cases.case_id]
+  ordinal integer [not null]
+  payload jsonb [not null, note: 'actor, event_type, previous/next status, reason, occurred_at, evidence_ids.']
+  indexes {
+    (case_id, ordinal) [unique]
+  }
+  Note: 'Append-only trigger; event and business change commit atomically.'
+}
+
+Ref: seller_consents.(seller_id, shop_id) > seller_shops.(seller_id, shop_id)
+Ref: seller_feature_snapshots.(seller_id, shop_id) > seller_shops.(seller_id, shop_id)
+Ref: evidence.(run_id, case_id) > assessment_runs.(id, case_id)
+Ref: generated_documents.(run_id, case_id) > assessment_runs.(id, case_id)
+Ref: decisions.(document_id, run_id, case_id) > generated_documents.(id, run_id, case_id)
+
+TableGroup source_registry {
+  sellers
+  seller_shops
+  seller_consents
+  seller_feature_snapshots
+}
+TableGroup underwriting {
+  cases
+  assessment_runs
+  evidence
+  generated_documents
+}
+TableGroup human_decision_and_delivery {
+  decisions
+  handoffs
+  case_events
+}

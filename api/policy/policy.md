@@ -22,3 +22,9 @@ Ngưỡng ghi (*) là giá trị minh họa cho hackathon, team chốt lại v�
 
 Thứ tự chạy: R09, R01, R04, R08 (số tiền và lịch) rồi R02, R03, R05 (hồ sơ) rồi R06, R07 (CIC).
 Duyệt số khác (FR-32) chạy lại toàn bộ bảng này trên bộ số mới.
+
+R05 dùng `requested_amount` khi caller cung cấp; caller cũ chưa có trường này
+tiếp tục dùng `amount`. Luồng hồ sơ truyền số seller xin; counter-offer truyền
+`max(requested_amount, final_amount)`. R01/R04/R08/R09 vẫn kiểm tra điều kiện đề
+xuất/cuối cùng. Thiếu chứng từ riêng R05 thì chờ sao kê, không cho duyệt; nếu có
+hard fail khác thì Escalated. Sao kê được bổ sung sẽ tạo run mới và chạy lại rule.

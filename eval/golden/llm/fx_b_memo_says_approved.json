@@ -1,0 +1,8 @@
+{
+  "case_id": "FX-B-memo-says-approved",
+  "sentence": "Hồ sơ đã được duyệt.",
+  "evidence_ids": [],
+  "status_target": "PENDING_REVIEW",
+  "evidence": {},
+  "expected": {"passed": false, "reasons": ["contradicts_status"]}
+}
