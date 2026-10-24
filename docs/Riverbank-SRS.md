@@ -339,7 +339,7 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-08 đến FR-15 | Đạt | Case B: gap 80.000.000, đề xuất 90.000.000, 8 tuần, 11.250.000. Case A: gap 0, cảnh báo 20.000.000 |
 | FR-16 | Đạt | LightGBM `pd-lgbm-v2`, tối đa 5 yếu tố SHAP. Thiếu hồ sơ shop thì `ESCALATED`, `RISK_DATA_MISSING` |
 | FR-16b | Đạt với nguồn mock | Jev gate ngưỡng 0,6 trước CIC. `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0. Gate từ chối hoặc lỗi thì R06 thiếu dữ liệu, chuyển người |
-| FR-17 | Đạt | Chín rule R01 đến R09, mỗi rule có `evidence_id` |
+| FR-17 | Đạt | Mười rule R01 đến R10, mỗi rule có `evidence_id` |
 | FR-18 | Đạt một phần | Không có bước nạp bộ rule đã ký. Có `policy_hash`, đổi rule sau thẩm định thì chặn `ACCEPT_PROPOSAL` |
 | FR-19, FR-19b | Đạt | Rule cứng fail thì `ESCALATED`. R09 trần 100.000.000 |
 | FR-20 | Đạt | Văn bản là template điền từ bằng chứng, không ghi ngược vào kết quả rule |
@@ -350,7 +350,7 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-26 | Đạt hình thức | Thử 3 lần nhưng template sinh lại giống nhau, nên lần 2 và 3 không đổi kết quả |
 | FR-27, FR-28 | Đạt | Bản seller không có lãi, phí, PD, CIC. Không vay thì nêu ngưỡng cảnh báo |
 | FR-29, FR-30 | Đạt | `GET /v1/queue`, `GET /v1/cases/{id}`, `GET /v1/cases/{id}/evidence/{evidence_id}` |
-| FR-31, FR-32 | Đạt | `ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT`. Counter giãn kỳ hạn và chạy lại chín rule |
+| FR-31, FR-32 | Đạt | `ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT`. Counter giãn kỳ hạn, chấm lại PD và chạy lại mười rule |
 | FR-31b | Đạt một phần | `expires_at` 14 ngày, chặn ở bàn giao. Chưa có job quét đưa hồ sơ về thẩm định lại |
 | FR-33, FR-34 | Đạt | Thiếu `verification_note` hoặc gap 0 thì `409` |
 | FR-35, FR-36 | Đạt | Gói bàn giao tạo khi quyết định, người bấm `POST /handoff`, `MockLosAdapter`. Lỗi LOS không mất quyết định |

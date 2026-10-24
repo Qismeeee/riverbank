@@ -47,7 +47,7 @@ Code chạy theo thứ tự R09, R01, R04, R08, R02, R03, R05, R06, R07. Nhãn `
 
 ## 4. Kết quả chạy API thật
 
-`demo_source` có ba shop: `demo-a` payout 40.000.000 mức sàn 90.000.000, `demo-b` payout 70.000.000 mức sàn 90.000.000, `demo-c` payout 70.000.000 mức sàn 30.000.000. Cả ba tuổi 12 tháng, hoàn 5%, CIC nhóm 1, dư nợ 0.
+`demo_source` có bốn shop: `demo-a` payout 40.000.000 mức sàn 90.000.000, `demo-b` payout 70.000.000 mức sàn 90.000.000, `demo-c` payout 70.000.000 mức sàn 30.000.000. Ba shop này tuổi 12 tháng, hoàn 5%. `demo-d` cùng payout và mức sàn với `demo-b` nhưng hồ sơ `fashion_young`: tuổi 7 tháng, hoàn 13%, 12 sản phẩm, top 3 chiếm 80%, rating 4,2. Với model thật PD của `demo-d` vượt `max_pd_bps` nên R10 fail. Cả bốn CIC nhóm 1, dư nợ 0.
 
 | Kịch bản | Trạng thái | Gap | Đề xuất | Kỳ hạn | Trích | Rule fail |
 |---|---|---:|---:|---:|---:|---|

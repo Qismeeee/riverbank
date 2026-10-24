@@ -4,9 +4,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from policy import PolicyConfig
 from routers import underwriting as routes
 from services.risk import MODEL_DIR
-from services.underwriting.models import WorkflowError
+from services.underwriting.models import DecisionInput, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import LightGbmRiskModel, RiskInput
 from services.underwriting.service import UnderwritingService
@@ -119,6 +120,44 @@ def test_hard_failure_outranks_missing_risk():
     assert (case.status, case.reason) == ("ESCALATED", "HARD_POLICY_FAILURE")
 
 
+class AmountScorer(FakeScorer):
+    def __init__(self, limit, high_bps, low_bps):
+        super().__init__()
+        self.limit, self.high, self.low = limit, high_bps, low_bps
+
+    def predict(self, raw, top_k=5):
+        self.pd = (self.high if raw["amount"] > self.limit else self.low) / 10_000
+        return super().predict(raw, top_k)
+
+
+def test_pd_over_cap_escalates_and_counter_rescores_pd():
+    cap = PolicyConfig().max_pd_bps
+    service = build(LightGbmRiskModel(AmountScorer(80_000_000, cap + 1, cap)))
+    case = create(service)
+    r10 = next(r for r in case.runs[-1]["policy"]["results"] if r["rule_id"] == "R10")
+    assert (case.status, case.reason) == ("ESCALATED", "HARD_POLICY_FAILURE")
+    assert not r10["passed"] and r10["evidence_id"]
+    note = {"reason": "test", "verification_note": "Đã kiểm tra"}
+    with pytest.raises(WorkflowError, match="HARD_POLICY_FAILURE") as error:
+        service.decide(
+            case.case_id,
+            DecisionInput(expected_version=1, decision_type="ACCEPT_PROPOSAL", **note),
+            "uw",
+            "proposal",
+        )
+    assert error.value.details == ["R10"]
+    counter = DecisionInput(
+        expected_version=1,
+        decision_type="ACCEPT_COUNTER",
+        final_amount=80_000_000,
+        final_tenor_weeks=8,
+        **note,
+    )
+    accepted = service.decide(case.case_id, counter, "uw", "counter")
+    assert accepted.status == "ACCEPTED"
+    assert [run["risk"]["pd_bps"] for run in accepted.runs] == [cap + 1, cap]
+
+
 def test_missing_risk_outranks_statement_request():
     case = create(build(LightGbmRiskModel(FakeScorer()), lambda f: f.pop("top3_share")), "demo-c")
     assert (case.status, case.reason) == ("ESCALATED", "RISK_DATA_MISSING")
@@ -161,3 +200,13 @@ def test_trained_model_scores_demo_case():
     assert case.status == "PENDING_REVIEW"
     assert risk["model_version"] == LightGbmRiskModel().scorer.meta["model_version"]
     assert 0 <= risk["pd_bps"] <= 10_000 and 1 <= len(risk["factors"]) <= 5
+
+
+def test_demo_d_shows_r10_against_demo_b_on_the_same_numbers():
+    cap = PolicyConfig().max_pd_bps
+    b, d = (create(build(LightGbmRiskModel()), seller) for seller in ("demo-b", "demo-d"))
+    assert b.runs[-1]["cashflow"]["amount_proposed"] == d.runs[-1]["cashflow"]["amount_proposed"]
+    assert b.runs[-1]["risk"]["pd_bps"] <= cap < d.runs[-1]["risk"]["pd_bps"]
+    assert (b.status, d.status, d.reason) == ("PENDING_REVIEW", "ESCALATED", "HARD_POLICY_FAILURE")
+    failed = [r["rule_id"] for r in d.runs[-1]["policy"]["results"] if not r["passed"]]
+    assert failed == ["R10"]

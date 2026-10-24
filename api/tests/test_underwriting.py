@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from policy import RULES
 from routers import underwriting as routes
 from services.underwriting.evidence import read_evidence
 from services.underwriting.models import DecisionInput, Plan, Statement, WorkflowError
@@ -91,7 +92,7 @@ def test_case_b_end_to_end_and_idempotent_handoff(client, service):
     cf = detail["runs"][-1]["cashflow"]
     assert (cf["gap"], cf["amount_proposed"], cf["tenor_weeks"]) == (80_000_000, 90_000_000, 8)
     assert cf["weekly_deductions"] == [11_250_000] * 8
-    assert len(detail["runs"][-1]["policy"]["results"]) == 9
+    assert len(detail["runs"][-1]["policy"]["results"]) == len(RULES)
     response = client.post(
         f"/v1/cases/{case_id}/decisions",
         headers=BANK,
@@ -296,7 +297,7 @@ def test_counter_reruns_policy_and_rolls_back_invalid_terms(client, service):
     decision = response.json()["decision"]
     assert decision["final_tenor_weeks"] == 6
     assert sum(decision["weekly_deductions"]) == 70_000_001
-    assert len(decision["policy_results_final"]) == 9
+    assert len(decision["policy_results_final"]) == len(RULES)
     assert len(service.repository.get(case_id).runs) == 2
     assert (
         client.post(f"/v1/cases/{case_id}/decisions", headers=BANK, json=good).json()

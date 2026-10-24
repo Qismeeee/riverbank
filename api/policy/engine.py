@@ -16,6 +16,7 @@ class PolicyConfig:
     max_outstanding_to_monthly_payout: float = 3.0
     deduction_cap_of_stress_payout: float = 0.25
     e_lending_cap: int = 100_000_000
+    max_pd_bps: int = 3_000
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class PolicyInput:
     borrower_is_individual: bool = True
     evidence_ids: dict[str, str] = field(default_factory=dict)
     requested_amount: int | None = None
+    pd_bps: int | None = None
 
 
 @dataclass

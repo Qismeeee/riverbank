@@ -6,7 +6,7 @@ Bộ này là nguồn cho prompt và guardrail của sản phẩm. Từ 23/10/20
 
 1. Code: `api/services/cashflow.py`, `api/policy/engine.py`, `api/policy/rules.py`, `api/services/underwriting/`.
 2. `policy/parameters.yaml`, bản chép ngưỡng của code, có test kiểm khớp.
-3. `policy/policy.md`, ý nghĩa rule R01 đến R09 và nhánh trạng thái.
+3. `policy/policy.md`, ý nghĩa rule R01 đến R10 và nhánh trạng thái.
 4. `policy/worked-examples.md`, nhãn kiểm thử tính tay.
 5. `docs/Riverbank-SRS.md`, `docs/Riverbank-TDD.md`, `docs/Riverbank-BRD.md`.
 6. Slide. Số trong slide không đè công thức.
@@ -20,7 +20,7 @@ Hai số khóa:
 
 | File | Việc |
 |---|---|
-| `policy/policy.md` | R01 đến R09, thứ tự xử lý, quyết định của người, phần chưa có code |
+| `policy/policy.md` | R01 đến R10, thứ tự xử lý, quyết định của người, phần chưa có code |
 | `policy/parameters.yaml` | Hệ số, trần, ngưỡng so sánh |
 | `policy/worked-examples.md` | FX-A, FX-B, FX-C, FX-E, FX-F, duyệt số khác. FX-D, FX-L chưa có code |
 

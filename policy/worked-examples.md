@@ -73,7 +73,7 @@ Vết kỳ hạn của biến thể vốn 50.000.000: số dư tuần 0 âm 150,
 
 ## Duyệt số khác
 
-Trên FX-B, người duyệt `ACCEPT_COUNTER` 80.000.000 trong 4 tuần. Trích `ceil(80.000.000 / 4)` = 20.000.000 > 12.250.000 → 6 tuần 13.333.334, vẫn vượt → 8 tuần 10.000.000. Chạy lại chín rule đều đạt → `ACCEPTED` với 80.000.000, 8 tuần, 10.000.000 mỗi tuần. Test ở `api/tests/test_underwriting.py`.
+Trên FX-B, người duyệt `ACCEPT_COUNTER` 80.000.000 trong 4 tuần. Trích `ceil(80.000.000 / 4)` = 20.000.000 > 12.250.000 → 6 tuần 13.333.334, vẫn vượt → 8 tuần 10.000.000. Chấm lại PD, chạy lại mười rule đều đạt → `ACCEPTED` với 80.000.000, 8 tuần, 10.000.000 mỗi tuần. Test ở `api/tests/test_underwriting.py`.
 
 ## Chưa có code, nhãn để ở `eval/golden/planned/`
 

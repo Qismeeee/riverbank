@@ -26,7 +26,7 @@ FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 ```
 api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client), llm.py (LlmClient, một cửa gọi OpenAI hoặc OpenRouter, cache khi eval), prompts.py (nạp knowledge/prompts)
 api/services/   engine code thuần: cashflow.py, features.py (FeatureBuilder, một nguồn feature cho train và serving), risk.py (RiskModel từ api/models/); shopee/ (schemas, weekly, seller_export, openapi_client)
-api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R09, policy.md tóm tắt; bản đầy đủ ở policy/policy.md
+api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R10, policy.md tóm tắt; bản đầy đủ ở policy/policy.md
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
 api/db/         schema.sql, một DB Postgres cho feature lẫn trạng thái app
 api/routers/    HTTP endpoint, mỏng, gọi services

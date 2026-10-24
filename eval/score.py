@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -82,12 +83,19 @@ class _GoldenCic(CicSource):
 
 
 class _GoldenRisk(DemoRiskModel):
-    def __init__(self):
+    def __init__(self, inp: dict):
         self.calls = 0
+        self.overridden = "pd_bps" in inp
+        self.pd_bps = inp.get("pd_bps")
 
     def assess(self, inp: RiskInput) -> RiskAssessment:
         self.calls += 1
-        return super().assess(inp)
+        base = super().assess(inp)
+        if not self.overridden:
+            return base
+        if self.pd_bps is None:
+            return RiskAssessment(base.model_version, base.source, missing_fields=["pd_bps"])
+        return replace(base, pd_bps=int(self.pd_bps))
 
 
 def _features(inp: dict) -> MappingFeatureSource:
@@ -229,7 +237,7 @@ def golden_service(inp: dict, memo: MemoComposer | None = None) -> UnderwritingS
     return UnderwritingService(
         MemoryCaseRepository(),
         _features(inp),
-        _GoldenRisk(),
+        _GoldenRisk(inp),
         _GoldenCic(inp),
         MockLosAdapter(),
         clock=lambda: NOW,
