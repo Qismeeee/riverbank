@@ -344,7 +344,7 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-19, FR-19b | Đạt | Rule cứng fail thì `ESCALATED`. R09 trần 100.000.000 |
 | FR-20 | Đạt | Prod viết tờ trình bằng LLM (`RIVERBANK_MEMO_WRITER=llm`) trên số đã khóa, lỗi thì quay về template. Không ghi ngược vào kết quả rule |
 | FR-21 | Đạt | Đòi sao kê khi `max(xin, đề xuất) > 2,5 ×` mức sàn. Bằng đúng mốc thì không đòi |
-| FR-22 | Đạt một phần | Người thẩm định nhập tổng tiền sàn trên sao kê, chưa đọc file. Lệch trên 15% thì `ESCALATED` |
+| FR-22 | Đạt | Seller hoặc người thẩm định nộp file CSV, PDF, ảnh qua `/statements/upload`. Code đọc dòng, phân loại tiền sàn, cộng tổng. Vẫn nhập tay được tổng qua `/statements`. Lệch trên 15% thì `ESCALATED` |
 | FR-23 | Đạt | Thông điệp "không khớp; cần xác minh" |
 | FR-24, FR-25 | Đạt | Hai bản từ cùng bằng chứng, mỗi câu có `evidence_id`, số khớp payload |
 | FR-26 | Đạt | Thử tối đa 3 lần, LLM nhận lỗi validator của lần trước. Template chỉ là đường lui |

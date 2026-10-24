@@ -57,6 +57,12 @@ class Statement(InputModel):
     document_ref: Annotated[str, Field(min_length=1, max_length=500)]
 
 
+class StatementUpload(InputModel):
+    expected_version: Annotated[int, Field(ge=1)]
+    period_start: str
+    period_end: str
+
+
 class DecisionInput(InputModel):
     expected_version: Annotated[int, Field(strict=True, ge=1)]
     decision_type: Literal["ACCEPT_PROPOSAL", "ACCEPT_COUNTER", "REJECT"]

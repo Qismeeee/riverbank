@@ -80,7 +80,8 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 - `requested_amount <= threshold` → đạt. **Bằng đúng mốc thì không đòi sao kê.**
 - Vượt mốc và chưa có sao kê → fail, `missing_data`. Đây là trường hợp duy nhất đưa hồ sơ sang `AWAITING_STATEMENT`.
 - Vượt mốc và đã có sao kê → đạt khi sao kê khớp, fail khi lệch. Lệch thì `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
-- Sao kê khớp khi `|payout sàn trong kỳ − tổng tiền sàn trên sao kê| ≤ 15% payout sàn` (`statement.mismatch_ratio`). Lời văn: "không khớp; cần xác minh".
+- Sao kê khớp khi `|payout sàn trong kỳ − tổng tiền sàn trên sao kê| ≤ 15% payout sàn` (`statement.mismatch_ratio`, trong code là `PolicyConfig.statement_mismatch_bps = 1500`). Lời văn: "không khớp; cần xác minh".
+- Tổng tiền sàn trên sao kê đến từ người thẩm định nhập tay, hoặc từ file nộp qua `/statements/upload`: code bóc dòng, phân loại dòng tiền sàn, tự cộng các dòng trong kỳ. Model không cộng và không tính lệch.
 - Bằng chứng E4, hoặc E8 khi đã có sao kê.
 
 ### R06 Nhóm nợ CIC

@@ -8,11 +8,20 @@ from uuid import uuid4
 
 from policy import RISK_RULE_IDS, PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
+from services.statements.reader import StatementReader
 
 from .evidence import digest, emit
 from .gates import CicGate, GateInput, OpenCicGate
 from .memo import MemoComposer, TemplateMemoWriter, default_validator
-from .models import Case, CicInquiry, DecisionInput, Plan, Statement, WorkflowError
+from .models import (
+    Case,
+    CicInquiry,
+    DecisionInput,
+    Plan,
+    Statement,
+    StatementUpload,
+    WorkflowError,
+)
 from .repository import CaseRepository
 from .risk import RiskInput, RiskModel
 from .sources import CicSource, FeatureSource, LosAdapter, validate_features
@@ -78,7 +87,9 @@ class UnderwritingService:
         clock: Callable[[], datetime] = utc_now,
         cic_gate: CicGate | None = None,
         memo: MemoComposer | None = None,
+        statements: StatementReader | None = None,
     ):
+        self.statements = statements
         self.memo = memo or MemoComposer(TemplateMemoWriter(), default_validator())
         self.repository, self.features = repository, features
         self.risk, self.cic, self.los, self.clock = risk, cic, los, clock
@@ -318,51 +329,85 @@ class UnderwritingService:
             )
         return self.repository.get(case_id)
 
+    @staticmethod
+    def _statement_period(case: Case, period_start: str, period_end: str) -> tuple:
+        if case.status not in {"AWAITING_STATEMENT", "ESCALATED"}:
+            raise WorkflowError("STATEMENT_NOT_REQUESTED")
+        prior = case.runs[-1]
+        if not prior["policy"] or not any(
+            r["rule_id"] == "R05" and not r["passed"] for r in prior["policy"]["results"]
+        ):
+            raise WorkflowError("STATEMENT_NOT_REQUESTED")
+        try:
+            start, end = date.fromisoformat(period_start), date.fromisoformat(period_end)
+        except ValueError as exc:
+            raise WorkflowError("INVALID_STATEMENT_PERIOD", 422) from exc
+        rows = prior["input_snapshot"]["features"]["weekly_payouts"]
+        selected = [r for r in rows if start <= date.fromisoformat(r["week_start"]) < end]
+        if (
+            start.weekday() != 0
+            or end.weekday() != 0
+            or end <= start
+            or len(selected) * 7 != (end - start).days
+        ):
+            raise WorkflowError("STATEMENT_PERIOD_NOT_COVERED", 422)
+        return start, end, selected
+
+    def _record_statement(
+        self, case: Case, period: tuple, marketplace_total: int, details: dict, actor: str
+    ) -> None:
+        start, end, selected = period
+        platform = sum(r["amount"] for r in selected)
+        difference = abs(platform - marketplace_total)
+        bps = self.policy.cfg.statement_mismatch_bps
+        matched = difference * 10_000 <= platform * bps if platform else difference == 0
+        statement = {
+            "period_start": start.isoformat(),
+            "period_end": end.isoformat(),
+            "platform_total": platform,
+            "marketplace_total": marketplace_total,
+            "difference": difference,
+            "threshold_bps": bps,
+            "matched": matched,
+            **details,
+            "rows": deepcopy(selected),
+            "message": "khớp trong ngưỡng" if matched else "không khớp; cần xác minh",
+        }
+        self._assess(case, case.runs[-1]["input_snapshot"]["features"], statement)
+        self._event(case, actor, "STATEMENT_RECORDED", case.status, "STATEMENT_COMPARED")
+
     def submit_statement(self, case_id: str, request: Statement, actor: str) -> Case:
         with self.repository.transaction(case_id, request.expected_version) as case:
-            if case.status not in {"AWAITING_STATEMENT", "ESCALATED"}:
-                raise WorkflowError("STATEMENT_NOT_REQUESTED")
-            prior = case.runs[-1]
-            if not prior["policy"] or not any(
-                r["rule_id"] == "R05" and not r["passed"] for r in prior["policy"]["results"]
-            ):
-                raise WorkflowError("STATEMENT_NOT_REQUESTED")
-            features = prior["input_snapshot"]["features"]
-            try:
-                start, end = (
-                    date.fromisoformat(request.period_start),
-                    date.fromisoformat(request.period_end),
-                )
-            except ValueError as exc:
-                raise WorkflowError("INVALID_STATEMENT_PERIOD", 422) from exc
-            rows = features["weekly_payouts"]
-            selected = [r for r in rows if start <= date.fromisoformat(r["week_start"]) < end]
-            if (
-                start.weekday() != 0
-                or end.weekday() != 0
-                or end <= start
-                or len(selected) * 7 != (end - start).days
-            ):
-                raise WorkflowError("STATEMENT_PERIOD_NOT_COVERED", 422)
-            platform = sum(r["amount"] for r in selected)
-            difference = abs(platform - request.marketplace_total)
-            matched = difference * 100 <= platform * 15 if platform else difference == 0
-            statement = {
-                "period_start": start.isoformat(),
-                "period_end": end.isoformat(),
-                "platform_total": platform,
-                "marketplace_total": request.marketplace_total,
-                "difference": difference,
-                "threshold_bps": 1500,
-                "matched": matched,
+            period = self._statement_period(case, request.period_start, request.period_end)
+            details = {
                 "document_ref": request.document_ref,
                 "source": "underwriter_entered_total",
                 "verified_by": actor,
-                "rows": deepcopy(selected),
-                "message": "khớp trong ngưỡng" if matched else "không khớp; cần xác minh",
             }
-            self._assess(case, features, statement)
-            self._event(case, actor, "STATEMENT_RECORDED", case.status, "STATEMENT_COMPARED")
+            self._record_statement(case, period, request.marketplace_total, details, actor)
+        return self.repository.get(case_id)
+
+    def upload_statement(
+        self, case_id: str, request: StatementUpload, content: bytes, actor: str
+    ) -> Case:
+        if self.statements is None:
+            raise WorkflowError("STATEMENT_READER_UNAVAILABLE", 503)
+        current = self.repository.get(case_id)
+        if current.version != request.expected_version:
+            raise WorkflowError("CASE_VERSION_CONFLICT")
+        period = self._statement_period(current, request.period_start, request.period_end)
+        read = self.statements.read(content)
+        details = self.statements.reconcile(read, period[0], period[1])
+        total = details.pop("marketplace_total")
+        with self.repository.transaction(case_id, request.expected_version) as case:
+            period = self._statement_period(case, request.period_start, request.period_end)
+            self._record_statement(
+                case,
+                period,
+                total,
+                {**details, "source": "uploaded_file", "submitted_by": actor},
+                actor,
+            )
         return self.repository.get(case_id)
 
     def decide(self, case_id: str, request: DecisionInput, actor: str, key: str) -> Case:

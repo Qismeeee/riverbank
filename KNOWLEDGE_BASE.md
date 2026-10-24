@@ -24,7 +24,7 @@ Quy ước cho mọi phiên viết code của sản phẩm. Từ 23/10/2026 số
 | Bóc dòng sao kê PDF/ảnh | `statement-ocr` |
 | Injection, thuộc tính nhạy cảm, ý gian lận, phân loại dòng sao kê, chấm ngữ nghĩa eval | Jev |
 
-CSV sao kê đi parser Python, không đi vision. Phân loại dòng và cộng tổng là Jev rồi Python.
+CSV và PDF có lớp chữ đi parser Python, không đi vision. Chỉ PDF scan và ảnh mới gọi `statement-ocr`, và chỉ khi `RIVERBANK_STATEMENT_OCR=llm`. Phân loại dòng mặc định là regex lọc ứng viên rồi Jev quyết. `RIVERBANK_STATEMENT_CLASSIFIER=pattern` chỉ dùng regex, để chạy offline. Cộng tổng luôn là Python.
 
 ## Policy-as-code
 
