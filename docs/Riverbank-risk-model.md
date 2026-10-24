@@ -54,10 +54,10 @@ Train 20.000 (seed 7), test 5.000 (seed 11, không chạm khi chọn tham số).
 2. Giữ LightGBM làm model phục vụ vì contract `factors` TreeSHAP đã có trong API. Nói rõ với giám khảo rằng scorecard logistic cho kết quả tương đương và dễ kiểm toán hơn.
 3. Calibration: không bật calibrator vì Platt và isotonic không giảm Brier trên OOF. LightGBM hơi thiếu tự tin ở nhóm rủi ro nhất (bin cuối dự đoán 0,52, thực 0,58). Với data thật, fit lại Platt trên validation theo thời gian.
 4. Ổn định qua 3 seed test: AUC 0,768 đến 0,783, Brier 0,126 đến 0,133.
-5. Ngưỡng PD 0,20 chặn 70% vỡ nợ với approval rate 63%, bad rate nhóm duyệt 9%. Model không chọn ngưỡng, Policy Engine và người duyệt quyết.
+5. Notebook ghi ngưỡng PD 0,20 chặn 70% vỡ nợ với approval rate 63%, bad rate nhóm duyệt 9%. Model không tự chọn ngưỡng. Policy Engine dùng rule cứng R10 với `max_pd_bps` 3.000 (PD 30%) trong `policy/parameters.yaml`: vượt trần thì hồ sơ `ESCALATED`, người duyệt xử lý, không tự từ chối. Lý do chọn mốc ở `policy/policy.md` mục R10.
 6. SHAP toàn cục xếp hạng đúng cơ chế sinh: biến động payout, tỷ lệ hoàn, tuổi shop, độ tập trung, mức trích so với payout.
 
-Artifact trong image Docker: `api/models/pd_lgbm.txt`, `pd_meta.json` (feature list, hash data, metric, tham số, git sha), `pd_calibrator.json` (enabled=false, có sẵn isotonic và Platt). Backend gọi `services.risk.RiskModel.load().predict(raw)` với 14 trường thô, trả `pd`, `pd_raw`, `factors` top 5 kèm hướng, `model_version`. Case B qua model: PD 7,3%, yếu tố giảm rủi ro chính là biến động payout thấp và tỷ lệ hoàn thấp.
+Artifact trong image Docker: `api/models/pd_lgbm.txt`, `pd_meta.json` (feature list, hash data, metric, tham số, git sha), `pd_calibrator.json` (enabled=false, có sẵn isotonic và Platt). Backend gọi `services.risk.RiskModel.load().predict(raw)` với 14 trường thô, trả `pd`, `pd_raw`, `factors` top 5 kèm hướng, `model_version`. Seller demo qua model `pd-lgbm-v2` với cùng kế hoạch vay của case B: `demo-b` PD 6,12% (612 bps), yếu tố giảm rủi ro chính là biến động payout thấp và tỷ lệ hoàn 5%. `demo-d` cùng payout nhưng shop 7 tháng, hoàn 13%, top 3 chiếm 80%, PD 37,42% (3.742 bps), vượt trần R10.
 
 Khi chấm shop thật, feature thật lấy từ `v_shop_features`, chuỗi payout thật chưa có nên dùng chuỗi mô phỏng co giãn theo `gmv_30d`, memo ghi rõ "payout mô phỏng". Khi có nhãn thật: thay CSV, chạy lại notebook, bỏ phần oracle, thay split ngẫu nhiên bằng split theo thời gian.
 

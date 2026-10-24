@@ -111,7 +111,7 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 ### R10 Trần PD
 
 - Cứng. Đạt khi `pd_bps <= max_pd_bps` (3.000, tức PD 30%).
-- Ngưỡng chọn trên tập test synthetic 5.000 shop (seed 11, cùng generator lúc train): trên 3.000 bps là 19% hồ sơ, tỷ lệ vỡ nợ 48% so với 14% ở nhóm còn lại, bắt được 45% số ca vỡ nợ. Dữ liệu là mô phỏng nên ngưỡng chỉ là ví dụ, ngân hàng chốt lại trên dữ liệu thật.
+- Ngưỡng chọn trên 5.000 shop sinh lại bằng `data/synth/train.py` seed 11, chấm bằng model đang chạy (tỷ lệ vỡ nợ của bộ này 20,7%, bộ test lúc train ghi 19,2%): trên 3.000 bps là 19% hồ sơ, tỷ lệ vỡ nợ 48% so với 14% ở nhóm còn lại, bắt được 45% số ca vỡ nợ. Dữ liệu là mô phỏng nên ngưỡng chỉ là ví dụ, ngân hàng chốt lại trên dữ liệu thật.
 - Không chấm được PD thì R10 fail thiếu dữ liệu. Khi đó trạng thái là `RISK_DATA_MISSING`, trừ khi có rule cứng khác fail.
 - Người duyệt hạ số tiền hoặc kỳ hạn bằng `ACCEPT_COUNTER` thì PD được chấm lại trên số mới.
 - Bằng chứng E6.
