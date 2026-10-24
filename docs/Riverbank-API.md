@@ -145,6 +145,7 @@ POST /cases ──> NO_LOAN_NEEDED
 | `GET` | `/v1/cases/{case_id}` | underwriter | Có | FR-30 |
 | `GET` | `/v1/cases/{case_id}/evidence/{evidence_id}` | underwriter | Có | FR-07, FR-30 |
 | `POST` | `/v1/cases/{case_id}/statements` | underwriter | Có | FR-21..FR-23 |
+| `POST` | `/v1/cases/{case_id}/cic-inquiry` | underwriter | Có | FR-16b |
 | `POST` | `/v1/cases/{case_id}/decisions` | underwriter | Có | FR-31..FR-34 |
 | `POST` | `/v1/cases/{case_id}/handoff` | underwriter | Có | FR-35, FR-36 |
 | `POST` | `/v1/copilot/extract-plan` | seller | Có | FR-02, FR-03 |
@@ -328,7 +329,7 @@ Một phần tử `runs`:
 | Trường | Nội dung |
 |---|---|
 | `run_id`, `run_no` | Định danh và số thứ tự lần chạy |
-| `trigger` | `INITIAL`, `STATEMENT`, hoặc `COUNTER` |
+| `trigger` | `INITIAL`, `STATEMENT`, `COUNTER`, hoặc `CIC_INQUIRY` |
 | `input_snapshot`, `input_hash` | Plan, feature, consent đã dùng và mã băm |
 | `engine_version`, `config` | Phiên bản và cấu hình CashFlow Engine |
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
@@ -410,7 +411,7 @@ Bản hiện tại để người thẩm định nhập tổng tiền sàn trên
 | `marketplace_total` | int | Tổng dòng tiền từ sàn trên sao kê, ≥ 0 |
 | `document_ref` | string | 1–500 ký tự. Tham chiếu file gốc |
 
-**Cách đối chiếu:** `platform_total` là tổng payout sàn các tuần trong khoảng. Lệch là `|platform_total − marketplace_total|`. Khớp khi lệch ≤ 15% `platform_total` (`statement_mismatch_ratio`). Hệ thống chạy lại thẩm định với kết quả này (`trigger = STATEMENT`), giữ nguyên PD và CIC của lần đầu.
+**Cách đối chiếu:** `platform_total` là tổng payout sàn các tuần trong khoảng. Lệch là `|platform_total − marketplace_total|`. Khớp khi lệch ≤ 15% `platform_total` (`statement_mismatch_ratio`). Hệ thống chạy lại thẩm định với kết quả này (`trigger = STATEMENT`), giữ nguyên CIC của lần trước. PD chấm lại trên cùng số nên không đổi.
 
 - Khớp: R05 đạt, hồ sơ sang `PENDING_REVIEW` nếu không còn rule cứng nào fail.
 - Lệch: `ESCALATED`. Thông điệp là "không khớp; cần xác minh". Không dùng từ trong `knowledge/guardrails.md`.
@@ -418,6 +419,29 @@ Bản hiện tại để người thẩm định nhập tổng tiền sàn trên
 **Phản hồi `200`:** `CaseSummary`.
 
 **Lỗi:** `409 STATEMENT_NOT_REQUESTED`, `409 CASE_VERSION_CONFLICT`, `422 INVALID_STATEMENT_PERIOD`, `422 STATEMENT_PERIOD_NOT_COVERED`.
+
+---
+
+### 4.8b `POST /v1/cases/{case_id}/cic-inquiry`, Người duyệt tra CIC thủ công
+
+Dùng khi Jev gate từ chối hoặc lỗi nên hệ thống chưa tra CIC (`cic.source = not_queried`, R06 fail thiếu dữ liệu). Người duyệt chịu trách nhiệm, hệ thống tra CIC bỏ qua Jev rồi chạy lại thẩm định (`trigger = CIC_INQUIRY`).
+
+**Header:** vai trò `underwriter`.
+
+**Điều kiện:** hồ sơ `ESCALATED`, chưa có quyết định, lần chạy cuối có `cic.source = not_queried`. Không thỏa thì `409 CIC_INQUIRY_NOT_ALLOWED`.
+
+**Thân yêu cầu** (`CicInquiry`):
+
+| Trường | Kiểu | Ràng buộc |
+|---|---|---|
+| `expected_version` | int | ≥ 1 |
+| `reason` | string | 1–2000, bắt buộc. Lý do người duyệt cho tra |
+
+**Kết quả:** E6a mới giữ nguyên `gate` của Jev và thêm `override` (`actor`, `reason`, `requested_at`). R06, R07 chạy trên CIC thật. Sự kiện `CIC_INQUIRY_OVERRIDE` vào `case_events`. Lần chạy sau đó (sao kê, duyệt số khác) dùng lại E6a này.
+
+**Phản hồi `200`:** `CaseSummary`.
+
+**Lỗi:** `409 CIC_INQUIRY_NOT_ALLOWED`, `409 CASE_VERSION_CONFLICT`, `403 UNDERWRITER_REQUIRED`.
 
 ---
 
@@ -457,7 +481,7 @@ Bản hiện tại để người thẩm định nhập tổng tiền sàn trên
    - Hồ sơ `ESCALATED` thiếu `verification_note` thì `409 VERIFICATION_NOTE_REQUIRED` (FR-33).
    - `ACCEPT_PROPOSAL` mà bộ rule đã đổi từ lúc thẩm định thì `409 POLICY_CHANGED_REASSESSMENT_REQUIRED`.
    - `ACCEPT_COUNTER` chạy lại engine với số mới (`trigger = COUNTER`). Engine kéo dài kỳ hạn 2 tuần một lần cho đến khi kỳ trích không vượt 25% payout xấu. Không xếp được lịch thì `409 COUNTER_TERMS_INVALID`.
-   - Chạy lại toàn bộ rule trên bộ số cuối. Có hard fail thì `409 HARD_POLICY_FAILURE`, `details` là danh sách mã rule (FR-32).
+   - Chạy lại toàn bộ rule trên bộ số cuối. Có hard fail thì `409 HARD_POLICY_FAILURE`, `details` là danh sách mã rule (FR-32). Riêng R10 fail vì thiếu PD (hồ sơ `RISK_DATA_MISSING`) không chặn, vì đã bắt buộc `verification_note`. R10 vẫn ghi fail trong `policy_results_final`.
    - Sao kê đã nhập mà lệch thì `409 STATEMENT_MISMATCH`.
    - Tờ trình mới nhất phải đã qua kiểm tra và thuộc đúng lần chạy cuối, không thì `409 MEMO_NOT_VALIDATED`.
 3. `REJECT` không cần các kiểm tra ở bước 2.
@@ -531,6 +555,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `IDEMPOTENCY_KEY_REUSED` | 409 | Tạo hồ sơ, quyết định | Khóa cũ, nội dung khác |
 | `CASE_VERSION_CONFLICT` | 409 | Lệnh ghi | `expected_version` cũ |
 | `STATEMENT_NOT_REQUESTED` | 409 | Sao kê | Hồ sơ không đang chờ sao kê |
+| `CIC_INQUIRY_NOT_ALLOWED` | 409 | Tra CIC thủ công | Hồ sơ không `ESCALATED`, đã có quyết định, hoặc CIC đã được tra |
 | `DECISION_NOT_ALLOWED` | 409 | Quyết định | Sai trạng thái hoặc đã có quyết định |
 | `NO_LOAN_NEEDED` | 409 | Quyết định | Chấp nhận hồ sơ Gap = 0 |
 | `VERIFICATION_NOTE_REQUIRED` | 409 | Quyết định | Chấp nhận hồ sơ `ESCALATED` thiếu ghi chú xác minh |

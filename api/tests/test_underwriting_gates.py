@@ -3,7 +3,7 @@ import pytest
 
 from routers import underwriting as routes
 from services.underwriting.gates import GateInput, JevCicGate, state
-from services.underwriting.models import WorkflowError
+from services.underwriting.models import CicInquiry, DecisionInput, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import DemoRiskModel
 from services.underwriting.service import UnderwritingService
@@ -92,6 +92,33 @@ def test_declined_or_failed_gate_skips_cic_and_escalates(answer, error):
     assert run["cic"]["gate"]["eligible"] is False and run["cic"]["gate"]["error"] == error
     assert not r06["passed"] and r06["missing_data"]
     assert (case.status, case.reason) == ("ESCALATED", "HARD_POLICY_FAILURE")
+
+
+def test_underwriter_cic_inquiry_unblocks_declined_gate():
+    service = build(FakeJev(noul(0.3)))
+    case = create(service)
+    request = CicInquiry(expected_version=case.version, reason="Đã gọi seller xác minh")
+    updated = service.inquire_cic(case.case_id, request, "uw-1")
+    cic = updated.runs[-1]["cic"]
+    assert service.cic.calls == 1 and updated.version == case.version + 1
+    assert updated.runs[-1]["trigger"] == "CIC_INQUIRY"
+    assert cic["bureau_group"] == 1 and cic["gate"] == case.runs[-1]["cic"]["gate"]
+    assert cic["override"]["actor"] == "uw-1"
+    assert (updated.status, updated.reason) == ("PENDING_REVIEW", None)
+    assert updated.events[-1]["event_type"] == "CIC_INQUIRY_OVERRIDE"
+    decision = DecisionInput(
+        expected_version=updated.version, decision_type="ACCEPT_PROPOSAL", reason="test"
+    )
+    assert service.decide(updated.case_id, decision, "uw-1", "accept").status == "ACCEPTED"
+
+
+def test_cic_inquiry_only_when_gate_skipped_cic():
+    service = build(FakeJev(noul(0.9)))
+    case = create(service)
+    request = CicInquiry(expected_version=case.version, reason="x")
+    with pytest.raises(WorkflowError, match="CIC_INQUIRY_NOT_ALLOWED"):
+        service.inquire_cic(case.case_id, request, "uw-1")
+    assert service.cic.calls == 1
 
 
 def test_statement_rerun_reuses_gate_snapshot():

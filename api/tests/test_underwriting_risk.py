@@ -113,6 +113,19 @@ def test_missing_profile_escalates_without_scoring(field):
     assert any(s["template"] == "risk_missing" and field in s["text"] for s in memo)
 
 
+def test_missing_risk_is_approvable_only_with_verification_note():
+    service = build(LightGbmRiskModel(FakeScorer()), lambda f: f.pop("rating"))
+    case = create(service)
+    plain = {"expected_version": 1, "decision_type": "ACCEPT_PROPOSAL", "reason": "test"}
+    with pytest.raises(WorkflowError, match="VERIFICATION_NOTE_REQUIRED"):
+        service.decide(case.case_id, DecisionInput(**plain), "uw", "no-note")
+    noted = DecisionInput(**plain, verification_note="Đã đối chiếu hồ sơ shop")
+    accepted = service.decide(case.case_id, noted, "uw", "note")
+    assert accepted.status == "ACCEPTED"
+    r10 = next(r for r in accepted.decision["policy_results_final"] if r["rule_id"] == "R10")
+    assert r10["missing_data"] and not r10["passed"]
+
+
 def test_hard_failure_outranks_missing_risk():
     case = create(
         build(LightGbmRiskModel(FakeScorer()), lambda f: f.update(rating=None, shop_age_months=1))

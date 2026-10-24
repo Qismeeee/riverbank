@@ -43,7 +43,7 @@ Hai bộ khớp nhau ở: kịch bản xấu `× 0,7` cắt phần lẻ, tuần 
 | R08 | Cứng. Trích ≤ 25% payout xấu | Giống ở thẩm định, thêm nhánh giám sát |
 | R09 | Cứng. Trần 100.000.000 cho vay điện tử cá nhân | Không có |
 
-Code chạy theo thứ tự R09, R01, R04, R08, R02, R03, R05, R06, R07. Nhãn `policy_version` là `riverbank-demo-r01-r09-v2`.
+Code chạy theo thứ tự R09, R01, R04, R08, R02, R03, R05, R06, R07. Nhãn lúc kiểm là `riverbank-demo-r01-r09-v2`. Từ khi thêm R10 nhãn là `riverbank-demo-r01-r10-v3`.
 
 ## 4. Kết quả chạy API thật
 

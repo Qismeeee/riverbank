@@ -427,3 +427,13 @@ def test_no_loan_memo_failure_cannot_enter_statement_flow(client, service, monke
     )
     assert response.status_code == 409
     assert client.get("/v1/cases/not-a-uuid", headers=BANK).status_code == 422
+
+
+def test_cic_inquiry_route_is_underwriter_only(client):
+    created = create(client)
+    body = {"expected_version": created["version"], "reason": "test"}
+    url = f"/v1/cases/{created['case_id']}/cic-inquiry"
+    seller = client.post(url, json=body, headers=seller_headers("demo-b"))
+    assert seller.status_code == 403
+    response = client.post(url, json=body, headers=BANK)
+    assert response.status_code == 409 and "CIC_INQUIRY_NOT_ALLOWED" in response.text

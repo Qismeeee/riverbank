@@ -79,6 +79,10 @@ class VersionInput(InputModel):
     expected_version: Annotated[int, Field(strict=True, ge=1)]
 
 
+class CicInquiry(VersionInput):
+    reason: Annotated[str, Field(min_length=1, max_length=2000)]
+
+
 class CaseSummary(BaseModel):
     case_id: str
     seller_id: str

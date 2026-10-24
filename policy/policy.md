@@ -1,6 +1,6 @@
 # Chính sách tín dụng Riverbank (bản demo)
 
-Bản này mô tả đúng bộ rule đang chạy trên prod: `api/policy/rules.py` (`policy_version = riverbank-demo-r01-r09-v2`). Ngưỡng ở `parameters.yaml`, ví dụ tính tay ở `worked-examples.md`. Bảng tóm tắt cho dev nằm ở `api/policy/policy.md`.
+Bản này mô tả đúng bộ rule đang chạy trên prod: `api/policy/rules.py` (`policy_version = riverbank-demo-r01-r10-v3`). Ngưỡng ở `parameters.yaml`, ví dụ tính tay ở `worked-examples.md`. Bảng tóm tắt cho dev nằm ở `api/policy/policy.md`.
 
 Đổi khẩu vị thì sửa `PolicyConfig` trong `api/policy/engine.py`, `parameters.yaml` và file này trong cùng một PR. `api/tests/test_golden.py` kiểm `parameters.yaml` khớp code và mỗi rule trong code có mục ở đây.
 
@@ -38,7 +38,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 
 - Số seller xin không bao giờ là số đề xuất. Số đề xuất là đầu ra CashFlow Engine.
 - PD vào R10 (mục 4). Vượt `max_pd_bps` thì hồ sơ sang người, không tự từ chối. Bản prod dùng `LightGbmRiskModel` (`api/services/underwriting/risk.py`) bọc model `api/services/risk.py`. Đầu vào gồm hồ sơ shop trong snapshot (`archetype`, `shop_age_months`, `n_products`, `top3_share`, `rating`, `return_rate`), payout 12 tuần gần nhất (`payout_profile`, dùng chung với lúc train) và số của CashFlow Engine. Kết quả E6 có `pd_bps`, tối đa 5 yếu tố SHAP và lời công bố "PD ước lượng trên dữ liệu mô phỏng". Thiếu một trường hồ sơ shop thì không chấm, E6 ghi `missing_fields`, hồ sơ sang `ESCALATED` lý do `RISK_DATA_MISSING`. `RIVERBANK_WORKFLOW_RISK=demo` chuyển về `DemoRiskModel` 500 bps cố định, bộ golden dùng bản này để số không đổi theo model.
-- Jev gate trước CIC: hỏi Jev (`typesafe/jev-1.14`) câu noul "đủ điều kiện tra CIC?" với state chỉ gồm số đã tính (gap, đề xuất, kỳ trích, payout, tuổi shop, hoàn hàng, rating, PD), không có định danh. Xác suất ≥ 0,6 mới gọi CIC. Dưới ngưỡng, lỗi mạng hoặc Jev trả sai định dạng thì không gọi CIC và không mặc định cho qua: E6a ghi `source = not_queried`, R06 fail thiếu dữ liệu, hồ sơ `ESCALATED` lý do `HARD_POLICY_FAILURE`. Quyết định gate (`probability`, `threshold`, `eligible`, `model`, `error`) lưu trong E6a. Lần chạy lại sau sao kê hoặc duyệt số khác dùng lại E6a cũ, không hỏi Jev lại. PD thì chấm lại trên số tiền và kỳ hạn của lần chạy đó, vì hai số này là feature của model.
+- Jev gate trước CIC: hỏi Jev (`typesafe/jev-1.14`) câu noul "đủ điều kiện tra CIC?" với state chỉ gồm số đã tính (gap, đề xuất, kỳ trích, payout, tuổi shop, hoàn hàng, rating, PD), không có định danh. Xác suất ≥ 0,6 mới gọi CIC. Dưới ngưỡng, lỗi mạng hoặc Jev trả sai định dạng thì không gọi CIC và không mặc định cho qua: E6a ghi `source = not_queried`, R06 fail thiếu dữ liệu, hồ sơ `ESCALATED` lý do `HARD_POLICY_FAILURE`. Người duyệt mở lại được bằng `POST /v1/cases/{id}/cic-inquiry` kèm lý do: hệ thống tra CIC bỏ qua Jev, ghi `override` vào E6a và chạy lại rule. Quyết định gate (`probability`, `threshold`, `eligible`, `model`, `error`) lưu trong E6a. Lần chạy lại sau sao kê hoặc duyệt số khác dùng lại E6a cũ, không hỏi Jev lại. PD thì chấm lại trên số tiền và kỳ hạn của lần chạy đó, vì hai số này là feature của model.
 - Giới tính, tôn giáo, dân tộc, sức khỏe không có trong feature hay rule. Nhắc tới trong `note` thì chặn cả hồ sơ.
 - Lãi và phí không có trong bản seller vì chưa có biểu phí ngân hàng.
 - Tờ trình không viết điều khoản hợp đồng, khế ước, ủy nhiệm chi.
@@ -112,7 +112,7 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 
 - Cứng. Đạt khi `pd_bps <= max_pd_bps` (3.000, tức PD 30%).
 - Ngưỡng chọn trên 5.000 shop sinh lại bằng `data/synth/train.py` seed 11, chấm bằng model đang chạy (tỷ lệ vỡ nợ của bộ này 20,7%, bộ test lúc train ghi 19,2%): trên 3.000 bps là 19% hồ sơ, tỷ lệ vỡ nợ 48% so với 14% ở nhóm còn lại, bắt được 45% số ca vỡ nợ. Dữ liệu là mô phỏng nên ngưỡng chỉ là ví dụ, ngân hàng chốt lại trên dữ liệu thật.
-- Không chấm được PD thì R10 fail thiếu dữ liệu. Khi đó trạng thái là `RISK_DATA_MISSING`, trừ khi có rule cứng khác fail.
+- Không chấm được PD thì R10 fail thiếu dữ liệu. Khi đó trạng thái là `RISK_DATA_MISSING`, trừ khi có rule cứng khác fail. Người duyệt chấp nhận được hồ sơ này khi có `verification_note`. R10 thiếu PD không chặn quyết định, nhưng vẫn ghi fail trong `policy_results_final`.
 - Người duyệt hạ số tiền hoặc kỳ hạn bằng `ACCEPT_COUNTER` thì PD được chấm lại trên số mới.
 - Bằng chứng E6.
 
