@@ -12,13 +12,14 @@ from services.cashflow import CashFlowEngine, CashFlowInput
 from .evidence import digest, emit
 from .gates import CicGate, GateInput, OpenCicGate
 from .memo import MemoComposer, TemplateMemoWriter, default_validator
-from .models import Case, DecisionInput, Plan, Statement, WorkflowError
+from .models import Case, CicInquiry, DecisionInput, Plan, Statement, WorkflowError
 from .repository import CaseRepository
 from .risk import RiskInput, RiskModel
 from .sources import CicSource, FeatureSource, LosAdapter, validate_features
 
 ENGINE_VERSION = "cashflow-v2-base-int"
-POLICY_VERSION = "riverbank-demo-r01-r09-v2"
+POLICY_VERSION = "riverbank-demo-r01-r10-v3"
+NOT_QUERIED = "not_queried"
 
 _UNSAFE_NOTE = re.compile(
     r"(?:ignore|bỏ\s+qua).*(?:policy|instruction|chính\s+sách|quy\s+tắc)|"
@@ -36,15 +37,20 @@ def _valid_risk(risk: dict) -> bool:
     return risk["pd_bps"] is not None and 0 <= risk["pd_bps"] <= 10_000 and bool(risk["factors"])
 
 
-def _route(results: list, risk: dict, statement: dict | None) -> tuple[str, str | None]:
+def _blocking(results: list, risk: dict) -> list:
     risk_missing = bool(risk.get("missing_fields"))
-    failures = [
+    return [
         r
         for r in results
         if r.hard
         and not r.passed
         and not (risk_missing and r.missing_data and r.rule_id in RISK_RULE_IDS)
     ]
+
+
+def _route(results: list, risk: dict, statement: dict | None) -> tuple[str, str | None]:
+    risk_missing = bool(risk.get("missing_fields"))
+    failures = _blocking(results, risk)
     awaiting_statement = bool(failures) and all(
         r.rule_id == "R05" and r.missing_data for r in failures
     )
@@ -151,7 +157,7 @@ class UnderwritingService:
         if not gate.eligible:
             return {
                 "seller_id": case.seller_id,
-                "source": "not_queried",
+                "source": NOT_QUERIED,
                 "bureau_group": None,
                 "outstanding": None,
                 "queried_at": None,
@@ -165,6 +171,7 @@ class UnderwritingService:
         features: dict,
         statement: dict | None = None,
         counter: DecisionInput | None = None,
+        cic_override: dict | None = None,
     ) -> dict:
         now = self.clock()
         run_id = str(uuid4())
@@ -196,7 +203,15 @@ class UnderwritingService:
         run = {
             "run_id": run_id,
             "run_no": len(case.runs) + 1,
-            "trigger": "COUNTER" if counter else "STATEMENT" if statement else "INITIAL",
+            "trigger": (
+                "COUNTER"
+                if counter
+                else "CIC_INQUIRY"
+                if cic_override
+                else "STATEMENT"
+                if statement
+                else "INITIAL"
+            ),
             "input_snapshot": deepcopy(snapshot),
             "input_hash": digest(snapshot),
             "engine_version": ENGINE_VERSION,
@@ -221,7 +236,9 @@ class UnderwritingService:
             risk = self.risk.predict(RiskInput(features, case.plan, cf))
             if not _valid_risk(risk):
                 raise WorkflowError("INVALID_RISK_RESULT", 422)
-            if case.runs:
+            if cic_override:
+                cic = deepcopy(cic_override)
+            elif case.runs:
                 cic = deepcopy(case.runs[-1]["cic"])
             else:
                 cic = self._inquire_cic(case, GateInput(features, cf, risk), now)
@@ -271,6 +288,35 @@ class UnderwritingService:
             case, "ORCHESTRATOR", "STATE_CHANGED", previous, case.reason or "ASSESSMENT_COMPLETED"
         )
         return run
+
+    def inquire_cic(self, case_id: str, request: CicInquiry, actor: str) -> Case:
+        with self.repository.transaction(case_id, request.expected_version) as case:
+            prior = case.runs[-1] if case.runs else None
+            if (
+                case.status != "ESCALATED"
+                or case.decision
+                or not prior
+                or not prior["cic"]
+                or prior["cic"]["source"] != NOT_QUERIED
+            ):
+                raise WorkflowError("CIC_INQUIRY_NOT_ALLOWED")
+            now = self.clock()
+            cic = {
+                **self.cic.inquire(case.seller_id, now),
+                "gate": prior["cic"]["gate"],
+                "override": {
+                    "actor": actor,
+                    "reason": request.reason,
+                    "requested_at": now.isoformat(),
+                },
+            }
+            self._assess(
+                case, prior["input_snapshot"]["features"], prior["statement"], cic_override=cic
+            )
+            self._event(
+                case, actor, "CIC_INQUIRY_OVERRIDE", case.status, "CIC_QUERIED_BY_UNDERWRITER"
+            )
+        return self.repository.get(case_id)
 
     def submit_statement(self, case_id: str, request: Statement, actor: str) -> Case:
         with self.repository.transaction(case_id, request.expected_version) as case:
@@ -351,8 +397,11 @@ class UnderwritingService:
                         raise WorkflowError("COUNTER_TERMS_INVALID") from exc
                 # Re-evaluate even the original proposal against the current executable rules.
                 outcome = self.policy.evaluate(PolicyInput(**run["policy_input"]))
-                if outcome.hard_fail:
-                    raise WorkflowError("HARD_POLICY_FAILURE", details=outcome.failed_rule_ids)
+                blocking = _blocking(outcome.results, run["risk"])
+                if blocking:
+                    raise WorkflowError(
+                        "HARD_POLICY_FAILURE", details=[r.rule_id for r in blocking]
+                    )
                 if run["statement"] and not run["statement"]["matched"]:
                     raise WorkflowError("STATEMENT_MISMATCH")
                 doc = case.documents[-1]

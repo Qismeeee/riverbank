@@ -81,6 +81,7 @@ Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau 
 | Chi tiết hồ sơ | `GET /v1/cases/{case_id}`. Đọc `runs[-1]` cho `cashflow`, `risk` (E6), `cic` (E6a), `policy`. Tờ trình ở `documents[-1].underwriter_memo` |
 | Mở bằng chứng khi bấm một câu | `GET /v1/cases/{case_id}/evidence/{evidence_id}` |
 | Nhập tổng sao kê | `POST /v1/cases/{case_id}/statements` |
+| Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source = not_queried`) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
 | Chấp nhận, sửa số, từ chối | `POST /v1/cases/{case_id}/decisions` với `Idempotency-Key` |
 | Bàn giao LOS sau khi ký | `POST /v1/cases/{case_id}/handoff` |
 

@@ -14,6 +14,7 @@ from services.underwriting.models import (
     Case,
     CaseDetail,
     CaseSummary,
+    CicInquiry,
     DecisionInput,
     DecisionResponse,
     EvidenceResponse,
@@ -168,6 +169,13 @@ def evidence(
 @router.post("/cases/{case_id}/statements", response_model=CaseSummary)
 def statement(case_id: Identifier, request: Statement, service: Service, actor: BankUser) -> dict:
     return summary(service.submit_statement(case_id, request, actor.subject))
+
+
+@router.post("/cases/{case_id}/cic-inquiry", response_model=CaseSummary)
+def cic_inquiry(
+    case_id: Identifier, request: CicInquiry, service: Service, actor: BankUser
+) -> dict:
+    return summary(service.inquire_cic(case_id, request, actor.subject))
 
 
 @router.post("/cases/{case_id}/decisions", response_model=DecisionResponse)

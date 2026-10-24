@@ -338,16 +338,16 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-06 | Đạt | Mã E4, E5, E6, E6a, E7, E8, băm lại mỗi lần đọc |
 | FR-08 đến FR-15 | Đạt | Case B: gap 80.000.000, đề xuất 90.000.000, 8 tuần, 11.250.000. Case A: gap 0, cảnh báo 20.000.000 |
 | FR-16 | Đạt | LightGBM `pd-lgbm-v2`, tối đa 5 yếu tố SHAP. Thiếu hồ sơ shop thì `ESCALATED`, `RISK_DATA_MISSING` |
-| FR-16b | Đạt với nguồn mock | Jev gate ngưỡng 0,6 trước CIC. `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0. Gate từ chối hoặc lỗi thì R06 thiếu dữ liệu, chuyển người |
+| FR-16b | Đạt với nguồn mock | Jev gate ngưỡng 0,6 trước CIC. `DemoCicSource` trả nhóm 1, dư nợ 0. Không gọi khi gap 0. Gate từ chối hoặc lỗi thì R06 thiếu dữ liệu, chuyển người. Người duyệt tra CIC thủ công được qua `POST /cic-inquiry` |
 | FR-17 | Đạt | Mười rule R01 đến R10, mỗi rule có `evidence_id` |
 | FR-18 | Đạt một phần | Không có bước nạp bộ rule đã ký. Có `policy_hash`, đổi rule sau thẩm định thì chặn `ACCEPT_PROPOSAL` |
 | FR-19, FR-19b | Đạt | Rule cứng fail thì `ESCALATED`. R09 trần 100.000.000 |
-| FR-20 | Đạt | Văn bản là template điền từ bằng chứng, không ghi ngược vào kết quả rule |
+| FR-20 | Đạt | Prod viết tờ trình bằng LLM (`RIVERBANK_MEMO_WRITER=llm`) trên số đã khóa, lỗi thì quay về template. Không ghi ngược vào kết quả rule |
 | FR-21 | Đạt | Đòi sao kê khi `max(xin, đề xuất) > 2,5 ×` mức sàn. Bằng đúng mốc thì không đòi |
 | FR-22 | Đạt một phần | Người thẩm định nhập tổng tiền sàn trên sao kê, chưa đọc file. Lệch trên 15% thì `ESCALATED` |
 | FR-23 | Đạt | Thông điệp "không khớp; cần xác minh" |
 | FR-24, FR-25 | Đạt | Hai bản từ cùng bằng chứng, mỗi câu có `evidence_id`, số khớp payload |
-| FR-26 | Đạt hình thức | Thử 3 lần nhưng template sinh lại giống nhau, nên lần 2 và 3 không đổi kết quả |
+| FR-26 | Đạt | Thử tối đa 3 lần, LLM nhận lỗi validator của lần trước. Template chỉ là đường lui |
 | FR-27, FR-28 | Đạt | Bản seller không có lãi, phí, PD, CIC. Không vay thì nêu ngưỡng cảnh báo |
 | FR-29, FR-30 | Đạt | `GET /v1/queue`, `GET /v1/cases/{id}`, `GET /v1/cases/{id}/evidence/{evidence_id}` |
 | FR-31, FR-32 | Đạt | `ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT`. Counter giãn kỳ hạn, chấm lại PD và chạy lại mười rule |
@@ -356,6 +356,6 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-35, FR-36 | Đạt | Gói bàn giao tạo khi quyết định, người bấm `POST /handoff`, `MockLosAdapter`. Lỗi LOS không mất quyết định |
 | FR-37 | Đạt | Không có lệnh sang core |
 | FR-38 | Đạt | `case_events` chỉ thêm, có tác nhân và mã bằng chứng |
-| NFR-01 | Đạt | Thẩm định chạy xong trong yêu cầu, dưới 1 giây trên bộ demo |
+| NFR-01 | Đạt, chưa đo trên prod | Thẩm định chạy xong trong yêu cầu. Engine và rule dưới 1 giây. Trên prod còn một lần gọi Jev (timeout 10 giây) và LLM viết tờ trình, chưa đo p50 |
 | NFR-02 | Đạt | Engine và rule thuần, golden khóa số |
-| NFR-06 | Đạt | 0 USD vì chưa gọi model nào |
+| NFR-06 | Chưa đo | Prod gọi Jev qua OpenRouter, Copilot và Memo Writer gọi `gpt-4.1-mini`. Chưa có số chi phí mỗi hồ sơ |
