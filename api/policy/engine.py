@@ -17,6 +17,7 @@ class PolicyConfig:
     deduction_cap_of_stress_payout: float = 0.25
     e_lending_cap: int = 100_000_000
     max_pd_bps: int = 3_000
+    statement_mismatch_bps: int = 1_500
 
 
 @dataclass(frozen=True)

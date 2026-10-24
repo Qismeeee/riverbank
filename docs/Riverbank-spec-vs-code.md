@@ -70,7 +70,7 @@ Ghi chú: case C trong `worked-examples.md` dùng mức sàn 120.000.000, nên `
 | Jev gate sao kê, chấm chéo memo | Chưa có. Jev mới dùng cho gate CIC (`services/underwriting/gates.py`) |
 | Che PII rồi lưu `sanitized_note` | Regex trong `service.py` chặn cả hồ sơ. TDD chọn regex miễn phí cho guardrail input, FR-03 cho phép chặn |
 | R06 đối chiếu sao kê, lý do `R06_MISMATCH` | Sao kê đi qua R05 (`docs_verified`). Lệch thì lý do `HARD_POLICY_FAILURE` |
-| Seller upload file sao kê lên S3 | Người thẩm định nhập tổng tiền |
+| Seller upload file sao kê lên S3 | Có `POST /statements/upload` nhận file thẳng, không qua S3, không lưu file gốc |
 | Trạng thái `DRAFT`, `ANALYZING`, `VERIFYING`, `HANDOFF_OK`, `HANDOFF_ERROR` | Enum có `ANALYZING`, `BLOCKED_INPUT` nhưng không lưu hồ sơ ở hai trạng thái đó. Bàn giao nằm ở `handoff.status` |
 | Bàn giao tự động sau quyết định | Người bấm `POST /handoff` |
 | `ACCEPT_MODIFIED` và bảng `loan_terms_versions` | `ACCEPT_COUNTER`, mỗi lần sửa số là một `run` mới với `trigger = COUNTER` |

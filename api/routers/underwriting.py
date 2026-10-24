@@ -2,11 +2,13 @@ from dataclasses import asdict
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
 
 import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
+from services.statements.factory import build_statement_reader
+from services.statements.reader import StatementConfig
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.memo import build_composer
@@ -23,6 +25,7 @@ from services.underwriting.models import (
     QueueResponse,
     SellerView,
     Statement,
+    StatementUpload,
     Status,
     VersionInput,
     WorkflowError,
@@ -80,6 +83,7 @@ def get_service() -> UnderwritingService:
         MockLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
         memo=build_composer(config.MEMO_WRITER),
+        statements=build_statement_reader(),
     )
 
 
@@ -169,6 +173,24 @@ def evidence(
 @router.post("/cases/{case_id}/statements", response_model=CaseSummary)
 def statement(case_id: Identifier, request: Statement, service: Service, actor: BankUser) -> dict:
     return summary(service.submit_statement(case_id, request, actor.subject))
+
+
+class StatementUploadForm(StatementUpload):
+    file: UploadFile
+
+
+@router.post("/cases/{case_id}/statements/upload", response_model=CaseSummary)
+def upload_statement(
+    case_id: Identifier,
+    form: Annotated[StatementUploadForm, Form(media_type="multipart/form-data")],
+    service: Service,
+    actor: Principal,
+) -> dict:
+    if actor.role == "seller":
+        seller_of(actor, service.repository.get(case_id).seller_id)
+    content = form.file.file.read(StatementConfig().max_bytes + 1)
+    request = StatementUpload(**form.model_dump(exclude={"file"}))
+    return summary(service.upload_statement(case_id, request, content, actor.subject))
 
 
 @router.post("/cases/{case_id}/cic-inquiry", response_model=CaseSummary)

@@ -1,9 +1,9 @@
 ---
 id: statement-ocr
 tier: system-2-vision
-model: openrouter-vision
+model: config STATEMENT_OCR_MODEL
 temperature: 0
-endpoint: node verify_statement
+endpoint: POST /v1/cases/{case_id}/statements/upload
 ---
 
 # System

@@ -7,7 +7,7 @@ Hướng dẫn cho Codex, Claude Code và người mới vào repo. Đọc file 
 Riverbank: cho vay vốn lưu động cho seller Shopee dựa trên dòng tiền payout.
 Tài liệu chuẩn nằm trong `docs/`: BRD (nghiệp vụ), SRS (yêu cầu), TDD (thiết kế), business-flows.html (luồng LOS và core).
 Số và rule: code đang chạy là chuẩn (chốt 23/10/2026). `policy/parameters.yaml` là bản chép của `CashFlowConfig` và `PolicyConfig`, có test kiểm khớp. Đổi ngưỡng thì đổi code, `parameters.yaml`, `policy/policy.md` trong cùng PR.
-Hành vi chưa có code (agent LLM, Monitor, upload sao kê) thì docs là kế hoạch. Danh sách lệch ở `docs/Riverbank-spec-vs-code.md`.
+Hành vi chưa có code (agent LLM, Monitor) thì docs là kế hoạch. Danh sách lệch ở `docs/Riverbank-spec-vs-code.md`.
 
 ## Ba nguyên tắc không được phá
 
@@ -31,6 +31,7 @@ api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addliv
 api/db/         schema.sql, một DB Postgres cho feature lẫn trạng thái app
 api/routers/    HTTP endpoint, mỏng, gọi services
 api/services/underwriting/  luồng hồ sơ: service.py, models.py, repository.py, evidence.py (evidence và template câu), memo.py (MemoWriter template hoặc LLM, MemoValidator, MemoComposer), sources.py
+api/services/statements/    đọc sao kê: documents.py (nhận loại file, đọc số VND, ngày), parsers.py (CSV, PDF kẻ bảng, PDF theo vị trí chữ), vision.py (OCR qua LlmClient), classifiers.py (dòng tiền sàn: regex lọc rồi Jev quyết), reader.py (đọc, che PII, cộng tổng), factory.py
 api/services/guard.py       OutputGuard: số phải có trong bằng chứng, từ cấm, câu nói ngược trạng thái. Dùng cho memo, eval và Copilot
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động

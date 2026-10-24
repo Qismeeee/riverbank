@@ -145,13 +145,12 @@ POST /cases ──> NO_LOAN_NEEDED
 | `GET` | `/v1/cases/{case_id}` | underwriter | Có | FR-30 |
 | `GET` | `/v1/cases/{case_id}/evidence/{evidence_id}` | underwriter | Có | FR-07, FR-30 |
 | `POST` | `/v1/cases/{case_id}/statements` | underwriter | Có | FR-21..FR-23 |
+| `POST` | `/v1/cases/{case_id}/statements/upload` | seller của hồ sơ, underwriter | Có | FR-22, FR-23 |
 | `POST` | `/v1/cases/{case_id}/cic-inquiry` | underwriter | Có | FR-16b |
 | `POST` | `/v1/cases/{case_id}/decisions` | underwriter | Có | FR-31..FR-34 |
 | `POST` | `/v1/cases/{case_id}/handoff` | underwriter | Có | FR-35, FR-36 |
 | `POST` | `/v1/copilot/extract-plan` | seller | Có | FR-02, FR-03 |
 | `POST` | `/v1/cases/{case_id}/copilot/ask` | seller | Chưa có | FR-27 |
-| `POST` | `/v1/cases/{case_id}/statements/presign` | seller | Chưa có | FR-22 |
-| `POST` | `/v1/cases/{case_id}/statements/confirm` | seller | Chưa có | FR-22 |
 | `POST` | `/v1/webhooks/los-status` | LOS ngân hàng | Chưa có | FR-36 |
 | `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter (demo) | Chưa có | FR-37 |
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
@@ -395,7 +394,7 @@ Server băm lại `payload` mỗi lần đọc. Lệch mã băm thì `409 EVIDEN
 
 ### 4.8 `POST /v1/cases/{case_id}/statements`, Nhập tổng sao kê
 
-Bản hiện tại để người thẩm định nhập tổng tiền sàn trên sao kê. Đầu upload file của seller ở mục 6.3.
+Người thẩm định tự nhập tổng tiền sàn trên sao kê. Nộp file thì dùng mục 4.8a, hai đầu dùng chung cách đối chiếu dưới đây.
 
 **Header:** `X-Actor-Role: underwriter`.
 
@@ -419,6 +418,48 @@ Bản hiện tại để người thẩm định nhập tổng tiền sàn trên
 **Phản hồi `200`:** `CaseSummary`.
 
 **Lỗi:** `409 STATEMENT_NOT_REQUESTED`, `409 CASE_VERSION_CONFLICT`, `422 INVALID_STATEMENT_PERIOD`, `422 STATEMENT_PERIOD_NOT_COVERED`.
+
+### 4.8a `POST /v1/cases/{case_id}/statements/upload`, Nộp file sao kê
+
+Seller của hồ sơ hoặc người thẩm định nộp file. Hệ thống bóc dòng, phân loại dòng nào là tiền sàn, code cộng tổng rồi đối chiếu như mục 4.8. Model không cộng, không tính phần trăm lệch.
+
+**Header:** `Authorization: Bearer`. Seller khác hồ sơ thì `403 SELLER_SCOPE_MISMATCH`.
+
+**Điều kiện:** như mục 4.8. Hệ thống kiểm điều kiện và kỳ trước khi đọc file, nên hồ sơ sai trạng thái không tốn lượt gọi model.
+
+**Thân yêu cầu:** `multipart/form-data`.
+
+| Trường | Kiểu | Ràng buộc |
+|---|---|---|
+| `expected_version` | int | ≥ 1 |
+| `period_start`, `period_end` | date | Như mục 4.8 |
+| `file` | file | CSV, PDF, PNG, JPEG. Tối đa 10 MB. Loại file xác định theo byte đầu, không tin `Content-Type` của client |
+
+**Cách đọc file** (lần lượt, dừng ở cách đầu tiên ra được dòng):
+
+1. CSV: parser Python, tự nhận dấu phân cách `,` `;` tab.
+2. PDF có lớp chữ và kẻ bảng: `pdfplumber` đọc bảng, bảng tràn sang trang sau không lặp header vẫn đọc tiếp. Không gọi model, không tốn phí.
+3. PDF có lớp chữ nhưng không kẻ bảng: đọc theo vị trí chữ. Cột lấy từ vị trí header, ô chữ cách nhau xa mới tách cột, nên số nằm trong mô tả (ví dụ "tuần 40") không bị hiểu là số tiền. Dòng mô tả xuống hàng được ghép vào giao dịch gần nhất.
+4. PDF scan hoặc ảnh: prompt `statement-ocr` qua model đọc ảnh, mỗi trang một lượt, tối đa 10 trang. Chỉ chạy khi `RIVERBANK_STATEMENT_OCR=llm`. Model đặt ở `STATEMENT_OCR_PROVIDER`, `STATEMENT_OCR_MODEL`.
+
+Cột được nhận theo từ khóa trong từng phần của header (header song ngữ như `Số tiền ghi có/Credit` tách theo `/`), tiếng Việt hoặc tiếng Anh, có dấu hoặc không: ngày hoặc thời gian, nội dung, diễn giải, mô tả, ghi có, phát sinh có, ghi nợ, phát sinh nợ, số dư (bỏ qua), hoặc một cột số tiền có dấu âm. Nhiều cột cùng vai trò thì chọn cột khớp cụm dài nhất, ví dụ `Debit` thắng `No.`. Không có header ngày thì lấy cột có từ 80% ô là ngày. Số tiền đọc được cả `70.000.000`, `70,000,000`, `70.000.000,00`.
+
+**Phân loại dòng:** chỉ dòng tiền vào. `RIVERBANK_STATEMENT_CLASSIFIER=jev` (mặc định): regex `RIVERBANK_STATEMENT_PAYOUT_PATTERN` (mặc định `shopee`, so trên mô tả đã bỏ dấu) chỉ lọc ứng viên, Jev quyết từng ứng viên theo lô 20, ngưỡng 0,5. Nhờ vậy "NGUYEN VAN A chuyen tien hang shopee" không bị tính là payout chỉ vì có chữ Shopee. Jev lỗi thì `503`, không tự cho qua. `pattern` chỉ dùng regex, để chạy offline.
+
+**Ngưỡng lệch:** `PolicyConfig.statement_mismatch_bps` (1500, tức 15%), dùng chung cho cả hai đầu sao kê. Nằm trong `policy_hash`.
+
+**Cộng tổng:** `marketplace_total` là tổng ghi có của dòng tiền sàn có ngày trong `[period_start, period_end)`. Dòng tiền sàn thiếu ngày hoặc thiếu số tiền thì `422 STATEMENT_LINES_UNREADABLE`, `details` là chỉ số dòng, không đoán.
+
+**Lưu:** không lưu file gốc. E8 giữ `document_ref = sha256:<băm file>`, `source = uploaded_file`, `submitted_by`, `file` (`media_type`, `pages`), `extraction` (`parser`, `model`, `prompt_version`, `notes`), `classifier`, `coverage` (ngày đầu, ngày cuối trên sao kê) và `statement_lines` (từng dòng, đã che SĐT, CCCD, số tài khoản, kèm `is_payout`, `probability`, `in_period`).
+
+**Phản hồi `200`:** `CaseSummary`.
+
+**Lỗi:** như mục 4.8, thêm `413 STATEMENT_TOO_LARGE`, `415 STATEMENT_FORMAT_UNSUPPORTED`, `422 STATEMENT_EMPTY`, `422 STATEMENT_UNREADABLE` (`details` liệt kê từng cách đã thử), `422 STATEMENT_LINES_UNREADABLE`, `422 STATEMENT_TOO_MANY_PAGES`, `503 STATEMENT_OCR_UNAVAILABLE`, `503 STATEMENT_CLASSIFIER_UNAVAILABLE`.
+
+```bash
+curl -X POST $API/v1/cases/$C/statements/upload -H "Authorization: Bearer $T" \
+  -F expected_version=1 -F period_start=2026-09-28 -F period_end=2026-10-12 -F file=@saoke.pdf
+```
 
 ---
 
@@ -584,6 +625,11 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `INVALID_RISK_RESULT` | 422 | Tạo hồ sơ | PD ngoài khoảng, thiếu yếu tố, hoặc báo thiếu dữ liệu mà vẫn có PD |
 | `INVALID_STATEMENT_PERIOD` | 422 | Sao kê | Ngày sai định dạng |
 | `STATEMENT_PERIOD_NOT_COVERED` | 422 | Sao kê | Kỳ không trùng trọn các tuần payout |
+| `STATEMENT_EMPTY`, `STATEMENT_UNREADABLE`, `STATEMENT_LINES_UNREADABLE`, `STATEMENT_TOO_MANY_PAGES` | 422 | Nộp sao kê | File rỗng, không đọc được bảng, dòng tiền sàn thiếu ngày hoặc số, quá 10 trang |
+| `STATEMENT_TOO_LARGE` | 413 | Nộp sao kê | File trên 10 MB |
+| `STATEMENT_FORMAT_UNSUPPORTED` | 415 | Nộp sao kê | Không phải CSV, PDF, PNG, JPEG |
+| `STATEMENT_OCR_UNAVAILABLE`, `STATEMENT_CLASSIFIER_UNAVAILABLE` | 503 | Nộp sao kê | Model đọc ảnh hoặc Jev lỗi |
+| `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
 | `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
 | `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
 | `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE` | 503 | `/v1/*` | Cấu hình sai |
@@ -655,30 +701,9 @@ Seller hỏi lại trên số đã khóa của hồ sơ.
 - Prompt `copilot-qa`. Đầu vào chỉ là payload bằng chứng của lần chạy cuối.
 - Câu trả lời đi qua cùng bộ kiểm tra số và từ cấm như tờ trình. Không nêu lãi và phí khi chưa có biểu phí ngân hàng (FR-27).
 
-### 6.3 `POST /v1/cases/{case_id}/statements/presign` và `/statements/confirm`
+### 6.3 Nộp file sao kê
 
-Seller nộp file sao kê. Thay cho đầu nhập tổng ở mục 4.8 khi làm xong.
-
-`presign` (hồ sơ phải ở `AWAITING_STATEMENT`):
-
-```json
-{ "file_name": "saoke-thang9.pdf", "content_type": "application/pdf" }
-```
-
-```json
-{ "upload_url": "https://...", "object_key": "statements/<case_id>/<uuid>.pdf", "expires_at": "..." }
-```
-
-`confirm`:
-
-```json
-{ "expected_version": 1, "object_key": "statements/<case_id>/<uuid>.pdf", "period_start": "2026-08-03", "period_end": "2026-10-26" }
-```
-
-- CSV đi parser Python. PDF và ảnh đi `statement-ocr`, chỉ bóc dòng `{date, raw_desc, credit_amount}`.
-- Jev `jev-line-classifier` gắn từng dòng có phải payout sàn. Python cộng tổng, không để model cộng.
-- So như R05 hiện tại: lệch trên 15% thì R05 fail và `ESCALATED`. Kế hoạch thêm lý do riêng khi phần xin vượt hạn mức chỉ dựa vào dòng ngoài sàn (`policy/policy.md` mục 7). Cả hai sang `ESCALATED`.
-- Lưu bảng đối chiếu thành `E8`. Phản hồi `CaseSummary`.
+Đã có ở mục 4.8a. Bản đầu nhận file thẳng qua API, không qua S3 presign, và không lưu file gốc. Khi cần lưu bản gốc theo yêu cầu ngân hàng thì thêm presign S3 và giữ nguyên phần đọc, phân loại, đối chiếu.
 
 ### 6.4 `POST /v1/webhooks/los-status`
 

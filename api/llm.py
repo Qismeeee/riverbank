@@ -20,6 +20,7 @@ class LlmRequest:
     schema: dict
     schema_name: str
     temperature: float | None = 0
+    images: tuple[str, ...] = ()
 
     def fingerprint(self, model: str) -> str:
         encoded = json.dumps(
@@ -65,12 +66,19 @@ class OpenAICompatibleClient(LlmClient):
         from openai import OpenAIError
 
         options = {} if request.temperature is None else {"temperature": request.temperature}
+        text = json.dumps(request.user, ensure_ascii=False)
+        content = (
+            [{"type": "text", "text": text}]
+            + [{"type": "image_url", "image_url": {"url": url}} for url in request.images]
+            if request.images
+            else text
+        )
         try:
             completion = self._client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": request.system},
-                    {"role": "user", "content": json.dumps(request.user, ensure_ascii=False)},
+                    {"role": "user", "content": content},
                 ],
                 response_format={
                     "type": "json_schema",
@@ -114,13 +122,16 @@ PROVIDERS = {
 }
 
 
-def build_llm_client(purpose: str) -> LlmClient:
-    if config.LLM_PROVIDER not in PROVIDERS:
+def build_llm_client(
+    purpose: str, provider: str | None = None, model: str | None = None
+) -> LlmClient:
+    provider = provider or config.LLM_PROVIDER
+    if provider not in PROVIDERS:
         raise LlmError("LLM_PROVIDER_UNKNOWN")
-    api_key, base_url = PROVIDERS[config.LLM_PROVIDER]()
+    api_key, base_url = PROVIDERS[provider]()
     client: LlmClient = OpenAICompatibleClient(
         api_key,
-        config.LLM_MODEL,
+        model or config.LLM_MODEL,
         base_url,
         config.LLM_TIMEOUT_SECONDS,
         config.LLM_MAX_RETRIES,
