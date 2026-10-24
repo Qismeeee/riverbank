@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from policy import PolicyInput, default_engine
+from policy import RISK_RULE_IDS, PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
 
 from .evidence import digest, emit
@@ -37,13 +37,20 @@ def _valid_risk(risk: dict) -> bool:
 
 
 def _route(results: list, risk: dict, statement: dict | None) -> tuple[str, str | None]:
-    failures = [r for r in results if r.hard and not r.passed]
+    risk_missing = bool(risk.get("missing_fields"))
+    failures = [
+        r
+        for r in results
+        if r.hard
+        and not r.passed
+        and not (risk_missing and r.missing_data and r.rule_id in RISK_RULE_IDS)
+    ]
     awaiting_statement = bool(failures) and all(
         r.rule_id == "R05" and r.missing_data for r in failures
     )
     if (failures and not awaiting_statement) or (statement and not statement["matched"]):
         return "ESCALATED", "HARD_POLICY_FAILURE"
-    if risk.get("missing_fields"):
+    if risk_missing:
         return "ESCALATED", "RISK_DATA_MISSING"
     if awaiting_statement:
         return "AWAITING_STATEMENT", "STATEMENT_REQUIRED"
@@ -116,7 +123,13 @@ class UnderwritingService:
         return self.repository.create(case, key, request_hash)
 
     def _policy_input(
-        self, case: Case, features: dict, cf: dict, cic: dict, statement: dict | None
+        self,
+        case: Case,
+        features: dict,
+        cf: dict,
+        risk: dict,
+        cic: dict,
+        statement: dict | None,
     ) -> PolicyInput:
         return PolicyInput(
             amount=cf["amount_proposed"],
@@ -130,6 +143,7 @@ class UnderwritingService:
             cic_group=cic.get("bureau_group"),
             cic_outstanding=cic.get("outstanding"),
             requested_amount=max(case.plan["requested_amount"], cf["amount_proposed"]),
+            pd_bps=risk.get("pd_bps"),
         )
 
     def _inquire_cic(self, case: Case, inp: GateInput, now: datetime) -> dict:
@@ -203,21 +217,20 @@ class UnderwritingService:
         previous = case.status
         case.reason = None
         if result.loan_needed:
-            # A new run after statement/counter keeps the original risk and CIC snapshot.
+            # PD is re-scored on each run's terms. A new run keeps the original CIC snapshot.
+            risk = self.risk.predict(RiskInput(features, case.plan, cf))
+            if not _valid_risk(risk):
+                raise WorkflowError("INVALID_RISK_RESULT", 422)
             if case.runs:
-                risk = deepcopy(case.runs[-1]["risk"])
                 cic = deepcopy(case.runs[-1]["cic"])
             else:
-                risk = self.risk.predict(RiskInput(features, case.plan, cf))
-                if not _valid_risk(risk):
-                    raise WorkflowError("INVALID_RISK_RESULT", 422)
                 cic = self._inquire_cic(case, GateInput(features, cf, risk), now)
             if cic.get("seller_id") != case.seller_id:
                 raise WorkflowError("CIC_SCOPE_MISMATCH", 403)
             run["risk"], run["cic"] = risk, cic
             refs["E6"] = emit(case, run_id, "E6", risk, now.isoformat())
             refs["E6a"] = emit(case, run_id, "E6a", cic, now.isoformat())
-            policy_input = self._policy_input(case, features, cf, cic, statement)
+            policy_input = self._policy_input(case, features, cf, risk, cic, statement)
             policy_input.evidence_ids.update(
                 {
                     "R01": refs["E5"]["evidence_id"],
@@ -229,6 +242,7 @@ class UnderwritingService:
                     "R06": refs["E6a"]["evidence_id"],
                     "R07": refs["E6a"]["evidence_id"],
                     "R05": refs["E4"]["evidence_id"],
+                    "R10": refs["E6"]["evidence_id"],
                 }
             )
             if statement:

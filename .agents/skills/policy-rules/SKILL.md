@@ -1,6 +1,6 @@
 ---
 name: policy-rules
-description: Thêm, sửa hoặc đổi ngưỡng rule chính sách trong api/policy (R01 đến R09). Dùng khi đụng FR-17 đến FR-20, FR-32, BL-01 đến BL-11, hoặc khi người duyệt cần lý do rule fail.
+description: Thêm, sửa hoặc đổi ngưỡng rule chính sách trong api/policy (R01 đến R10). Dùng khi đụng FR-17 đến FR-20, FR-32, BL-01 đến BL-11, hoặc khi người duyệt cần lý do rule fail.
 ---
 
 # Policy Engine

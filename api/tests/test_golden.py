@@ -103,6 +103,7 @@ def test_parameters_mirror_code():
     assert ratio == pc.max_outstanding_to_monthly_payout
     assert float(policy["deduction_cap_of_stress_payout"]) == pc.deduction_cap_of_stress_payout
     assert policy["e_lending_cap_vnd"] == pc.e_lending_cap
+    assert policy["max_pd_bps"] == pc.max_pd_bps
     assert cap["max_requested_amount_vnd"] == _field_bound(Plan, "requested_amount", "le")
     assert cap["max_sell_weeks"] == _field_bound(Plan, "sell_weeks", "le")
     assert cap["max_supplier_rows"] == _field_bound(Plan, "supplier_schedule", "max_length")

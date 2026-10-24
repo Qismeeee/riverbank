@@ -95,6 +95,13 @@ def r09_e_lending_cap(p: PolicyInput, c: PolicyConfig) -> RuleResult:
     )
 
 
+def r10_pd(p: PolicyInput, c: PolicyConfig) -> RuleResult:
+    if p.pd_bps is None:
+        return _missing("R10", True, "PD")
+    ok = p.pd_bps <= c.max_pd_bps
+    return _result("R10", True, ok, f"PD {p.pd_bps} điểm cơ bản, trần {c.max_pd_bps}")
+
+
 RULES: list[Rule] = [
     Rule("R09", True, r09_e_lending_cap),
     Rule("R01", True, r01_max_amount),
@@ -105,7 +112,10 @@ RULES: list[Rule] = [
     Rule("R05", True, r05_docs_when_over_platform),
     Rule("R06", True, r06_cic_group),
     Rule("R07", False, r07_outstanding),
+    Rule("R10", True, r10_pd),
 ]
+
+RISK_RULE_IDS = frozenset({"R10"})
 
 
 def default_engine(config: PolicyConfig | None = None) -> PolicyEngine:

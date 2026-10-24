@@ -722,7 +722,7 @@ Ngày 23/10/2026 team chốt: số và rule theo code đang chạy. `policy/poli
 | Trần tuần bán | `sell_weeks` ≤ 26 |
 | Trần kỳ hạn | 26 tuần ở engine và R04 |
 | Làm tròn số đề xuất | Lên bội 5.000.000, không vượt `gap × 1,15`. Gap 80.000.000 ra 90.000.000 |
-| Bộ rule | R01 đến R09 trong `api/policy/rules.py`, nghĩa ở `policy/policy.md` |
+| Bộ rule | R01 đến R10 trong `api/policy/rules.py`, nghĩa ở `policy/policy.md` |
 | So R05 | Đòi sao kê khi `max(xin, đề xuất) > 2,5 ×` mức sàn. Bằng mốc thì không đòi |
 | Trạng thái bàn giao | Hồ sơ giữ `ACCEPTED` hoặc `REJECTED`, kết quả gửi ở `handoff.status` |
 | Lúc bàn giao | Người bấm `POST /handoff` |

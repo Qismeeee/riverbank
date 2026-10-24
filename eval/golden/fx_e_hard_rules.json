@@ -55,7 +55,8 @@
           "R03",
           "R05",
           "R06",
-          "R07"
+          "R07",
+          "R10"
         ],
         "amount_proposed": 90000000
       }
@@ -80,7 +81,8 @@
           "R03",
           "R05",
           "R06",
-          "R07"
+          "R07",
+          "R10"
         ],
         "amount_proposed": 90000000
       }
@@ -107,7 +109,8 @@
           "R03",
           "R05",
           "R06",
-          "R07"
+          "R07",
+          "R10"
         ],
         "amount_proposed": 90000000
       }
@@ -134,7 +137,8 @@
           "R03",
           "R05",
           "R06",
-          "R07"
+          "R07",
+          "R10"
         ],
         "amount_proposed": 90000000
       }
@@ -161,7 +165,8 @@
           "R03",
           "R05",
           "R06",
-          "R07"
+          "R07",
+          "R10"
         ],
         "amount_proposed": 90000000
       }
@@ -188,12 +193,140 @@
           "R03",
           "R05",
           "R06",
-          "R07"
+          "R07",
+          "R10"
         ],
         "gap": 150000000,
         "amount_proposed": 165000000,
         "tenor_weeks": 15,
         "weekly_deduction": 11000000
+      }
+    },
+    {
+      "variant_id": "pd_above_cap",
+      "input": {
+        "pd_bps": 3001
+      },
+      "expected": {
+        "status": "ESCALATED",
+        "reason": "HARD_POLICY_FAILURE",
+        "failed_rules": [
+          "R10"
+        ],
+        "hard_failed_rules": [
+          "R10"
+        ],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07",
+          "R10"
+        ],
+        "amount_proposed": 90000000
+      }
+    },
+    {
+      "variant_id": "pd_at_cap",
+      "input": {
+        "pd_bps": 3000
+      },
+      "expected": {
+        "status": "PENDING_REVIEW",
+        "reason": null,
+        "failed_rules": [],
+        "hard_failed_rules": [],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07",
+          "R10"
+        ],
+        "amount_proposed": 90000000
+      }
+    },
+    {
+      "variant_id": "pd_missing",
+      "input": {
+        "pd_bps": null
+      },
+      "expected": {
+        "status": "ESCALATED",
+        "reason": "RISK_DATA_MISSING",
+        "failed_rules": [
+          "R10"
+        ],
+        "hard_failed_rules": [
+          "R10"
+        ],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07",
+          "R10"
+        ],
+        "amount_proposed": 90000000
+      }
+    },
+    {
+      "variant_id": "pd_missing_and_cic_group_3",
+      "input": {
+        "pd_bps": null,
+        "cic_group": 3
+      },
+      "expected": {
+        "status": "ESCALATED",
+        "reason": "HARD_POLICY_FAILURE",
+        "failed_rules": [
+          "R06",
+          "R10"
+        ],
+        "hard_failed_rules": [
+          "R06",
+          "R10"
+        ],
+        "cic_called": true,
+        "pd_scored": true,
+        "auto_rejected": false,
+        "rules_evaluated": [
+          "R09",
+          "R01",
+          "R04",
+          "R08",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07",
+          "R10"
+        ],
+        "amount_proposed": 90000000
       }
     }
   ]

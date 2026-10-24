@@ -97,6 +97,14 @@ DEMO_PROFILES = {
         "top3_share": 0.45,
         "rating": 4.8,
     },
+    "fashion_young": {
+        "archetype": "fashion",
+        "shop_age_months": 7,
+        "return_rate": 0.13,
+        "n_products": 12,
+        "top3_share": 0.8,
+        "rating": 4.2,
+    },
 }
 
 
@@ -107,6 +115,7 @@ def demo_source(now: datetime) -> MappingFeatureSource:
         ("demo-a", 40_000_000, 90_000_000, DEMO_PROFILES["fashion"]),
         ("demo-b", 70_000_000, 90_000_000, DEMO_PROFILES["fashion"]),
         ("demo-c", 70_000_000, 30_000_000, DEMO_PROFILES["electronics"]),
+        ("demo-d", 70_000_000, 90_000_000, DEMO_PROFILES["fashion_young"]),
     ):
         consent = {
             "reference": f"demo-consent-{seller}",

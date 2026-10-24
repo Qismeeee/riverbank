@@ -14,6 +14,7 @@ def _case_b(**kw) -> PolicyInput:
         return_rate=0.05,
         cic_group=1,
         cic_outstanding=0,
+        pd_bps=612,
     )
     base.update(kw)
     return PolicyInput(**base)
@@ -84,3 +85,15 @@ def test_r05_uses_requested_amount_when_provided():
     )
     result = r05_docs_when_over_platform(inp, PolicyConfig())
     assert not result.passed and result.missing_data
+
+
+def test_r10_escalates_only_above_pd_cap():
+    cap = ENGINE.cfg.max_pd_bps
+    assert "R10" not in ENGINE.evaluate(_case_b(pd_bps=cap)).failed_rule_ids
+    out = ENGINE.evaluate(_case_b(pd_bps=cap + 1))
+    assert out.hard_fail and out.failed_rule_ids == ["R10"]
+
+
+def test_r10_missing_pd_is_missing_data():
+    result = next(r for r in ENGINE.evaluate(_case_b(pd_bps=None)).results if r.rule_id == "R10")
+    assert result.hard and not result.passed and result.missing_data

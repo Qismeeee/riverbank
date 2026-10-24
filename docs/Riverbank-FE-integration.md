@@ -24,7 +24,7 @@ async function login(subject, role, passcode) {
 }
 ```
 
-- Seller: `subject` là `seller_id` (`demo-a`, `demo-b`, `demo-c`), `role: "seller"`.
+- Seller: `subject` là `seller_id` (`demo-a`, `demo-b`, `demo-c`, `demo-d`), `role: "seller"`. `demo-d` cùng số với `demo-b` nhưng hồ sơ shop rủi ro hơn, PD vượt trần nên R10 fail và hồ sơ sang `ESCALATED`.
 - Người thẩm định: `subject` là mã người duyệt bất kỳ, ví dụ `uw-01`, `role: "underwriter"`.
 - `passcode` là mã demo chung, chủ dự án đưa riêng. Không ghi mã vào code FE.
 - Lưu `access_token` trong bộ nhớ trang hoặc `sessionStorage`. Hết hạn (`expires_at`, mặc định 8 giờ) thì đăng nhập lại.

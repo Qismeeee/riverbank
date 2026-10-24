@@ -133,6 +133,50 @@
       "status": "ESCALATED"
     },
     {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-pd_above_cap",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-pd_at_cap",
+      "cic_called": true,
+      "expected_status": "PENDING_REVIEW",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "PENDING_REVIEW"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-pd_missing",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
+      "amount_proposed": 90000000,
+      "case_id": "FX-E-pd_missing_and_cic_group_3",
+      "cic_called": true,
+      "expected_status": "ESCALATED",
+      "gap": 80000000,
+      "mismatched_keys": [],
+      "passed": true,
+      "pd_scored": true,
+      "status": "ESCALATED"
+    },
+    {
       "amount_proposed": 0,
       "case_id": "FX-F-injection",
       "cic_called": false,
@@ -177,10 +221,10 @@
       "status": "INVALID_INPUT"
     }
   ],
-  "golden_digest": "7f6f3afe6a594a4c252b7e9b444ad01e86eb0ebccac77ae29742cca9a6b10a9a",
+  "golden_digest": "ce2ed7a660767676fd2f36075a6ae877dd81fc7e7f51f83d5d93966801b9f8af",
   "summary": {
     "failed": 0,
-    "passed": 16,
-    "total": 16
+    "passed": 20,
+    "total": 20
   }
 }

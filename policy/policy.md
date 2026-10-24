@@ -26,7 +26,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 3. Thiếu consent hiệu lực → `422 CONSENT_REQUIRED`, không đọc dữ liệu sàn. Snapshot feature sai → lỗi `422` hoặc `403` tương ứng.
 4. Tính Gap trên kịch bản cơ sở.
 5. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule.
-6. Gap > 0 → chấm PD (E6), qua Jev gate rồi mới tra CIC (E6a, xem mục 3), chạy đủ chín rule (E7).
+6. Gap > 0 → chấm PD (E6), qua Jev gate rồi mới tra CIC (E6a, xem mục 3), chạy đủ mười rule (E7).
 7. Có rule cứng fail khác R05 thiếu sao kê, hoặc sao kê lệch → `ESCALATED`, lý do `HARD_POLICY_FAILURE`.
 8. Thiếu dữ liệu hồ sơ shop nên không chấm được PD → `ESCALATED`, lý do `RISK_DATA_MISSING`.
 9. Rule cứng duy nhất fail là R05 vì thiếu kết quả sao kê → `AWAITING_STATEMENT`, lý do `STATEMENT_REQUIRED`.
@@ -37,8 +37,8 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 ## 3. Việc không nằm trong rule
 
 - Số seller xin không bao giờ là số đề xuất. Số đề xuất là đầu ra CashFlow Engine.
-- PD là thông tin cho người duyệt. Không có ngưỡng PD để tự chuyển trạng thái. Bản prod dùng `LightGbmRiskModel` (`api/services/underwriting/risk.py`) bọc model `api/services/risk.py`. Đầu vào gồm hồ sơ shop trong snapshot (`archetype`, `shop_age_months`, `n_products`, `top3_share`, `rating`, `return_rate`), payout 12 tuần gần nhất (`payout_profile`, dùng chung với lúc train) và số của CashFlow Engine. Kết quả E6 có `pd_bps`, tối đa 5 yếu tố SHAP và lời công bố "PD ước lượng trên dữ liệu mô phỏng". Thiếu một trường hồ sơ shop thì không chấm, E6 ghi `missing_fields`, hồ sơ sang `ESCALATED` lý do `RISK_DATA_MISSING`. `RIVERBANK_WORKFLOW_RISK=demo` chuyển về `DemoRiskModel` 500 bps cố định, bộ golden dùng bản này để số không đổi theo model.
-- Jev gate trước CIC: hỏi Jev (`typesafe/jev-1.14`) câu noul "đủ điều kiện tra CIC?" với state chỉ gồm số đã tính (gap, đề xuất, kỳ trích, payout, tuổi shop, hoàn hàng, rating, PD), không có định danh. Xác suất ≥ 0,6 mới gọi CIC. Dưới ngưỡng, lỗi mạng hoặc Jev trả sai định dạng thì không gọi CIC và không mặc định cho qua: E6a ghi `source = not_queried`, R06 fail thiếu dữ liệu, hồ sơ `ESCALATED` lý do `HARD_POLICY_FAILURE`. Quyết định gate (`probability`, `threshold`, `eligible`, `model`, `error`) lưu trong E6a. Lần chạy lại sau sao kê hoặc duyệt số khác dùng lại E6a cũ, không hỏi Jev lại.
+- PD vào R10 (mục 4). Vượt `max_pd_bps` thì hồ sơ sang người, không tự từ chối. Bản prod dùng `LightGbmRiskModel` (`api/services/underwriting/risk.py`) bọc model `api/services/risk.py`. Đầu vào gồm hồ sơ shop trong snapshot (`archetype`, `shop_age_months`, `n_products`, `top3_share`, `rating`, `return_rate`), payout 12 tuần gần nhất (`payout_profile`, dùng chung với lúc train) và số của CashFlow Engine. Kết quả E6 có `pd_bps`, tối đa 5 yếu tố SHAP và lời công bố "PD ước lượng trên dữ liệu mô phỏng". Thiếu một trường hồ sơ shop thì không chấm, E6 ghi `missing_fields`, hồ sơ sang `ESCALATED` lý do `RISK_DATA_MISSING`. `RIVERBANK_WORKFLOW_RISK=demo` chuyển về `DemoRiskModel` 500 bps cố định, bộ golden dùng bản này để số không đổi theo model.
+- Jev gate trước CIC: hỏi Jev (`typesafe/jev-1.14`) câu noul "đủ điều kiện tra CIC?" với state chỉ gồm số đã tính (gap, đề xuất, kỳ trích, payout, tuổi shop, hoàn hàng, rating, PD), không có định danh. Xác suất ≥ 0,6 mới gọi CIC. Dưới ngưỡng, lỗi mạng hoặc Jev trả sai định dạng thì không gọi CIC và không mặc định cho qua: E6a ghi `source = not_queried`, R06 fail thiếu dữ liệu, hồ sơ `ESCALATED` lý do `HARD_POLICY_FAILURE`. Quyết định gate (`probability`, `threshold`, `eligible`, `model`, `error`) lưu trong E6a. Lần chạy lại sau sao kê hoặc duyệt số khác dùng lại E6a cũ, không hỏi Jev lại. PD thì chấm lại trên số tiền và kỳ hạn của lần chạy đó, vì hai số này là feature của model.
 - Giới tính, tôn giáo, dân tộc, sức khỏe không có trong feature hay rule. Nhắc tới trong `note` thì chặn cả hồ sơ.
 - Lãi và phí không có trong bản seller vì chưa có biểu phí ngân hàng.
 - Tờ trình không viết điều khoản hợp đồng, khế ước, ủy nhiệm chi.
@@ -49,7 +49,7 @@ Mỗi rule là hàm thuần nhận `PolicyInput`, trả `rule_id`, `hard`, `pass
 
 `PolicyInput` lấy từ lần chạy engine: `amount` là số đề xuất (hoặc số người duyệt sửa), `weekly_deduction` là kỳ trích lớn nhất của lịch, `requested_amount = max(số seller xin, amount)`, `platform_supported_amount`, `shop_age_months`, `return_rate` từ E4, `cic_group`, `cic_outstanding` từ E6a, `docs_verified` từ kết quả sao kê.
 
-Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07.
+Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 
 ### R01 Hạn mức sản phẩm
 
@@ -108,13 +108,21 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07.
 - Pháp chế còn phải xác nhận cách áp khi đứng tên hộ kinh doanh.
 - Bằng chứng E5.
 
+### R10 Trần PD
+
+- Cứng. Đạt khi `pd_bps <= max_pd_bps` (3.000, tức PD 30%).
+- Ngưỡng chọn trên tập test synthetic 5.000 shop (seed 11, cùng generator lúc train): trên 3.000 bps là 19% hồ sơ, tỷ lệ vỡ nợ 48% so với 14% ở nhóm còn lại, bắt được 45% số ca vỡ nợ. Dữ liệu là mô phỏng nên ngưỡng chỉ là ví dụ, ngân hàng chốt lại trên dữ liệu thật.
+- Không chấm được PD thì R10 fail thiếu dữ liệu. Khi đó trạng thái là `RISK_DATA_MISSING`, trừ khi có rule cứng khác fail.
+- Người duyệt hạ số tiền hoặc kỳ hạn bằng `ACCEPT_COUNTER` thì PD được chấm lại trên số mới.
+- Bằng chứng E6.
+
 ## 5. Nhánh trạng thái sau rule
 
 | Điều kiện, xét từ trên xuống | Trạng thái | `reason` |
 |---|---|---|
 | Gap = 0 | `NO_LOAN_NEEDED` | `null` |
 | Rule cứng khác fail, hoặc sao kê lệch | `ESCALATED` | `HARD_POLICY_FAILURE` |
-| Thiếu hồ sơ shop, không chấm được PD | `ESCALATED` | `RISK_DATA_MISSING` |
+| Thiếu hồ sơ shop, không chấm được PD, chỉ R10 fail vì thiếu PD | `ESCALATED` | `RISK_DATA_MISSING` |
 | Rule cứng duy nhất fail là R05 thiếu sao kê | `AWAITING_STATEMENT` | `STATEMENT_REQUIRED` |
 | Tờ trình không qua kiểm tra sau 3 lần | `ESCALATED` | `MEMO_VALIDATION_FAILED` |
 | Không rule cứng nào fail | `PENDING_REVIEW` | `null` |
@@ -127,8 +135,8 @@ Chỉ vai trò `underwriter`. Seller và tác nhân hệ thống bị từ chố
 
 | Quyết định | Hệ quả |
 |---|---|
-| `ACCEPT_PROPOSAL` | Chạy lại chín rule trên số đề xuất với bộ rule hiện tại. Bộ rule đổi từ lúc thẩm định → `409 POLICY_CHANGED_REASSESSMENT_REQUIRED`. Đạt thì `ACCEPTED` |
-| `ACCEPT_COUNTER` | Người nhập số tiền và kỳ hạn 2 đến 26 tuần. Engine giãn kỳ hạn 2 tuần một lần đến khi kỳ trích không vượt trần. Tạo lần chạy mới `trigger = COUNTER`, chạy lại chín rule. Rule cứng fail → `409 HARD_POLICY_FAILURE` kèm mã rule, không lưu |
+| `ACCEPT_PROPOSAL` | Chạy lại mười rule trên số đề xuất với bộ rule hiện tại. Bộ rule đổi từ lúc thẩm định → `409 POLICY_CHANGED_REASSESSMENT_REQUIRED`. Đạt thì `ACCEPTED` |
+| `ACCEPT_COUNTER` | Người nhập số tiền và kỳ hạn 2 đến 26 tuần. Engine giãn kỳ hạn 2 tuần một lần đến khi kỳ trích không vượt trần. Tạo lần chạy mới `trigger = COUNTER`, chấm lại PD, chạy lại mười rule. Rule cứng fail → `409 HARD_POLICY_FAILURE` kèm mã rule, không lưu |
 | `REJECT` | `REJECTED`. Gói bàn giao có `final_amount = null` |
 
 Quyết định chấp nhận hết hiệu lực sau 14 ngày. Hết hạn thì `POST /handoff` trả `409 DECISION_EXPIRED_REASSESSMENT_REQUIRED`. Nhật ký `case_events` chỉ thêm, không sửa, không xóa.

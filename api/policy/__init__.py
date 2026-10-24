@@ -1,7 +1,8 @@
 from .engine import PolicyConfig, PolicyEngine, PolicyInput, PolicyOutcome, Rule, RuleResult
-from .rules import RULES, default_engine
+from .rules import RISK_RULE_IDS, RULES, default_engine
 
 __all__ = [
+    "RISK_RULE_IDS",
     "RULES",
     "PolicyConfig",
     "PolicyEngine",
