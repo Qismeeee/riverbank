@@ -2,7 +2,7 @@ from pydantic import ValidationError
 
 from llm import LlmClient, LlmError, LlmRequest
 from prompts import Prompt
-from services.guardrail import GuardUnavailable, InputGuard, PiiRedactor
+from services.guardrail import InputGuard, PiiRedactor
 from services.underwriting.models import Plan, WorkflowError
 
 from .grounding import PlanGrounder
@@ -12,16 +12,12 @@ from .models import (
     ExtractPlanInput,
     ExtractPlanResponse,
     FieldIssue,
+    KnownPlan,
     PlanDraft,
 )
+from .replies import FIELD_LABELS, PlanReply
+from .screening import screen
 
-FIELD_LABELS = {
-    "lot_value": "giá trị lô hàng",
-    "cash_on_hand": "số vốn bạn đang có",
-    "supplier_schedule": "lịch trả tiền cho xưởng theo tuần",
-    "sell_weeks": "số tuần bán hết lô",
-    "requested_amount": "số tiền muốn vay",
-}
 EXTRACTION_SCHEMA = Extraction.model_json_schema()
 
 
@@ -33,53 +29,41 @@ class PlanExtractor:
         guard: InputGuard,
         redactor: PiiRedactor | None = None,
         grounder: PlanGrounder | None = None,
+        replies: PlanReply | None = None,
     ):
         self.llm, self.prompt, self.guard = llm, prompt, guard
         self.redactor = redactor or PiiRedactor()
         self.grounder = grounder or PlanGrounder()
+        self.replies = replies or PlanReply()
 
     def extract(self, request: ExtractPlanInput) -> ExtractPlanResponse:
         sanitized = self.redactor.redact(request.message)
-        self._screen(sanitized)
-        extraction, model = self._ask(sanitized)
+        screen(self.guard, sanitized)
+        extraction, model = self._ask(sanitized, request.known)
         draft = PlanDraft(
             seller_id=request.seller_id,
             shop_id=request.shop_id,
-            **self.grounder.ground(extraction, sanitized),
+            **self.grounder.ground(extraction, sanitized, request.known),
         )
         missing = [name for name in PLAN_FIELDS if getattr(draft, name) is None]
         issues = [] if missing else self._issues(draft)
+        question = self._question(extraction, missing)
         return ExtractPlanResponse(
             draft=draft,
             ready=not missing and not issues,
             missing_fields=missing,
             issues=issues,
-            clarifying_question=self._question(extraction, missing),
+            clarifying_question=question,
+            reply=self.replies.compose(draft, question, issues),
             sanitized_message=sanitized,
             prompt_version=self.prompt.version,
             model=model,
         )
 
-    def _screen(self, text: str) -> None:
-        try:
-            verdict = self.guard.check(text)
-        except GuardUnavailable as e:
-            raise WorkflowError("GUARD_UNAVAILABLE", 503) from e
-        if verdict.blocked:
-            raise WorkflowError(
-                "BLOCKED_INPUT",
-                422,
-                [
-                    {"flag": flag, "probability": p, "threshold": verdict.threshold}
-                    for flag, p in verdict.flags.items()
-                    if p >= verdict.threshold
-                ],
-            )
-
-    def _ask(self, text: str) -> tuple[Extraction, str]:
+    def _ask(self, text: str, known: KnownPlan | None) -> tuple[Extraction, str]:
         request = LlmRequest(
             system=self.prompt.system,
-            user={"message": text},
+            user={"message": text, "known": known.model_dump() if known else None},
             schema=EXTRACTION_SCHEMA,
             schema_name="plan_extraction",
             temperature=self.prompt.temperature,

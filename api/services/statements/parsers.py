@@ -1,12 +1,15 @@
 import csv
 import io
 import re
+import zipfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from itertools import islice
 
 from .documents import (
     CSV,
     PDF,
+    XLSX,
     ParsedStatement,
     StatementDocument,
     StatementLine,
@@ -143,6 +146,35 @@ class CsvStatementParser(TabularStatementParser):
             dialect = csv.excel
         rows = list(csv.reader(io.StringIO(text), dialect))
         return ParsedStatement(self.name, self.lines([rows]))
+
+
+class ExcelStatementParser(TabularStatementParser):
+    name = "xlsx"
+    media_types = frozenset({XLSX})
+
+    def __init__(self, max_rows: int = 50_000):
+        self.max_rows = max_rows
+
+    def parse(self, document: StatementDocument) -> ParsedStatement:
+        import openpyxl
+        from openpyxl.utils.exceptions import InvalidFileException
+
+        try:
+            book = openpyxl.load_workbook(
+                io.BytesIO(document.content), read_only=True, data_only=True
+            )
+        except (InvalidFileException, zipfile.BadZipFile, KeyError, ValueError, OSError):
+            return ParsedStatement(self.name, [], notes=["WORKBOOK_UNREADABLE"])
+        try:
+            tables = [
+                [list(row) for row in islice(sheet.iter_rows(values_only=True), self.max_rows)]
+                for sheet in book.worksheets
+            ]
+        finally:
+            book.close()
+        if found := self.lines(tables):
+            return ParsedStatement(self.name, found, len(tables))
+        return ParsedStatement(self.name, [], len(tables), notes=["NO_STATEMENT_HEADER"])
 
 
 class PdfTextStatementParser(TabularStatementParser):

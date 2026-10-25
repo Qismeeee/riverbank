@@ -2,7 +2,14 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.underwriting.models import FreeText, InputModel, PartyId
+from services.underwriting.models import (
+    FreeText,
+    InputModel,
+    Money,
+    PartyId,
+    Payment,
+    PositiveMoney,
+)
 
 PlanField = Literal[
     "lot_value", "cash_on_hand", "supplier_schedule", "sell_weeks", "requested_amount"
@@ -42,10 +49,19 @@ class FieldIssue(BaseModel):
     code: str
 
 
+class KnownPlan(InputModel):
+    lot_value: PositiveMoney | None = None
+    cash_on_hand: Money | None = None
+    supplier_schedule: list[Payment] | None = None
+    sell_weeks: Annotated[int, Field(gt=0)] | None = None
+    requested_amount: Annotated[int, Field(strict=True, gt=0)] | None = None
+
+
 class ExtractPlanInput(InputModel):
     seller_id: PartyId
     shop_id: PartyId
     message: Annotated[FreeText, Field(min_length=1)]
+    known: KnownPlan | None = None
 
 
 class ExtractPlanResponse(BaseModel):
@@ -54,6 +70,33 @@ class ExtractPlanResponse(BaseModel):
     missing_fields: list[PlanField]
     issues: list[FieldIssue]
     clarifying_question: str | None
+    reply: str
     sanitized_message: str
     prompt_version: str
     model: str
+
+
+class AskTurn(InputModel):
+    question: FreeText
+    answer: FreeText
+
+
+class AskInput(InputModel):
+    question: Annotated[FreeText, Field(min_length=1)]
+    history: Annotated[list[AskTurn], Field(max_length=6)] = []
+
+
+class Answer(StrictOutput):
+    answer_vi: str
+    figures_used: list[str]
+
+
+class AskResponse(BaseModel):
+    case_id: str
+    status: str
+    answer: str
+    figures_used: list[str]
+    source: Literal["llm", "template"]
+    guard_codes: list[str]
+    prompt_version: str
+    model: str | None

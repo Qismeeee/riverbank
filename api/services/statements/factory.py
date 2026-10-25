@@ -11,6 +11,7 @@ from .classifiers import (
 )
 from .parsers import (
     CsvStatementParser,
+    ExcelStatementParser,
     PdfLayoutStatementParser,
     PdfTextStatementParser,
     StatementParser,
@@ -38,6 +39,7 @@ def build_parsers(ocr: str) -> list[StatementParser]:
         raise WorkflowError("STATEMENT_OCR_UNKNOWN", 503)
     parsers: list[StatementParser] = [
         CsvStatementParser(),
+        ExcelStatementParser(),
         PdfTextStatementParser(),
         PdfLayoutStatementParser(),
     ]

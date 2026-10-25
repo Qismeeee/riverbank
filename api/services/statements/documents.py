@@ -1,13 +1,17 @@
 import hashlib
+import io
 import re
 import unicodedata
+import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from services.underwriting.models import WorkflowError
 
 CSV, PDF, PNG, JPEG = "text/csv", "application/pdf", "image/png", "image/jpeg"
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SIGNATURES = ((b"%PDF-", PDF), (b"\x89PNG\r\n\x1a\n", PNG), (b"\xff\xd8\xff", JPEG))
+ZIP_SIGNATURE, XLSX_PART = b"PK\x03\x04", "xl/workbook.xml"
 DATE_FORMATS = ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%y")
 _DECIMAL_TAIL = re.compile(r"[.,]\d{1,2}$")
 _NEGATIVE = re.compile(r"^\(.*\)$|^-|-$")
@@ -23,11 +27,23 @@ class StatementDocument:
         for signature, media_type in SIGNATURES:
             if content.startswith(signature):
                 return cls(content, media_type)
+        if content.startswith(ZIP_SIGNATURE):
+            return cls._workbook(content)
         try:
             content.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
             raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415) from exc
         return cls(content, CSV)
+
+    @classmethod
+    def _workbook(cls, content: bytes) -> "StatementDocument":
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                if XLSX_PART in archive.namelist():
+                    return cls(content, XLSX)
+        except zipfile.BadZipFile as exc:
+            raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415) from exc
+        raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415)
 
     @property
     def ref(self) -> str:
@@ -59,8 +75,8 @@ def fold(text: str) -> str:
 
 
 def parse_vnd(text: object) -> int | None:
-    if isinstance(text, int):
-        return abs(text)
+    if isinstance(text, int | float):
+        return abs(int(text))
     raw = str(text or "").strip().replace(" ", "")
     if not raw or not any(c.isdigit() for c in raw):
         return None
@@ -73,6 +89,10 @@ def is_negative(text: object) -> bool:
 
 
 def parse_date(text: object) -> str | None:
+    if isinstance(text, datetime):
+        return text.date().isoformat()
+    if isinstance(text, date):
+        return text.isoformat()
     head = str(text or "").strip().split(" ")[0]
     for fmt in DATE_FORMATS:
         try:

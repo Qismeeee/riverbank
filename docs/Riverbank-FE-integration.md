@@ -55,6 +55,9 @@ async function call(token, method, path, body, extraHeaders = {}) {
 | Gửi kế hoạch lô hàng | `POST /v1/cases` với `Idempotency-Key: crypto.randomUUID()` (giữ nguyên khóa khi bấm lại) |
 | Danh sách hồ sơ của mình | `GET /v1/me/cases` |
 | Xem giải thích và quyết định | `GET /v1/cases/{case_id}/seller-view` |
+| Chat nhập kế hoạch | `POST /v1/copilot/extract-plan`. Hiện `reply` trong khung chat. Lượt sau gửi `known = draft` của lượt trước. `ready = true` thì bật nút Gửi, gửi nguyên `draft` vào `POST /v1/cases` |
+| Hỏi về hồ sơ của mình | `POST /v1/cases/{case_id}/copilot/ask` với `question` và `history` (tối đa 6 lượt gần nhất). Hiện `answer`. `source = "template"` là câu mẫu khi LLM lỗi, vẫn hiện bình thường |
+| Nộp sao kê | `POST /v1/cases/{case_id}/statements/upload`, nhận CSV, `.xlsx`, PDF, ảnh. `accept=".csv,.xlsx,.pdf,.png,.jpg,.jpeg"` |
 
 Thân `POST /v1/cases`:
 

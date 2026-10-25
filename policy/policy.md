@@ -47,7 +47,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 
 Mỗi rule là hàm thuần nhận `PolicyInput`, trả `rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`. Rule không sửa số tiền, kỳ hạn hay kỳ trích.
 
-`PolicyInput` lấy từ lần chạy engine: `amount` là số đề xuất (hoặc số người duyệt sửa), `weekly_deduction` là kỳ trích lớn nhất của lịch, `requested_amount = max(số seller xin, amount)`, `platform_supported_amount`, `shop_age_months`, `return_rate` từ E4, `cic_group`, `cic_outstanding` từ E6a, `docs_verified` từ kết quả sao kê.
+`PolicyInput` lấy từ lần chạy engine: `amount` là số đề xuất (hoặc số người duyệt sửa), `weekly_deduction` là kỳ trích lớn nhất của lịch, `requested_amount = max(số seller xin, amount)`, `platform_supported_amount`, `shop_age_months`, `return_rate` từ E4, `cic_group` (nhóm nợ hiện tại xấu nhất trong các khoản), `cic_outstanding` (tổng dư nợ) từ E6a, `docs_verified` từ kết quả sao kê.
 
 Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 

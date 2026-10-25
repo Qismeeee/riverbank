@@ -150,7 +150,7 @@ POST /cases ──> NO_LOAN_NEEDED
 | `POST` | `/v1/cases/{case_id}/decisions` | underwriter | Có | FR-31..FR-34 |
 | `POST` | `/v1/cases/{case_id}/handoff` | underwriter | Có | FR-35, FR-36 |
 | `POST` | `/v1/copilot/extract-plan` | seller | Có | FR-02, FR-03 |
-| `POST` | `/v1/cases/{case_id}/copilot/ask` | seller | Chưa có | FR-27 |
+| `POST` | `/v1/cases/{case_id}/copilot/ask` | seller của hồ sơ | Có | FR-27 |
 | `POST` | `/v1/webhooks/los-status` | LOS ngân hàng | Chưa có | FR-36 |
 | `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter (demo) | Chưa có | FR-37 |
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
@@ -334,7 +334,7 @@ Một phần tử `runs`:
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
 | `cashflow` | `payout_base`, `payout_stress`, `weeks`, `stress_weeks`, `gap`, `negative_weeks`, `amount_proposed`, `tenor_weeks`, `weekly_deduction`, `weekly_deductions`, `tenor_trace`, `payout_warning_threshold` |
 | `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `demo`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
-| `cic` | `source` (`mock` hoặc `not_queried`), `bureau_group`, `outstanding`, `queried_at` (`null` khi không tra), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
+| `cic` | `source` (`simulated`, `mock` hoặc `not_queried`), `bureau_group` (nhóm nợ hiện tại xấu nhất), `outstanding` (tổng dư nợ), `queried_at` (`null` khi không tra). Nguồn `simulated` thêm `profiles_hash` (mã băm của `api/data/cic_profiles.json` lúc tra, sửa file là mã đổi, hồ sơ cũ giữ mã cũ), `worst_group_12m`, `has_credit_history`, `recent_inquiries_90d`, `facilities` (mỗi khoản: `institution`, `product`, `limit`, `outstanding`, `group`, `opened_month`, `history_12m` 12 tháng cũ đến mới), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
 | `policy` | `results[]` (`rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`), `hard_fail`, `summary` |
 | `policy_input` | Snapshot đưa vào Policy Engine |
 | `statement` | Kết quả đối chiếu sao kê, hoặc `null` |
@@ -433,11 +433,12 @@ Seller của hồ sơ hoặc người thẩm định nộp file. Hệ thống b�
 |---|---|---|
 | `expected_version` | int | ≥ 1 |
 | `period_start`, `period_end` | date | Như mục 4.8 |
-| `file` | file | CSV, PDF, PNG, JPEG. Tối đa 10 MB. Loại file xác định theo byte đầu, không tin `Content-Type` của client |
+| `file` | file | CSV, Excel `.xlsx`, PDF, PNG, JPEG. Tối đa 10 MB. Loại file xác định theo byte đầu, không tin `Content-Type` của client |
 
 **Cách đọc file** (lần lượt, dừng ở cách đầu tiên ra được dòng):
 
 1. CSV: parser Python, tự nhận dấu phân cách `,` `;` tab.
+1. Excel `.xlsx`: `openpyxl` đọc mọi sheet, ô ngày và ô số kiểu Excel đọc thẳng, header nằm ở dòng nào cũng được. Tối đa 50.000 dòng mỗi sheet. File zip không có `xl/workbook.xml` (ví dụ `.docx`) bị `415`. `.xls` đời cũ chưa hỗ trợ.
 2. PDF có lớp chữ và kẻ bảng: `pdfplumber` đọc bảng, bảng tràn sang trang sau không lặp header vẫn đọc tiếp. Không gọi model, không tốn phí.
 3. PDF có lớp chữ nhưng không kẻ bảng: đọc theo vị trí chữ. Cột lấy từ vị trí header, ô chữ cách nhau xa mới tách cột, nên số nằm trong mô tả (ví dụ "tuần 40") không bị hiểu là số tiền. Dòng mô tả xuống hàng được ghép vào giao dịch gần nhất.
 4. PDF scan hoặc ảnh: prompt `statement-ocr` qua model đọc ảnh, mỗi trang một lượt, tối đa 10 trang. Chỉ chạy khi `RIVERBANK_STATEMENT_OCR=llm`. Model đặt ở `STATEMENT_OCR_PROVIDER`, `STATEMENT_OCR_MODEL`.
@@ -627,12 +628,12 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `STATEMENT_PERIOD_NOT_COVERED` | 422 | Sao kê | Kỳ không trùng trọn các tuần payout |
 | `STATEMENT_EMPTY`, `STATEMENT_UNREADABLE`, `STATEMENT_LINES_UNREADABLE`, `STATEMENT_TOO_MANY_PAGES` | 422 | Nộp sao kê | File rỗng, không đọc được bảng, dòng tiền sàn thiếu ngày hoặc số, quá 10 trang |
 | `STATEMENT_TOO_LARGE` | 413 | Nộp sao kê | File trên 10 MB |
-| `STATEMENT_FORMAT_UNSUPPORTED` | 415 | Nộp sao kê | Không phải CSV, PDF, PNG, JPEG |
+| `STATEMENT_FORMAT_UNSUPPORTED` | 415 | Nộp sao kê | Không phải CSV, XLSX, PDF, PNG, JPEG |
 | `STATEMENT_OCR_UNAVAILABLE`, `STATEMENT_CLASSIFIER_UNAVAILABLE` | 503 | Nộp sao kê | Model đọc ảnh hoặc Jev lỗi |
 | `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
 | `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
 | `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
-| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE` | 503 | `/v1/*` | Cấu hình sai |
+| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE`, `INVALID_WORKFLOW_CIC_SOURCE`, `CIC_PROFILES_INVALID` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
 | `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |
 | `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
@@ -647,9 +648,9 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 
 ---
 
-## 6. API trong kế hoạch
+## 6. Copilot và API trong kế hoạch
 
-Các đầu dưới đây là kế hoạch, chưa có code. Hợp đồng dưới đây theo quy ước mục 1. Đầu nào có gọi model phải đi đúng chỗ ở bảng "Chỗ nào được gọi model" trong `KNOWLEDGE_BASE.md`.
+Mục 6.1, 6.2, 6.3 đã có code. Từ 6.4 trở đi là kế hoạch, chưa có code. Hợp đồng dưới đây theo quy ước mục 1. Đầu nào có gọi model phải đi đúng chỗ ở bảng "Chỗ nào được gọi model" trong `KNOWLEDGE_BASE.md`.
 
 ### 6.1 `POST /v1/copilot/extract-plan`
 
@@ -657,6 +658,12 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
 
 ```json
 { "seller_id": "demo-b", "shop_id": "demo-b", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
+```
+
+Chat nhiều lượt: lượt sau gửi thêm `known` là `draft` của lượt trước. Câu mới chỉ cần nói phần còn thiếu hoặc phần muốn sửa.
+
+```json
+{ "seller_id": "demo-b", "shop_id": "demo-b", "message": "à xin 120tr thôi", "known": { "lot_value": 200000000, "cash_on_hand": 120000000, "supplier_schedule": [{ "week": 0, "amount": 200000000 }], "sell_weeks": 6, "requested_amount": 150000000 } }
 ```
 
 ```json
@@ -674,6 +681,7 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
   "missing_fields": [],
   "issues": [],
   "clarifying_question": null,
+  "reply": "Mình đã ghi giá trị lô hàng 200.000.000 đ, ... Đủ thông tin rồi, bạn bấm Gửi để hệ thống tính.",
   "sanitized_message": "...",
   "prompt_version": "copilot-extract@<sha8>",
   "model": "..."
@@ -683,23 +691,36 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
 - Che SĐT, CCCD, số tài khoản trên `message` trước khi gọi Jev hoặc LLM (FR-03).
 - Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`, `details` liệt kê nhãn và xác suất. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
 - Prompt `copilot-extract` trả JSON theo schema cố định. Code kiểm lại: số tiền và số tuần phải có trong câu đã che, lịch xưởng phải cộng đúng `lot_value`. Sai thì trường đó về `null`, vào `missing_fields`, kèm `clarifying_question`.
+- Giá trị trong `known` chỉ được giữ khi câu mới không nói khác. Số mới mà không có trong câu thì bỏ, quay về số trong `known`. Lịch xưởng cũ chỉ giữ khi vẫn cộng đúng `lot_value` mới.
+- `reply` là câu trả lời để hiện trong khung chat, do code ghép từ `draft`, `clarifying_question`, `issues`. Không phải chữ LLM tự viết, nên số trong `reply` luôn khớp `draft`.
 - Đủ năm trường thì code chạy validator của `Plan`. Lỗi (ví dụ xin quá 300 triệu) nằm ở `issues` dạng `{field, code}`, số seller nói vẫn giữ nguyên.
 - `ready = true` thì client gửi nguyên `draft` vào `POST /v1/cases`. LLM lỗi hoặc trả sai dạng thì `503 EXTRACTION_UNAVAILABLE`.
 
 ### 6.2 `POST /v1/cases/{case_id}/copilot/ask`
 
-Seller hỏi lại trên số đã khóa của hồ sơ.
+Seller hỏi lại trên số đã khóa của hồ sơ. Chỉ seller chủ hồ sơ gọi được, seller khác `403`. `history` là tối đa 6 lượt hỏi đáp trước, FE tự giữ.
 
 ```json
-{ "question": "Sao chỉ được vay ít hơn số mình xin?" }
+{ "question": "Sao chỉ được vay ít hơn số mình xin?", "history": [ { "question": "Hồ sơ mình sao rồi?", "answer": "Hồ sơ đang chờ ngân hàng xem." } ] }
 ```
 
 ```json
-{ "answer": [ { "text": "...", "evidence_id": "..." } ] }
+{
+  "case_id": "...",
+  "status": "PENDING_REVIEW",
+  "answer": "Hệ thống đề xuất 90.000.000 đ trong 8 tuần, mỗi tuần trừ 11.250.000 đ từ payout.",
+  "figures_used": ["amount_proposed", "tenor_weeks", "weekly_deduction"],
+  "source": "llm",
+  "guard_codes": [],
+  "prompt_version": "copilot-qa@<sha8>",
+  "model": "..."
+}
 ```
 
-- Prompt `copilot-qa`. Đầu vào chỉ là payload bằng chứng của lần chạy cuối.
-- Câu trả lời đi qua cùng bộ kiểm tra số và từ cấm như tờ trình. Không nêu lãi và phí khi chưa có biểu phí ngân hàng (FR-27).
+- Che PII trên câu hỏi và lịch sử, rồi Jev `jev-input-guard` như 6.1 (`422 BLOCKED_INPUT`, `503 GUARD_UNAVAILABLE`).
+- Prompt `copilot-qa` chỉ thấy bộ số an toàn cho seller của hồ sơ: trạng thái, số trong kế hoạch, gap, số đề xuất, kỳ hạn, khoản trừ mỗi tuần, sao kê khớp hay không, số chốt, mã giải ngân. Không có PD, không có CIC, không có ghi chú của người thẩm định.
+- LLM phải kê `figures_used`. Code kiểm: tên số phải có giá trị, mọi con số trong câu phải nằm trong các số đã kê (viết đủ hoặc theo triệu), qua `OutputGuard` (từ cấm, câu nói ngược trạng thái). Không nêu lãi và phí khi chưa có biểu phí ngân hàng (FR-27).
+- LLM lỗi hoặc câu trả lời vi phạm thì không lỗi `503`: trả câu mẫu do code ghép, `source = "template"`, `guard_codes` ghi lý do, `model = null`.
 
 ### 6.3 Nộp file sao kê
 
@@ -792,4 +813,4 @@ Ngày 23/10/2026 team chốt: số và rule theo code đang chạy. `policy/poli
 | Cờ fast-track | `is_fast_track`, hàng đợi lọc được | Chưa có |
 | Sao kê | Seller upload file lên S3, mục 6.3 | Người thẩm định nhập tổng |
 | Tiền ngoài sàn | `R06_OFF_PLATFORM_NOT_EVIDENCE` | Chưa phân biệt |
-| Copilot, Monitor, Studio | Mục 6 | Chưa có |
+| Monitor | Mục 6 | Chưa có |

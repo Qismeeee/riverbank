@@ -1,0 +1,65 @@
+{
+  "disclosure": "Dữ liệu CIC giả lập cho demo. Tên tổ chức tín dụng là tên chung, không phải tổ chức thật.",
+  "default": {"facilities": [], "recent_inquiries_90d": 0},
+  "sellers": {
+    "demo-a": {"facilities": [], "recent_inquiries_90d": 0},
+    "demo-b": {
+      "recent_inquiries_90d": 1,
+      "facilities": [
+        {
+          "institution": "Ngân hàng A",
+          "product": "Thẻ tín dụng",
+          "limit": 50000000,
+          "outstanding": 12000000,
+          "group": 1,
+          "opened_months_ago": 30
+        }
+      ]
+    },
+    "demo-c": {
+      "recent_inquiries_90d": 2,
+      "facilities": [
+        {
+          "institution": "Ngân hàng B",
+          "product": "Vay kinh doanh hộ cá thể",
+          "limit": 200000000,
+          "outstanding": 120000000,
+          "group": 1,
+          "opened_months_ago": 18,
+          "history": [1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1]
+        },
+        {
+          "institution": "Công ty tài chính C",
+          "product": "Thẻ tín dụng",
+          "limit": 30000000,
+          "outstanding": 8000000,
+          "group": 1,
+          "opened_months_ago": 9
+        }
+      ]
+    },
+    "demo-d": {
+      "recent_inquiries_90d": 5,
+      "facilities": [
+        {
+          "institution": "Công ty tài chính D",
+          "product": "Vay tiêu dùng",
+          "limit": 60000000,
+          "outstanding": 45000000,
+          "group": 2,
+          "opened_months_ago": 11,
+          "history": [1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2]
+        },
+        {
+          "institution": "Công ty F",
+          "product": "Vay qua ứng dụng",
+          "limit": 20000000,
+          "outstanding": 18000000,
+          "group": 1,
+          "opened_months_ago": 14,
+          "history": [1, 1, 1, 3, 2, 1, 1, 1, 1, 1, 1, 1]
+        }
+      ]
+    }
+  }
+}

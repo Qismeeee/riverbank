@@ -1,6 +1,8 @@
+import io
 import json
+import zipfile
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +22,7 @@ from services.statements.documents import (
     CSV,
     PDF,
     PNG,
+    XLSX,
     StatementDocument,
     fold,
     parse_date,
@@ -28,6 +31,7 @@ from services.statements.documents import (
 from services.statements.parsers import (
     ColumnMap,
     CsvStatementParser,
+    ExcelStatementParser,
     PdfLayoutStatementParser,
     PdfTextStatementParser,
 )
@@ -81,6 +85,27 @@ def pdf_bytes(rows: list[list[str]]) -> bytes:
 
 def csv_bytes(rows: list[list[str]], delimiter: str = ";") -> bytes:
     return "\n".join(delimiter.join(row) for row in [HEADER, *rows]).encode("utf-8-sig")
+
+
+def xlsx_bytes(*sheets: list[list]) -> bytes:
+    import openpyxl
+
+    book = openpyxl.Workbook()
+    book.remove(book.active)
+    for number, rows in enumerate(sheets):
+        sheet = book.create_sheet(f"Sheet{number + 1}")
+        for row in rows:
+            sheet.append(row)
+    out = io.BytesIO()
+    book.save(out)
+    return out.getvalue()
+
+
+def zip_bytes(name: str) -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr(name, "x")
+    return out.getvalue()
 
 
 class ScriptedVision(LlmClient):
@@ -155,6 +180,46 @@ def test_csv_parser_reads_signed_amount_column():
     text = 'Date,Description,Amount\n2026-10-05,Shopee payout,"1,200,000"\n2026-10-06,Fee,-50000\n'
     lines = CsvStatementParser().parse(StatementDocument.sniff(text.encode())).lines
     assert [(x.credit, x.debit) for x in lines] == [(1_200_000, None), (None, 50_000)]
+
+
+def test_sniff_accepts_workbook_and_rejects_other_zips():
+    assert StatementDocument.sniff(xlsx_bytes([["a"]])).media_type == XLSX
+    for content in (zip_bytes("word/document.xml"), b"PK\x03\x04broken"):
+        with pytest.raises(WorkflowError) as exc:
+            StatementDocument.sniff(content)
+        assert (exc.value.code, exc.value.status) == ("STATEMENT_FORMAT_UNSUPPORTED", 415)
+
+
+def test_excel_parser_reads_native_cells_across_sheets():
+    content = xlsx_bytes(
+        [["Sao kê tài khoản"], HEADER, [datetime(2026, 10, 5, 8, 12), "SHOPEE VN", None, 70e6]],
+        [
+            ["Transaction date", "Description", "Amount"],
+            [date(2026, 10, 6), "Fee", -50_000],
+            ["07/10/2026", "Shopee payout", "1.200.000"],
+            [None, "Closing balance", None],
+        ],
+    )
+    parsed = ExcelStatementParser().parse(StatementDocument.sniff(content))
+    assert (parsed.parser, parsed.pages) == ("xlsx", 2)
+    assert [(x.date, x.raw_desc, x.credit, x.debit) for x in parsed.lines] == [
+        ("2026-10-05", "SHOPEE VN", 70_000_000, None),
+        ("2026-10-06", "Fee", None, 50_000),
+        ("2026-10-07", "Shopee payout", 1_200_000, None),
+    ]
+
+
+def test_excel_parser_reports_missing_header_and_broken_workbook():
+    empty = ExcelStatementParser().parse(StatementDocument.sniff(xlsx_bytes([["a", "b"]])))
+    assert (empty.lines, empty.notes) == ([], ["NO_STATEMENT_HEADER"])
+    broken = ExcelStatementParser().parse(StatementDocument(zip_bytes("xl/workbook.xml"), XLSX))
+    assert (broken.lines, broken.notes) == ([], ["WORKBOOK_UNREADABLE"])
+
+
+def test_excel_parser_stops_at_row_limit():
+    rows = [HEADER, *[["05/10/2026", "SHOPEE", "", "1.000"]] * 5]
+    parsed = ExcelStatementParser(max_rows=3).parse(StatementDocument.sniff(xlsx_bytes(rows)))
+    assert len(parsed.lines) == 2
 
 
 def test_pdf_text_layer_parses_table_without_model():
@@ -295,7 +360,12 @@ def test_jev_classifier_batches_and_fails_closed():
 
 
 def test_factory_validates_config(monkeypatch):
-    assert [p.name for p in factory.build_parsers("off")] == ["csv", "pdf_text", "pdf_layout"]
+    assert [p.name for p in factory.build_parsers("off")] == [
+        "csv",
+        "xlsx",
+        "pdf_text",
+        "pdf_layout",
+    ]
     with pytest.raises(WorkflowError, match="STATEMENT_OCR_UNKNOWN"):
         factory.build_parsers("tesseract")
     with pytest.raises(WorkflowError, match="STATEMENT_CLASSIFIER_UNKNOWN"):
@@ -346,7 +416,7 @@ def period_rows(case) -> tuple[str, str, list[str]]:
     return start.isoformat(), end.isoformat(), inside
 
 
-def upload(api, case, content, headers=BANK, version=None):
+def upload(api, case, content, headers=BANK, version=None, name="saoke.csv"):
     start, end, _ = period_rows(case)
     return api.post(
         f"/v1/cases/{case.case_id}/statements/upload",
@@ -356,7 +426,7 @@ def upload(api, case, content, headers=BANK, version=None):
             "period_start": start,
             "period_end": end,
         },
-        files={"file": ("saoke.csv", content, "text/csv")},
+        files={"file": (name, content, "application/octet-stream")},
     )
 
 
@@ -389,6 +459,24 @@ def test_uploaded_statement_drives_r05_through_existing_threshold(
     assert statement["extraction"]["parser"] == "csv"
     assert any(e["code"] == "E8" for e in updated.evidence)
     assert updated.events[-1]["event_type"] == "STATEMENT_RECORDED"
+
+
+def test_uploaded_workbook_reconciles_like_csv(client, upload_service):  # noqa: F811
+    upload_service.statements = reader(CsvStatementParser(), ExcelStatementParser())
+    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    _, _, (first_day, second_day) = period_rows(case)
+    content = xlsx_bytes(
+        [
+            HEADER,
+            [first_day, "SHOPEE VN THANH TOAN", None, 70_000_000],
+            [second_day, "SHOPEE VN THANH TOAN", None, 70_000_000],
+        ]
+    )
+    response = upload(client, case, content, name="saoke.xlsx")
+    assert response.status_code == 200, response.text
+    statement = upload_service.repository.get(case.case_id).runs[-1]["statement"]
+    assert statement["extraction"]["parser"] == "xlsx"
+    assert statement["marketplace_total"] == 140_000_000
 
 
 def test_upload_scope_version_and_state_checks(client, upload_service):  # noqa: F811

@@ -225,11 +225,18 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
 
 
 class CicSource(ABC):
+    name: str
+
     @abstractmethod
     def inquire(self, seller_id: str, now: datetime) -> dict: ...
 
+    def describe(self) -> dict:
+        return {"source": self.name}
+
 
 class DemoCicSource(CicSource):
+    name = "mock"
+
     def inquire(self, seller_id: str, now: datetime) -> dict:
         return {
             "seller_id": seller_id,
