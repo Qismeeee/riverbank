@@ -22,7 +22,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 ## 2. Thứ tự xử lý trong `POST /v1/cases`
 
 1. Pydantic kiểm kiểu và trần cổng nhập. Sai thì `422`, không tạo hồ sơ.
-2. Regex quét `note`: lệnh bỏ qua chính sách hoặc ép duyệt, SĐT, CCCD 12 số, số tài khoản, thuộc tính nhạy cảm. Có thì `422 BLOCKED_INPUT`, không tạo hồ sơ.
+2. Regex quét `note`: lệnh bỏ qua chính sách hoặc ép duyệt, SĐT, CCCD 12 số, số tài khoản, thuộc tính nhạy cảm. Có thì `422 BLOCKED_INPUT`, `details` nêu từng lý do và câu tiếng Việt tương ứng, không tạo hồ sơ.
 3. Thiếu consent hiệu lực → `422 CONSENT_REQUIRED`, không đọc dữ liệu sàn. Snapshot feature sai → lỗi `422` hoặc `403` tương ứng.
 4. Tính Gap trên kịch bản cơ sở.
 5. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule.

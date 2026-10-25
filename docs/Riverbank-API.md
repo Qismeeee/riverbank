@@ -222,7 +222,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 
 **Thứ tự xử lý:**
 
-1. Quét `note`. Có lệnh bỏ qua chính sách hoặc ép duyệt, có SĐT, CCCD, số tài khoản, hoặc nhắc thuộc tính nhạy cảm thì trả `422 BLOCKED_INPUT`. Không tạo hồ sơ.
+1. Quét `note`. Có lệnh bỏ qua chính sách hoặc ép duyệt, có SĐT, CCCD, số tài khoản, hoặc nhắc thuộc tính nhạy cảm thì trả `422 BLOCKED_INPUT`. `details` liệt kê từng lý do khớp, theo thứ tự `PHONE`, `NATIONAL_ID`, `ACCOUNT`, `PROMPT_INJECTION`, `PROHIBITED_ATTRIBUTE`. Mỗi phần tử có `reason`, `field: "note"` và `message`. Không tạo hồ sơ.
 2. Kiểm tra khóa idempotency.
 3. Đọc consent và feature của đúng `seller_id` + `shop_id`. Consent phải có `reference`, mục đích `WORKING_CAPITAL_UNDERWRITING`, chưa thu hồi, còn hạn. Thiếu thì `422 CONSENT_REQUIRED`.
 4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `simulated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
@@ -612,7 +612,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `HANDOFF_IN_PROGRESS` | 409 | Bàn giao | Đang có lần gửi khác |
 | `HANDOFF_HASH_MISMATCH` | 409 | Bàn giao | Gói bị đổi sau khi tạo |
 | `FEATURE_HASH_MISMATCH` | 409 | Tạo hồ sơ | Snapshot feature trong Postgres lệch mã băm |
-| `BLOCKED_INPUT` | 422 | Tạo hồ sơ | Ghi chú có lệnh ép duyệt, PII, hoặc thuộc tính nhạy cảm |
+| `BLOCKED_INPUT` | 422 | Tạo hồ sơ, rút kế hoạch | Ghi chú hoặc câu chat vi phạm cổng vào. `details[]` có `reason` và `message` |
 | `CONSENT_REQUIRED` | 422 | Tạo hồ sơ | Không có consent hiệu lực |
 | `PAYOUT_HISTORY_REQUIRED` | 422 | Tạo hồ sơ | Dưới 4 hoặc trên 104 tuần payout |
 | `INVALID_PAYOUT_PERIOD` | 422 | Tạo hồ sơ | `week_start` sai định dạng |
@@ -681,7 +681,7 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
 ```
 
 - Che SĐT, CCCD, số tài khoản trên `message` trước khi gọi Jev hoặc LLM (FR-03).
-- Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`, `details` liệt kê nhãn và xác suất. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
+- Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`. `details` có `reason` (`PROMPT_INJECTION` hoặc `PROHIBITED_ATTRIBUTE`), `field: "message"`, `message`, `flag`, `probability`, `threshold`. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
 - Prompt `copilot-extract` trả JSON theo schema cố định. Code kiểm lại: số tiền và số tuần phải có trong câu đã che, lịch xưởng phải cộng đúng `lot_value`. Sai thì trường đó về `null`, vào `missing_fields`, kèm `clarifying_question`.
 - Đủ năm trường thì code chạy validator của `Plan`. Lỗi (ví dụ xin quá 300 triệu) nằm ở `issues` dạng `{field, code}`, số seller nói vẫn giữ nguyên.
 - `ready = true` thì client gửi nguyên `draft` vào `POST /v1/cases`. LLM lỗi hoặc trả sai dạng thì `503 EXTRACTION_UNAVAILABLE`.

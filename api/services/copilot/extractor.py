@@ -2,7 +2,7 @@ from pydantic import ValidationError
 
 from llm import LlmClient, LlmError, LlmRequest
 from prompts import Prompt
-from services.guardrail import GuardUnavailable, InputGuard, PiiRedactor
+from services.guardrail import GuardUnavailable, InputGuard, PiiRedactor, jev_block_details
 from services.underwriting.models import Plan, WorkflowError
 
 from .grounding import PlanGrounder
@@ -67,13 +67,7 @@ class PlanExtractor:
             raise WorkflowError("GUARD_UNAVAILABLE", 503) from e
         if verdict.blocked:
             raise WorkflowError(
-                "BLOCKED_INPUT",
-                422,
-                [
-                    {"flag": flag, "probability": p, "threshold": verdict.threshold}
-                    for flag, p in verdict.flags.items()
-                    if p >= verdict.threshold
-                ],
+                "BLOCKED_INPUT", 422, jev_block_details(verdict.flags, verdict.threshold)
             )
 
     def _ask(self, text: str) -> tuple[Extraction, str]:
