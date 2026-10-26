@@ -5,7 +5,7 @@ from uuid import uuid4
 import config
 from llm import LlmClient, LlmError, LlmRequest, build_llm_client
 from prompts import Prompt, default_prompts
-from services.guard import OutputGuard, ints, numbers
+from services.guard import OutputGuard, in_order, ints, numbers
 
 from .evidence import TEMPLATES, read_evidence, sentence
 from .models import Case, WorkflowError
@@ -186,13 +186,15 @@ class MemoValidator:
             return [exc.code]
         if item.get("template") not in TEMPLATES:
             return ["MEMO_TEMPLATE_UNKNOWN"]
-        claims = sentence(item["template"], evidence)["claims"]
+        reference = sentence(item["template"], evidence)
+        claims = reference["claims"]
         codes = [] if item.get("claims") == claims else ["MEMO_EVIDENCE_MISMATCH"]
         text = item.get("text") or ""
         codes += [GUARD_CODES[r] for r in self.guard.check(text, ints(claims), case.status)]
-        required = {v for v in claims.values() if type(v) is int}
-        if not required <= set(numbers(text)):
+        if not ints(claims) <= set(numbers(text)):
             codes.append("MEMO_CLAIM_MISSING")
+        if not in_order(text, reference["text"]):
+            codes.append("MEMO_NUMBER_ORDER")
         return list(dict.fromkeys(codes))
 
     def errors(self, case: Case, sentences: dict[str, list[dict]]) -> list[dict]:

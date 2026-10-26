@@ -10,6 +10,12 @@ def numbers(text: str) -> list[int]:
     return [int(match.group().replace(".", "")) for match in _NUMBER.finditer(text)]
 
 
+def in_order(text: str, reference: str) -> bool:
+    expected = list(dict.fromkeys(numbers(reference)))
+    seen = list(dict.fromkeys(n for n in numbers(text) if n in expected))
+    return seen == [n for n in expected if n in seen]
+
+
 def ints(node: object) -> set[int]:
     if isinstance(node, bool) or node is None:
         return set()
