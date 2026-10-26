@@ -16,6 +16,7 @@ class GateInput:
     features: dict
     cashflow: dict
     risk: dict
+    statement: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,7 @@ class CicGate(ABC):
     name = "cic"
     model = "open"
     threshold = 0.0
+    waits_for_statement = False
 
     @abstractmethod
     def evaluate(self, inp: GateInput) -> GateDecision: ...
@@ -50,6 +52,7 @@ class OpenCicGate(CicGate):
 
 class JevCicGate(CicGate):
     model = jev.MODEL
+    waits_for_statement = True
 
     def __init__(
         self,
@@ -76,6 +79,17 @@ def _known(value, unit: str = "") -> str:
     return "chưa rõ" if value is None else f"{value}{unit}"
 
 
+def _statement(statement: dict | None) -> list[str]:
+    if not statement:
+        return []
+    verdict = "khớp" if statement["matched"] else "không khớp"
+    return [
+        f"Sao kê ngân hàng đã đối chiếu: tiền sàn về {statement['marketplace_total']} VND so với "
+        f"payout sàn {statement['platform_total']} VND, {verdict} trong ngưỡng "
+        f"{statement['threshold_bps']} điểm cơ bản."
+    ]
+
+
 def state(inp: GateInput) -> list[str]:
     f, cf, risk = inp.features, inp.cashflow, inp.risk
     return [
@@ -87,4 +101,5 @@ def state(inp: GateInput) -> list[str]:
         f"Tuổi shop {_known(f.get('shop_age_months'), ' tháng')}, tỷ lệ hoàn hàng "
         f"{_known(f.get('return_rate'))}, đánh giá {_known(f.get('rating'))}.",
         f"PD ước lượng {_known(risk.get('pd_bps'), ' điểm cơ bản')}.",
+        *_statement(inp.statement),
     ]
