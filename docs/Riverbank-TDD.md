@@ -28,14 +28,14 @@ Kiểm trên `main` commit `68588f2`. Số và rule theo code là chuẩn. Phầ
 | Luồng | Trạng thái | Code |
 |---|---|---|
 | FLOW-01 Tiếp nhận | Có. Regex chặn cả hồ sơ, chưa che PII, chưa có Jev | `routers/underwriting.py`, `services/underwriting/service.py` |
-| FLOW-02 Consent, dữ liệu sàn | Có. `demo_source` hoặc `PostgresFeatureSource`. Không có Data Analyst LLM | `services/underwriting/sources.py` |
+| FLOW-02 Consent, dữ liệu sàn | Có. `seller_book_source` hoặc `PostgresFeatureSource`. Không có Data Analyst LLM | `services/underwriting/sources.py` |
 | FLOW-03, FLOW-03a Dòng tiền | Có, đúng số mục này | `services/cashflow.py` |
-| FLOW-04 PD, CIC | PD là `LightGbmRiskModel`, thiếu hồ sơ shop thì `RISK_DATA_MISSING`. Jev gate ngưỡng 0,6 rồi mới gọi `DemoCicSource` | `services/underwriting/risk.py`, `gates.py`, `sources.py` |
+| FLOW-04 PD, CIC | PD là `LightGbmRiskModel`, thiếu hồ sơ shop thì `RISK_DATA_MISSING`. Jev gate ngưỡng 0,6 rồi mới gọi `FixedCicSource` | `services/underwriting/risk.py`, `gates.py`, `sources.py` |
 | FLOW-05 Policy | Có, chín rule | `policy/engine.py`, `policy/rules.py` |
 | FLOW-06 Sao kê | Có. Nhập tay tổng tiền sàn, hoặc nộp file CSV, PDF, ảnh. PDF có lớp chữ đọc bằng `pdfplumber` (bảng kẻ, hoặc theo vị trí chữ), PDF scan và ảnh qua OCR khi bật. So ngưỡng `PolicyConfig.statement_mismatch_bps` | `service.submit_statement`, `service.upload_statement`, `services/statements/` |
 | FLOW-07 Tờ trình | Có bằng template, kiểm từng câu với bằng chứng. Chưa có Memo Writer LLM | `services/underwriting/evidence.py` |
 | FLOW-08 Quyết định | Có. `ACCEPT_PROPOSAL`, `ACCEPT_COUNTER`, `REJECT`. Chưa có job quét hồ sơ quá 14 ngày | `service.decide` |
-| FLOW-09 Bàn giao | Có. Người bấm, `MockLosAdapter` | `service.handoff` |
+| FLOW-09 Bàn giao | Có. Người bấm, `InternalLosAdapter` | `service.handoff` |
 | FLOW-10 Audit | Có. `case_events` chỉ thêm | `service._event` |
 | FLOW-11 Eval | Có golden chạy qua service thật. Chưa có metric latency, cost, LLM judge | `eval/score.py`, `api/tests/test_golden.py` |
 | FLOW-12 Monitor | Kế hoạch | |

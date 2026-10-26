@@ -22,9 +22,9 @@ from services.guardrail import (
 )
 from services.underwriting.models import Plan, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
-from services.underwriting.sources import DemoCicSource, MockLosAdapter, demo_source
+from services.underwriting.sources import FixedCicSource, InternalLosAdapter, seller_book_source
 from tests.test_underwriting import plan
 
 CASE_B = "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr"
@@ -323,10 +323,10 @@ def test_ready_draft_is_a_valid_create_case_body(client):
     now = datetime(2026, 10, 22, tzinfo=UTC)
     service = UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(now),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(now),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: now,
     )
     app.dependency_overrides[routes.get_service] = lambda: service
@@ -352,10 +352,10 @@ def case_b():
     now = datetime(2026, 10, 22, tzinfo=UTC)
     service = UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(now),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(now),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: now,
     )
     return service, service.create(Plan(**plan()), "qa-1")

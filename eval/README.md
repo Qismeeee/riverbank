@@ -2,7 +2,7 @@
 
 Nhãn lấy từ `policy/worked-examples.md`, tức là hành vi của code đang chạy.
 
-`api/tests/test_golden.py` đọc thư mục này. `eval/score.py` dựng một `UnderwritingService` thật (repository bộ nhớ, `DemoRiskModel`, CIC mock lấy nhóm nợ từ nhãn, `MockLosAdapter`), gọi `create`, rồi `submit_statement` nếu nhãn có sao kê. Không gọi mạng, không gọi model. Test còn kiểm `policy/parameters.yaml` khớp `CashFlowConfig`, `PolicyConfig`, `Plan`.
+`api/tests/test_golden.py` đọc thư mục này. `eval/score.py` dựng một `UnderwritingService` thật (repository bộ nhớ, `BaselineRiskModel`, CIC mock lấy nhóm nợ từ nhãn, `InternalLosAdapter`), gọi `create`, rồi `submit_statement` nếu nhãn có sao kê. Không gọi mạng, không gọi model. Test còn kiểm `policy/parameters.yaml` khớp `CashFlowConfig`, `PolicyConfig`, `Plan`.
 
 ## Case
 

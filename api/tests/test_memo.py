@@ -18,12 +18,12 @@ from services.underwriting.memo import (
 )
 from services.underwriting.models import DecisionInput, Plan, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
-    DemoCicSource,
-    MockLosAdapter,
-    demo_source,
+    FixedCicSource,
+    InternalLosAdapter,
+    seller_book_source,
 )
 from tests.test_underwriting import NOW, plan
 
@@ -61,10 +61,10 @@ def _service(client: LlmClient) -> UnderwritingService:
     )
     return UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(NOW),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
         memo=MemoComposer(writer, default_validator()),
     )

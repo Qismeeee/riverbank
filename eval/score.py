@@ -16,12 +16,12 @@ from services.underwriting.evidence import digest
 from services.underwriting.memo import MemoComposer
 from services.underwriting.models import Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel, RiskAssessment, RiskInput
+from services.underwriting.risk import BaselineRiskModel, RiskAssessment, RiskInput
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
     CicSource,
+    InternalLosAdapter,
     MappingFeatureSource,
-    MockLosAdapter,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,14 +75,14 @@ class _GoldenCic(CicSource):
         self.calls += 1
         return {
             "seller_id": seller_id,
-            "source": "mock",
+            "source": "fixed",
             "bureau_group": self.inp.get("cic_group", 1),
             "outstanding": self.inp.get("cic_outstanding", 0),
             "queried_at": now.isoformat(),
         }
 
 
-class _GoldenRisk(DemoRiskModel):
+class _GoldenRisk(BaselineRiskModel):
     def __init__(self, inp: dict):
         self.calls = 0
         self.overridden = "pd_bps" in inp
@@ -103,7 +103,7 @@ def _features(inp: dict) -> MappingFeatureSource:
     history = [int(v) for v in inp["payout_weekly_history"]]
     consent = {
         "reference": "golden-consent",
-        "source": "synthetic",
+        "source": "seller_book",
         "purpose": "WORKING_CAPITAL_UNDERWRITING",
         "granted_at": (NOW - timedelta(days=1)).isoformat(),
         "expires_at": (NOW + timedelta(days=30)).isoformat(),
@@ -112,9 +112,9 @@ def _features(inp: dict) -> MappingFeatureSource:
     features = {
         "seller_id": SELLER,
         "shop_id": SELLER,
-        "source": "synthetic",
-        "payout_origin": "simulated",
-        "disclosure": "synthetic; payout mô phỏng",
+        "source": "seller_book",
+        "payout_origin": "estimated",
+        "disclosure": "payout 12 tuần gần nhất từ sàn",
         "platform_supported_amount": int(inp.get("platform_support_limit", 120_000_000)),
         "shop_age_months": inp.get("shop_age_months", 12),
         "return_rate": inp.get("return_rate_90d", 0.05),
@@ -239,7 +239,7 @@ def golden_service(inp: dict, memo: MemoComposer | None = None) -> UnderwritingS
         _features(inp),
         _GoldenRisk(inp),
         _GoldenCic(inp),
-        MockLosAdapter(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
         memo=memo,
     )

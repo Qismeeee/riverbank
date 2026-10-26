@@ -13,15 +13,15 @@ from services.copilot.history import PostgresChatHistory
 from services.jobs import Job, JobConfig, PostgresJobQueue
 from services.underwriting.models import DecisionInput, Plan, WorkflowError
 from services.underwriting.repository import PostgresCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
-    DemoCicSource,
-    MockLosAdapter,
+    FixedCicSource,
+    InternalLosAdapter,
     PostgresFeatureSource,
-    demo_source,
+    seller_book_source,
 )
-from tests.test_underwriting import NOW, plan
+from tests.test_underwriting import NOW, check_queue_scopes, plan
 
 pytestmark = pytest.mark.skipif(
     not config.WORKFLOW_TEST_DATABASE_URL,
@@ -54,10 +54,10 @@ def database():
 def make_service(database):
     return UnderwritingService(
         PostgresCaseRepository(database),
-        demo_source(NOW),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
     )
 
@@ -150,20 +150,20 @@ def test_postgres_concurrent_decisions_and_atomic_rollback(database):
         assert sorted(pool.map(decide, ["one", "two"])) == ["conflict", "ok"]
 
 
-def test_demo_seed_and_postgres_source(database):
+def test_seller_book_seed_and_postgres_source(database):
     from services.underwriting.service import utc_now
 
     with psycopg.connect(database) as conn:
         seed(conn)
     source = PostgresFeatureSource(database)
     consent, features = source.fetch("demo-b", "demo-b", utc_now())
-    assert consent["source"] == "synthetic"
-    assert features["payout_origin"] == "simulated"
+    assert consent["source"] == "seller_book"
+    assert features["payout_origin"] == "estimated"
     with pytest.raises(WorkflowError, match="SCOPE"):
         source.fetch("demo-a", "demo-b", utc_now())
 
 
-def test_etl_seed_preserves_source_and_labels_simulated_payout(database):
+def test_etl_seed_preserves_source_and_labels_estimated_payout(database):
     from db.seed_underwriting import seed
     from etl.load import PostgresLoader
     from services.underwriting.service import utc_now
@@ -175,16 +175,16 @@ def test_etl_seed_preserves_source_and_labels_simulated_payout(database):
         loader.load(MANIFEST, TRANSFORMER.transform(_run(), "2026-10-22"))
         seed(conn, "demo-etl", 984839978)
     consent, feature = PostgresFeatureSource(database).fetch("demo-etl", "984839978", utc_now())
-    assert feature["source"] == "addlivetag" and feature["payout_origin"] == "simulated"
+    assert feature["source"] == "addlivetag" and feature["payout_origin"] == "estimated"
     assert feature["source_snapshot"]["gmv_30d"] == 100_620_000
     assert feature["weekly_payouts"][0]["amount"] == 100_620_000 * 7 * 85 // 3000
-    assert feature["raw_refs"] and consent["source"] == "synthetic"
+    assert feature["raw_refs"] and consent["source"] == "seller_book"
     with psycopg.connect(database) as conn:
         rows = conn.execute(
             "select payout_origin,payout_vnd from v_seller_payout_weekly where seller_id=%s",
             ("demo-etl",),
         ).fetchall()
-        assert len(rows) == 12 and all(row[0] == "simulated" for row in rows)
+        assert len(rows) == 12 and all(row[0] == "estimated" for row in rows)
 
 
 def test_postgres_chat_history_keeps_order_and_is_append_only(database):
@@ -225,3 +225,7 @@ def test_postgres_job_queue_claims_once_retries_and_expires(database):
     with psycopg.connect(database) as conn:
         rows = conn.execute("select count(*) from jobs where content is not null").fetchone()
     assert rows[0] == 0
+
+
+def test_postgres_queue_lists_decided_cases_newest_first(database):
+    check_queue_scopes(make_service(database))

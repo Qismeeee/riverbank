@@ -97,7 +97,6 @@ class CaseSummary(BaseModel):
     version: int
     reason: str | None
     created_at: str
-    demo: bool
 
 
 class MemoSentence(BaseModel):

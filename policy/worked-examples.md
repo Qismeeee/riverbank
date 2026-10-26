@@ -22,7 +22,7 @@ Giả định chung khi không nói khác: 12 tuần payout 70.000.000, nên pay
 - Số xin 150.000.000 không thành số đề xuất.
 - R05: `max(150.000.000, 90.000.000)` = 150.000.000 ≤ `2,5 × 120.000.000` = 300.000.000 → không đòi sao kê.
 - R09: 90.000.000 ≤ 100.000.000. Mọi rule đạt → `PENDING_REVIEW`.
-- PD: bộ golden dùng `DemoRiskModel` 500 bps để số không đổi theo model. Prod chấm bằng LightGBM.
+- PD: bộ golden dùng `BaselineRiskModel` 500 bps để số không đổi theo model. Prod chấm bằng LightGBM.
 
 ## FX-A Không thiếu tiền
 

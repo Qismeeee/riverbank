@@ -8,14 +8,14 @@ from services.underwriting.cic import (
     HISTORY_MONTHS,
     NO_HISTORY_GROUP,
     CicProfileBook,
-    SimulatedCicSource,
+    ProfileCicSource,
 )
 from services.underwriting.evidence import read_evidence
 from services.underwriting.models import Plan, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
-from services.underwriting.sources import MockLosAdapter, demo_source
+from services.underwriting.sources import InternalLosAdapter, seller_book_source
 from tests.test_underwriting import NOW, plan
 
 
@@ -44,17 +44,17 @@ def book_file(tmp_path, sellers, default=None):
 def service_with(book):
     return UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(NOW),
-        DemoRiskModel(),
-        SimulatedCicSource(book),
-        MockLosAdapter(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
+        ProfileCicSource(book),
+        InternalLosAdapter(),
         clock=lambda: NOW,
     )
 
 
 def test_shipped_profiles_cover_every_demo_seller():
     book = CicProfileBook.load()
-    sellers = {seller for seller, _ in demo_source(NOW).records}
+    sellers = {seller for seller, _ in seller_book_source(NOW).records}
     assert sellers <= set(book.sellers)
 
 
@@ -74,7 +74,7 @@ def test_report_aggregates_facilities(tmp_path):
             },
         )
     )
-    report = SimulatedCicSource(book).inquire("s1", datetime(2026, 2, 10, tzinfo=UTC))
+    report = ProfileCicSource(book).inquire("s1", datetime(2026, 2, 10, tzinfo=UTC))
     assert report["bureau_group"] == 2
     assert report["outstanding"] == 35_000_000
     assert report["worst_group_12m"] == 3
@@ -91,14 +91,14 @@ def test_profiles_hash_changes_with_content_and_is_recorded(tmp_path):
         book_file(tmp_path, {"s1": {"facilities": [facility(outstanding=1)]}})
     )
     assert first.profiles_hash == same.profiles_hash != edited.profiles_hash
-    source = SimulatedCicSource(first)
+    source = ProfileCicSource(first)
     assert source.inquire("s1", NOW)["profiles_hash"] == first.profiles_hash
     assert source.describe()["profiles_hash"] == first.profiles_hash
 
 
 def test_unknown_seller_reads_default_profile(tmp_path):
     book = CicProfileBook.load(book_file(tmp_path, {}))
-    report = SimulatedCicSource(book).inquire("nobody", NOW)
+    report = ProfileCicSource(book).inquire("nobody", NOW)
     assert report["seller_id"] == "nobody"
     assert report["has_credit_history"] is False
     assert (report["bureau_group"], report["outstanding"]) == (NO_HISTORY_GROUP, 0)

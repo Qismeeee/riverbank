@@ -38,16 +38,16 @@ from reportlab.platypus import (  # noqa: E402
 from services.statements.classifiers import PayoutClassifier, PayoutLabel  # noqa: E402
 from services.statements.factory import build_parsers  # noqa: E402
 from services.statements.reader import StatementReader  # noqa: E402
-from services.underwriting.cic import CicProfileBook, SimulatedCicSource  # noqa: E402
+from services.underwriting.cic import CicProfileBook, ProfileCicSource  # noqa: E402
 from services.underwriting.models import Case, Plan, StatementUpload  # noqa: E402
 from services.underwriting.repository import MemoryCaseRepository  # noqa: E402
-from services.underwriting.risk import DemoRiskModel, LightGbmRiskModel, RiskModel  # noqa: E402
+from services.underwriting.risk import BaselineRiskModel, LightGbmRiskModel, RiskModel  # noqa: E402
 from services.underwriting.service import UnderwritingService  # noqa: E402
 from services.underwriting.sources import (  # noqa: E402
-    DemoSeller,
-    DemoSellerBook,
-    MockLosAdapter,
-    demo_source,
+    InternalLosAdapter,
+    SellerBook,
+    SellerProfile,
+    seller_book_source,
 )
 
 VN = timezone(timedelta(hours=7))
@@ -111,7 +111,7 @@ class Entry:
 @dataclass
 class Dossier:
     spec: dict
-    seller: DemoSeller
+    seller: SellerProfile
     credit: dict
     window: Window
     lender: str = ""
@@ -323,10 +323,10 @@ class Expectation:
     def service(self) -> UnderwritingService:
         return UnderwritingService(
             MemoryCaseRepository(),
-            demo_source(self.window.now),
+            seller_book_source(self.window.now),
             self.risk,
-            SimulatedCicSource(),
-            MockLosAdapter(),
+            ProfileCicSource(),
+            InternalLosAdapter(),
             statements=StatementReader(build_parsers("off"), TruthClassifier()),
             clock=lambda: self.window.now,
         )
@@ -1431,7 +1431,7 @@ def risk_model() -> RiskModel:
 
         return LightGbmRiskModel()
     except OSError:
-        return DemoRiskModel()
+        return BaselineRiskModel()
 
 
 def build(d: Dossier, fonts: Fonts, expect: Expectation) -> dict[str, bytes]:
@@ -1481,7 +1481,7 @@ def main() -> None:
     ap.add_argument("--hand-fonts", default=str(ROOT / "eval/dossiers/fonts"))
     args = ap.parse_args()
     spec = json.loads((ROOT / "eval/dossiers/cases.json").read_text(encoding="utf-8"))
-    sellers = {s.seller_id: s for s in DemoSellerBook.load().sellers}
+    sellers = {s.seller_id: s for s in SellerBook.load().sellers}
     credit = json.loads((ROOT / "api/data/cic_profiles.json").read_text(encoding="utf-8"))[
         "sellers"
     ]

@@ -28,7 +28,7 @@ from .risk import RiskInput, RiskModel
 from .sources import CicSource, FeatureSource, LosAdapter, validate_features
 
 ENGINE_VERSION = "cashflow-v2-base-int"
-POLICY_VERSION = "riverbank-demo-r01-r10-v3"
+POLICY_VERSION = "riverbank-r01-r10-v4"
 NOT_QUERIED = "not_queried"
 DEFERRED = "deferred_until_statement"
 CIC_RULE_IDS = frozenset({"R06", "R07"})
@@ -535,7 +535,6 @@ class UnderwritingService:
                 "policy": run["policy"],
                 "document": deepcopy(case.documents[-1]),
                 "evidence_ids": evidence_ids,
-                "demo": True,
             }
             case.handoff = {
                 "idempotency_key": str(uuid4()),

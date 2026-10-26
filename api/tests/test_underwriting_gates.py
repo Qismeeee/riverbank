@@ -5,9 +5,9 @@ from routers import underwriting as routes
 from services.underwriting.gates import GateInput, JevCicGate, state
 from services.underwriting.models import CicInquiry, DecisionInput, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
-from services.underwriting.sources import DemoCicSource, MockLosAdapter, demo_source
+from services.underwriting.sources import FixedCicSource, InternalLosAdapter, seller_book_source
 from tests.test_underwriting import NOW, statement_request
 from tests.test_underwriting_risk import create
 
@@ -24,7 +24,7 @@ class FakeJev:
         return self.answer
 
 
-class CountingCic(DemoCicSource):
+class CountingCic(FixedCicSource):
     def __init__(self):
         self.calls = 0
 
@@ -40,10 +40,10 @@ def noul(p):
 def build(jev):
     return UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(NOW),
-        DemoRiskModel(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
         CountingCic(),
-        MockLosAdapter(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
         cic_gate=JevCicGate(decide=jev),
     )

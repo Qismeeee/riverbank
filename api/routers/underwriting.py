@@ -9,7 +9,7 @@ from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
 from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
-from services.underwriting.cic import SimulatedCicSource
+from services.underwriting.cic import ProfileCicSource
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.memo import build_composer
@@ -32,27 +32,30 @@ from services.underwriting.models import (
     WorkflowError,
 )
 from services.underwriting.repository import MemoryCaseRepository, PostgresCaseRepository
-from services.underwriting.risk import DemoRiskModel, LightGbmRiskModel, RiskModel
+from services.underwriting.risk import BaselineRiskModel, LightGbmRiskModel, RiskModel
 from services.underwriting.service import UnderwritingService, utc_now
 from services.underwriting.sources import (
     CicSource,
-    DemoCicSource,
-    MockLosAdapter,
+    FixedCicSource,
+    InternalLosAdapter,
     PostgresFeatureSource,
-    demo_source,
+    seller_book_source,
 )
 
 router = APIRouter(prefix="/v1", tags=["underwriting"])
 
-RISK_MODELS: dict[str, type[RiskModel]] = {"demo": DemoRiskModel, "lightgbm": LightGbmRiskModel}
+RISK_MODELS: dict[str, type[RiskModel]] = {
+    "baseline": BaselineRiskModel,
+    "lightgbm": LightGbmRiskModel,
+}
 CIC_GATES: dict[str, type[CicGate]] = {"open": OpenCicGate, "jev": JevCicGate}
-CIC_SOURCES: dict[str, type[CicSource]] = {"mock": DemoCicSource, "simulated": SimulatedCicSource}
+CIC_SOURCES: dict[str, type[CicSource]] = {"fixed": FixedCicSource, "profiles": ProfileCicSource}
 
 
 @lru_cache
 def get_service() -> UnderwritingService:
     if config.WORKFLOW_MODE != "demo":
-        raise WorkflowError("WORKFLOW_DEMO_DISABLED", 503)
+        raise WorkflowError("WORKFLOW_DISABLED", 503)
     if config.WORKFLOW_STORAGE not in {"memory", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_STORAGE", 503)
     if config.WORKFLOW_FEATURES not in {"demo", "postgres"}:
@@ -78,14 +81,14 @@ def get_service() -> UnderwritingService:
     features = (
         PostgresFeatureSource(url)
         if config.WORKFLOW_FEATURES == "postgres"
-        else demo_source(utc_now())
+        else seller_book_source(utc_now())
     )
     return UnderwritingService(
         repository,
         features,
         RISK_MODELS[config.WORKFLOW_RISK](),
         CIC_SOURCES[config.WORKFLOW_CIC_SOURCE](),
-        MockLosAdapter(),
+        InternalLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
         memo=build_composer(config.MEMO_WRITER),
         statements=build_statement_reader(),
@@ -107,7 +110,6 @@ def summary(case: Case) -> dict:
         "version": case.version,
         "reason": case.reason,
         "created_at": case.created_at,
-        "demo": True,
     }
 
 
@@ -166,7 +168,7 @@ def my_cases(
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)
 def detail(case_id: Identifier, service: Service, actor: BankUser) -> dict:
-    return {**asdict(service.repository.get(case_id)), "demo": True}
+    return asdict(service.repository.get(case_id))
 
 
 @router.get("/cases/{case_id}/evidence/{evidence_id}", response_model=EvidenceResponse)
