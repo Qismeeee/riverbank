@@ -79,7 +79,7 @@ def train(
         },
         "calibration": {"method": cal.method, "holdout": cal.table.to_dict()},
         "shap_mean_abs": shap.round(4).to_dict(),
-        "label": "synthetic, BL-11 (3 kỳ trích thiếu liên tiếp), xem docs/Riverbank-risk-model.md",
+        "label": "BL-11 (3 kỳ trích thiếu liên tiếp), xem docs/Riverbank-risk-model.md",
     }
     pdlib.save_artifacts(out, model, cal, meta)
     log(f"saved -> {out}")

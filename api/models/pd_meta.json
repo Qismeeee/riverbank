@@ -223,5 +223,5 @@
     "payout_trend_down": 0.0,
     "arch_home": 0.0
   },
-  "label": "synthetic, BL-11 (3 kỳ trích thiếu liên tiếp), xem docs/Riverbank-risk-model.md"
+  "label": "BL-11 (3 kỳ trích thiếu liên tiếp), xem docs/Riverbank-risk-model.md"
 }

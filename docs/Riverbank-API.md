@@ -27,7 +27,7 @@ Mục 4 là API đang chạy trong `api/`, viết theo code `main` commit `68588
 
 ### 1.2 Danh tính và vai trò
 
-Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DEMO_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
+Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
 
 | Chế độ | Dùng ở | Cách gửi |
 |---|---|---|
@@ -228,7 +228,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 1. Quét `note`. Có lệnh bỏ qua chính sách hoặc ép duyệt, có SĐT, CCCD, số tài khoản, hoặc nhắc thuộc tính nhạy cảm thì trả `422 BLOCKED_INPUT`. Không tạo hồ sơ.
 2. Kiểm tra khóa idempotency.
 3. Đọc consent và feature của đúng `seller_id` + `shop_id`. Consent phải có `reference`, mục đích `WORKING_CAPITAL_UNDERWRITING`, chưa thu hồi, còn hạn. Thiếu thì `422 CONSENT_REQUIRED`.
-4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `simulated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
+4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `estimated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
 5. Chạy CashFlow Engine. Lưu bằng chứng `E4` (feature) và `E5` (dòng tiền).
 6. Gap = 0: trạng thái `NO_LOAN_NEEDED`. Dừng ở đây, không gọi CIC.
 7. Gap > 0: chấm PD (`E6`), hỏi Jev gate, đủ điều kiện mới tra CIC (`E6a`), chạy Policy Engine (`E7`). Gate từ chối hoặc lỗi thì không tra CIC, R06 fail thiếu dữ liệu.
@@ -248,8 +248,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
   "status": "PENDING_REVIEW",
   "version": 1,
   "reason": null,
-  "created_at": "2026-10-23T08:00:00+00:00",
-  "demo": true
+  "created_at": "2026-10-23T08:00:00+00:00"
 }
 ```
 
@@ -301,7 +300,11 @@ Vai trò `seller`. Trả hồ sơ của chính `subject`, mới nhất trước,
 | `limit` | 1–100 | 50 |
 | `offset` | ≥ 0 | 0 |
 
-Hàng đợi chỉ chứa `PENDING_REVIEW`, `ESCALATED`, `NO_LOAN_NEEDED`, `AWAITING_STATEMENT`, sắp theo `created_at` tăng dần.
+Không truyền `status`: hàng đợi mặc định chỉ chứa hồ sơ chưa quyết (`PENDING_REVIEW`, `ESCALATED`, `NO_LOAN_NEEDED`, `AWAITING_STATEMENT`), sắp `created_at` tăng dần, `case_id` tăng dần (hồ sơ cũ lên trước).
+
+`status=ACCEPTED` hoặc `status=REJECTED` là lối đọc hồ sơ đã thẩm định: trả đúng hồ sơ ở trạng thái đó, sắp `created_at` giảm dần, `case_id` giảm dần (hồ sơ mới lên trước). FE tự ghép hai danh sách, API không có mã gộp.
+
+`status` là mã khác: trả hồ sơ ở trạng thái đó, sắp tăng dần.
 
 ```json
 { "items": [ { "case_id": "...", "status": "ESCALATED", "version": 1, "...": "..." } ], "limit": 50, "offset": 0 }
@@ -336,8 +339,8 @@ Một phần tử `runs`:
 | `engine_version`, `config` | Phiên bản và cấu hình CashFlow Engine |
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
 | `cashflow` | `payout_base`, `payout_stress`, `weeks`, `stress_weeks`, `gap`, `negative_weeks`, `amount_proposed`, `tenor_weeks`, `weekly_deduction`, `weekly_deductions`, `tenor_trace`, `payout_warning_threshold` |
-| `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `demo`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
-| `cic` | `source` (`simulated`, `mock`, `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê và Jev chưa được hỏi, lúc đó `gate` là `null`), `bureau_group` (nhóm nợ hiện tại xấu nhất), `outstanding` (tổng dư nợ), `queried_at` (`null` khi không tra). Nguồn `simulated` thêm `profiles_hash` (mã băm của `api/data/cic_profiles.json` lúc tra, sửa file là mã đổi, hồ sơ cũ giữ mã cũ), `worst_group_12m`, `has_credit_history`, `recent_inquiries_90d`, `facilities` (mỗi khoản: `institution`, `product`, `limit`, `outstanding`, `group`, `opened_month`, `history_12m` 12 tháng cũ đến mới), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
+| `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `baseline`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
+| `cic` | `source` (`cic_profiles`, `fixed`, `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê và Jev chưa được hỏi, lúc đó `gate` là `null`), `bureau_group` (nhóm nợ hiện tại xấu nhất), `outstanding` (tổng dư nợ), `queried_at` (`null` khi không tra). Nguồn `cic_profiles` thêm `profiles_hash` (mã băm của `api/data/cic_profiles.json` lúc tra, sửa file là mã đổi, hồ sơ cũ giữ mã cũ), `worst_group_12m`, `has_credit_history`, `recent_inquiries_90d`, `facilities` (mỗi khoản: `institution`, `product`, `limit`, `outstanding`, `group`, `opened_month`, `history_12m` 12 tháng cũ đến mới), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
 | `policy` | `results[]` (`rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`), `hard_fail`, `summary` |
 | `policy_input` | Snapshot đưa vào Policy Engine |
 | `statement` | Kết quả đối chiếu sao kê, hoặc `null` |
@@ -598,12 +601,12 @@ Ghi quyết định thành công thì hệ thống tạo `handoff` ở trạng t
 
 1. Đặt `status = SENDING`, tăng `attempts`, giữ khóa 60 giây. Đang có khóa thì `409 HANDOFF_IN_PROGRESS`.
 2. Băm lại gói. Lệch thì `409 HANDOFF_HASH_MISMATCH`.
-3. Gửi LOS với `idempotency_key` cố định của gói. Bản demo dùng `MockLosAdapter`, trả `MOCK-<key>`.
+3. Gửi LOS với `idempotency_key` cố định của gói. `InternalLosAdapter` trả mã `LOS-<key>`.
 4. Ghi `SUCCEEDED` kèm `los_reference`, hoặc `FAILED` kèm `last_error` (`LOS_UNAVAILABLE`, `LOS_INVALID_RESPONSE`). Quyết định của người không bị đổi khi gửi lỗi (FR-36). Gọi lại đầu này để thử lại.
 
 Đã `SUCCEEDED` thì gọi lại trả kết quả cũ, không gửi lần hai.
 
-**Gói gửi LOS** (`handoff.payload`): `case_id`, `seller_id`, `shop_id`, `decision`, `risk`, `cic`, `policy`, `document` (tờ trình đã qua), `evidence_ids`, `demo`. Gói `REJECT` có `final_amount = null` (FR-35).
+**Gói gửi LOS** (`handoff.payload`): `case_id`, `seller_id`, `shop_id`, `decision`, `risk`, `cic`, `policy`, `document` (tờ trình đã qua), `evidence_ids`. Gói `REJECT` có `final_amount = null` (FR-35).
 
 **Phản hồi `200`** (`HandoffResponse`): `CaseSummary` thêm `handoff` không kèm `payload`:
 
@@ -614,7 +617,7 @@ Ghi quyết định thành công thì hệ thống tạo `handoff` ở trạng t
   "payload_hash": "...",
   "attempts": 1,
   "last_error": null,
-  "los_reference": "MOCK-...",
+  "los_reference": "LOS-...",
   "lease_until": null
 }
 ```
@@ -661,7 +664,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `INVALID_PAYOUT_HISTORY` | 422 | Tạo hồ sơ | Tuần không liên tục, chưa kết thúc, hoặc số âm |
 | `UNAPPROVED_FEATURE_FIELDS` | 422 | Tạo hồ sơ | Snapshot có trường ngoài danh sách cho phép |
 | `PAYOUT_PROVENANCE_REQUIRED` | 422 | Tạo hồ sơ | Thiếu nguồn gốc payout |
-| `SIMULATION_MUST_BE_LABELLED` | 422 | Tạo hồ sơ | Dữ liệu synthetic không gắn nhãn mô phỏng |
+| `ESTIMATE_MUST_BE_LABELLED` | 422 | Tạo hồ sơ | Nguồn `addlivetag` hoặc `seller_book` không gắn `payout_origin = estimated` |
 | `INVALID_FEATURE_SNAPSHOT` | 422 | Tạo hồ sơ | Thiếu mức dữ liệu sàn hỗ trợ hoặc lời công bố nguồn, hoặc hồ sơ shop sai kiểu, ngoài khoảng |
 | `UNSUPPORTED_SHOPEE_SOURCE` | 422 | Tạo hồ sơ | Nguồn Shopee chưa hỗ trợ |
 | `INVALID_RISK_RESULT` | 422 | Tạo hồ sơ | PD ngoài khoảng, thiếu yếu tố, hoặc báo thiếu dữ liệu mà vẫn có PD |
@@ -677,7 +680,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `JOB_LEASE_EXPIRED`, `JOB_HANDLER_ERROR`, `JOB_KIND_UNKNOWN` | 500 | Trong `error` của job | Worker chết quá số lần, lỗi không lường trước, loại job lạ |
 | `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
 | `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
-| `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
+| `WORKFLOW_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
 | `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE`, `INVALID_WORKFLOW_CIC_SOURCE`, `CIC_PROFILES_INVALID` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
 | `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |

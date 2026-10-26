@@ -8,9 +8,9 @@ from routers import auth
 from routers import underwriting as routes
 from services.underwriting.models import WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService, utc_now
-from services.underwriting.sources import DemoCicSource, MockLosAdapter, demo_source
+from services.underwriting.sources import FixedCicSource, InternalLosAdapter, seller_book_source
 from tests.test_underwriting import NOW, plan
 
 KEY = "k" * 32
@@ -23,7 +23,7 @@ def token_mode(monkeypatch, service):
     monkeypatch.setattr(auth.config, "WORKFLOW_MODE", "demo")
     monkeypatch.setattr(auth.config, "WORKFLOW_IDENTITY", "token")
     monkeypatch.setattr(auth.config, "AUTH_SIGNING_KEY", KEY)
-    monkeypatch.setattr(auth.config, "DEMO_PASSCODE", PASSCODE)
+    monkeypatch.setattr(auth.config, "ACCESS_PASSCODE", PASSCODE)
     monkeypatch.setattr(auth, "throttle", auth.LoginThrottle(3, 60))
     app.dependency_overrides[routes.get_service] = lambda: service
     with TestClient(app) as client:
@@ -35,10 +35,10 @@ def token_mode(monkeypatch, service):
 def service():
     return UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(NOW),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
     )
 
@@ -104,7 +104,7 @@ def test_tampered_and_expired_tokens_are_rejected(token_mode):
     "changes, expected",
     [
         ({"WORKFLOW_IDENTITY": "header"}, (503, "TOKEN_LOGIN_DISABLED")),
-        ({"DEMO_PASSCODE": ""}, (503, "AUTH_NOT_CONFIGURED")),
+        ({"ACCESS_PASSCODE": ""}, (503, "AUTH_NOT_CONFIGURED")),
         ({"AUTH_SIGNING_KEY": "short"}, (503, "AUTH_NOT_CONFIGURED")),
     ],
 )

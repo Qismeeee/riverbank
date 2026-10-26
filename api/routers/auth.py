@@ -126,7 +126,7 @@ def get_actor(
     actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
 ) -> Actor:
     if config.WORKFLOW_MODE != "demo":
-        raise WorkflowError("WORKFLOW_DEMO_DISABLED", 503)
+        raise WorkflowError("WORKFLOW_DISABLED", 503)
     provider = IDENTITY_PROVIDERS.get(config.WORKFLOW_IDENTITY)
     if provider is None:
         raise WorkflowError("INVALID_WORKFLOW_IDENTITY", 503)
@@ -218,11 +218,11 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 def issue_token(request: TokenRequest, http: Request) -> dict:
     if config.WORKFLOW_MODE != "demo" or config.WORKFLOW_IDENTITY != "token":
         raise WorkflowError("TOKEN_LOGIN_DISABLED", 503)
-    if not config.DEMO_PASSCODE:
+    if not config.ACCESS_PASSCODE:
         raise WorkflowError("AUTH_NOT_CONFIGURED", 503)
     key, now = client_key(http), utc_now()
     throttle.check(key, now)
-    if not hmac.compare_digest(request.passcode.encode(), config.DEMO_PASSCODE.encode()):
+    if not hmac.compare_digest(request.passcode.encode(), config.ACCESS_PASSCODE.encode()):
         throttle.fail(key, now)
         raise WorkflowError("INVALID_CREDENTIALS", 401)
     throttle.reset(key)

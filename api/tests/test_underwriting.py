@@ -11,12 +11,12 @@ from routers import underwriting as routes
 from services.underwriting.evidence import read_evidence
 from services.underwriting.models import DecisionInput, Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
-    DemoCicSource,
-    MockLosAdapter,
-    demo_source,
+    FixedCicSource,
+    InternalLosAdapter,
+    seller_book_source,
 )
 
 NOW = datetime(2026, 10, 22, tzinfo=UTC)
@@ -45,10 +45,10 @@ def seller_headers(seller="demo-b", key="create-1"):
 def service():
     return UnderwritingService(
         MemoryCaseRepository(),
-        demo_source(NOW),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
     )
 
@@ -112,7 +112,7 @@ def test_case_b_end_to_end_and_idempotent_handoff(client, service):
     assert response.status_code == 200, response.text
     sent = response.json()
     assert sent["status"] == "ACCEPTED" and sent["handoff"]["status"] == "SUCCEEDED"
-    assert sent["handoff"]["los_reference"].startswith("MOCK-")
+    assert sent["handoff"]["los_reference"].startswith("LOS-")
     repeat = client.post(
         f"/v1/cases/{case_id}/handoff", headers=BANK, json={"expected_version": decided["version"]}
     ).json()
@@ -330,7 +330,7 @@ def test_handoff_failure_retries_same_payload_and_key(service):
         calls.append((deepcopy(payload), key))
         if len(calls) == 1:
             raise TimeoutError("private dependency details")
-        return "MOCK-retry"
+        return "LOS-retry"
 
     service.los.send = send
     failed = service.handoff(case.case_id, case.version, "uw")
@@ -397,9 +397,9 @@ def test_missing_cic_never_defaults_to_pass(service):
     assert rule["missing_data"] and not rule["passed"]
 
 
-def test_simulated_source_cannot_claim_observed_payout(service):
+def test_estimated_source_cannot_claim_observed_payout(service):
     service.features.records[("demo-b", "demo-b")][1]["payout_origin"] = "observed"
-    with pytest.raises(WorkflowError, match="SIMULATION_MUST_BE_LABELLED"):
+    with pytest.raises(WorkflowError, match="ESTIMATE_MUST_BE_LABELLED"):
         service.create(Plan(**plan()), "fake-observed")
 
 
@@ -437,3 +437,29 @@ def test_cic_inquiry_route_is_underwriter_only(client):
     assert seller.status_code == 403
     response = client.post(url, json=body, headers=BANK)
     assert response.status_code == 409 and "CIC_INQUIRY_NOT_ALLOWED" in response.text
+
+
+def check_queue_scopes(service):
+    decisions = {"q1": "ACCEPT_PROPOSAL", "q2": "REJECT", "q3": "ACCEPT_PROPOSAL", "q4": None}
+    ids = {}
+    for minute, (key, decision) in enumerate(decisions.items()):
+        service.clock = lambda minute=minute: NOW + timedelta(minutes=minute)
+        case = service.create(Plan(**plan()), key)
+        ids[key] = case.case_id
+        if decision:
+            request = DecisionInput(
+                expected_version=case.version, decision_type=decision, reason="test"
+            )
+            service.decide(case.case_id, request, "uw-1", f"decide-{key}")
+
+    def listed(status, limit=100, offset=0):
+        return [c.case_id for c in service.repository.list_queue(status, limit, offset)]
+
+    assert listed("ACCEPTED") == [ids["q3"], ids["q1"]]
+    assert listed("REJECTED") == [ids["q2"]]
+    assert listed(None) == [ids["q4"]]
+    assert listed("ACCEPTED", limit=1, offset=1) == [ids["q1"]]
+
+
+def test_queue_lists_decided_cases_newest_first(service):
+    check_queue_scopes(service)

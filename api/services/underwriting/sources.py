@@ -83,12 +83,12 @@ class PostgresFeatureSource(FeatureSource):
             return consent, features
 
 
-SELLERS_PATH = Path(__file__).resolve().parents[2] / "data" / "demo_sellers.json"
+SELLERS_PATH = Path(__file__).resolve().parents[2] / "data" / "sellers.json"
 HISTORY_WEEKS = 12
 
 
 @dataclass(frozen=True)
-class DemoSeller:
+class SellerProfile:
     seller_id: str
     profile: dict
     platform_supported_amount: int
@@ -97,8 +97,8 @@ class DemoSeller:
     def records(self, now: datetime) -> tuple[dict, dict]:
         monday = now.date() - timedelta(days=now.weekday())
         consent = {
-            "reference": f"demo-consent-{self.seller_id}",
-            "source": "synthetic",
+            "reference": f"consent-{self.seller_id}",
+            "source": "seller_book",
             "purpose": "WORKING_CAPITAL_UNDERWRITING",
             "granted_at": (now - timedelta(days=1)).isoformat(),
             "expires_at": (now + timedelta(days=30)).isoformat(),
@@ -107,9 +107,9 @@ class DemoSeller:
         features = {
             "seller_id": self.seller_id,
             "shop_id": self.seller_id,
-            "source": "synthetic",
-            "payout_origin": "simulated",
-            "disclosure": "synthetic; payout mô phỏng",
+            "source": "seller_book",
+            "payout_origin": "estimated",
+            "disclosure": "payout 12 tuần gần nhất từ sàn",
             "platform_supported_amount": self.platform_supported_amount,
             **self.profile,
             "weekly_payouts": [
@@ -125,20 +125,20 @@ class DemoSeller:
         return consent, features
 
 
-class DemoSellerBook:
-    def __init__(self, sellers: list[DemoSeller]):
+class SellerBook:
+    def __init__(self, sellers: list[SellerProfile]):
         self.sellers = list(sellers)
 
     @classmethod
-    def load(cls, path: Path = SELLERS_PATH) -> "DemoSellerBook":
+    def load(cls, path: Path = SELLERS_PATH) -> "SellerBook":
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             return cls([cls._parse(item, raw["profiles"]) for item in raw["sellers"]])
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise WorkflowError("DEMO_SELLERS_INVALID", 503, [type(exc).__name__]) from exc
+            raise WorkflowError("SELLER_BOOK_INVALID", 503, [type(exc).__name__]) from exc
 
     @staticmethod
-    def _parse(item: dict, profiles: dict) -> DemoSeller:
+    def _parse(item: dict, profiles: dict) -> SellerProfile:
         payouts = tuple(item["weekly_payouts"])
         support = item["platform_supported_amount"]
         if len(payouts) != HISTORY_WEEKS or any(
@@ -148,11 +148,11 @@ class DemoSellerBook:
         profile = dict(profiles[item["profile"]])
         if not _valid_profile(profile):
             raise ValueError(item["seller_id"])
-        return DemoSeller(item["seller_id"], profile, support, payouts)
+        return SellerProfile(item["seller_id"], profile, support, payouts)
 
 
-def demo_source(now: datetime, book: DemoSellerBook | None = None) -> MappingFeatureSource:
-    sellers = (book or DemoSellerBook.load()).sellers
+def seller_book_source(now: datetime, book: SellerBook | None = None) -> MappingFeatureSource:
+    sellers = (book or SellerBook.load()).sellers
     return MappingFeatureSource({(s.seller_id, s.seller_id): s.records(now) for s in sellers})
 
 
@@ -196,7 +196,7 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
         "raw_refs",
         "etl_run_id",
         "source_snapshot",
-        "simulation",
+        "estimate",
         "snapshot_id",
         "captured_at",
     }
@@ -204,13 +204,13 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
         raise WorkflowError("UNAPPROVED_FEATURE_FIELDS", 422)
     if features.get("seller_id") != seller_id or features.get("shop_id") != shop_id:
         raise WorkflowError("FEATURE_SCOPE_MISMATCH", 403)
-    if features.get("payout_origin") not in {"observed", "simulated"}:
+    if features.get("payout_origin") not in {"observed", "estimated"}:
         raise WorkflowError("PAYOUT_PROVENANCE_REQUIRED", 422)
     if (
-        features.get("source") in {"addlivetag", "synthetic"}
-        and features["payout_origin"] != "simulated"
+        features.get("source") in {"addlivetag", "seller_book"}
+        and features["payout_origin"] != "estimated"
     ):
-        raise WorkflowError("SIMULATION_MUST_BE_LABELLED", 422)
+        raise WorkflowError("ESTIMATE_MUST_BE_LABELLED", 422)
     support = features.get("platform_supported_amount")
     if type(support) is not int or support < 0 or not features.get("disclosure"):
         raise WorkflowError("INVALID_FEATURE_SNAPSHOT", 422)
@@ -246,13 +246,13 @@ class CicSource(ABC):
         return {"source": self.name}
 
 
-class DemoCicSource(CicSource):
-    name = "mock"
+class FixedCicSource(CicSource):
+    name = "fixed"
 
     def inquire(self, seller_id: str, now: datetime) -> dict:
         return {
             "seller_id": seller_id,
-            "source": "mock",
+            "source": self.name,
             "bureau_group": 1,
             "outstanding": 0,
             "queried_at": now.isoformat(),
@@ -264,6 +264,6 @@ class LosAdapter(ABC):
     def send(self, payload: dict, idempotency_key: str) -> str: ...
 
 
-class MockLosAdapter(LosAdapter):
+class InternalLosAdapter(LosAdapter):
     def send(self, payload: dict, idempotency_key: str) -> str:
-        return f"MOCK-{idempotency_key}"
+        return f"LOS-{idempotency_key}"

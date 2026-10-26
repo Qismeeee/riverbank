@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from services.underwriting.models import WorkflowError
-from services.underwriting.sources import HISTORY_WEEKS, DemoSellerBook, demo_source
+from services.underwriting.sources import HISTORY_WEEKS, SellerBook, seller_book_source
 
 NOW = datetime(2026, 10, 31, 2, 0, tzinfo=UTC)
 PROFILES = {"shop": {"archetype": "fashion", "shop_age_months": 12, "rating": 4.7}}
@@ -27,20 +27,20 @@ def write(tmp_path, sellers: list[dict], profiles: dict = PROFILES):
 
 
 def test_shipped_book_loads_every_seller():
-    ids = [s.seller_id for s in DemoSellerBook.load().sellers]
+    ids = [s.seller_id for s in SellerBook.load().sellers]
     assert len(ids) == len(set(ids))
     assert {"demo-a", "demo-d", "demo-e", "demo-j"} <= set(ids)
 
 
 def test_records_end_on_week_before_current_monday(tmp_path):
-    book = DemoSellerBook.load(write(tmp_path, [seller()]))
-    consent, features = demo_source(NOW, book).fetch("s1", "s1", NOW)
+    book = SellerBook.load(write(tmp_path, [seller()]))
+    consent, features = seller_book_source(NOW, book).fetch("s1", "s1", NOW)
     weeks = [w["week_start"] for w in features["weekly_payouts"]]
     monday = NOW.date() - timedelta(days=NOW.weekday())
     assert len(weeks) == HISTORY_WEEKS
     assert weeks[-1] == (monday - timedelta(weeks=1)).isoformat()
     assert features["archetype"] == "fashion"
-    assert consent["reference"] == "demo-consent-s1"
+    assert consent["reference"] == "consent-s1"
 
 
 @pytest.mark.parametrize(
@@ -55,16 +55,16 @@ def test_records_end_on_week_before_current_monday(tmp_path):
 )
 def test_invalid_seller_rejected(tmp_path, bad):
     with pytest.raises(WorkflowError) as err:
-        DemoSellerBook.load(write(tmp_path, [bad]))
-    assert err.value.code == "DEMO_SELLERS_INVALID"
+        SellerBook.load(write(tmp_path, [bad]))
+    assert err.value.code == "SELLER_BOOK_INVALID"
 
 
 def test_invalid_profile_rejected(tmp_path):
     profiles = {"shop": {"archetype": "fashion", "rating": 9}}
     with pytest.raises(WorkflowError):
-        DemoSellerBook.load(write(tmp_path, [seller()], profiles))
+        SellerBook.load(write(tmp_path, [seller()], profiles))
 
 
 def test_missing_file_rejected(tmp_path):
     with pytest.raises(WorkflowError):
-        DemoSellerBook.load(tmp_path / "nope.json")
+        SellerBook.load(tmp_path / "nope.json")

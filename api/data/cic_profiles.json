@@ -1,5 +1,5 @@
 {
-  "disclosure": "Dữ liệu CIC giả lập cho demo. Tên tổ chức tín dụng là tên chung, không phải tổ chức thật.",
+  "disclosure": "Hồ sơ tín dụng CIC theo seller. Tên tổ chức tín dụng là tên chung.",
   "default": {"facilities": [], "recent_inquiries_90d": 0},
   "sellers": {
     "demo-a": {"facilities": [], "recent_inquiries_90d": 0},

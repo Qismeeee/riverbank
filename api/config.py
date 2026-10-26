@@ -15,7 +15,7 @@ WORKFLOW_STORAGE = os.getenv("RIVERBANK_WORKFLOW_STORAGE", "memory")
 WORKFLOW_FEATURES = os.getenv("RIVERBANK_WORKFLOW_FEATURES", "demo")
 WORKFLOW_RISK = os.getenv("RIVERBANK_WORKFLOW_RISK", "lightgbm")
 WORKFLOW_CIC_GATE = os.getenv("RIVERBANK_WORKFLOW_CIC_GATE", "jev")
-WORKFLOW_CIC_SOURCE = os.getenv("RIVERBANK_WORKFLOW_CIC_SOURCE", "simulated")
+WORKFLOW_CIC_SOURCE = os.getenv("RIVERBANK_WORKFLOW_CIC_SOURCE", "profiles")
 WORKFLOW_IDENTITY = os.getenv("RIVERBANK_WORKFLOW_IDENTITY", "header")
 AUTH_TOKEN_TTL_SECONDS = int(os.getenv("RIVERBANK_AUTH_TOKEN_TTL_SECONDS", "28800"))
 AUTH_MAX_FAILURES = int(os.getenv("RIVERBANK_AUTH_MAX_FAILURES", "5"))
@@ -77,7 +77,7 @@ OPENROUTER_API_KEY = _from_env_or_secret(
 AUTH_SIGNING_KEY = _from_env_or_secret(
     "AUTH_SIGNING_KEY", "riverbank/auth", "AUTH_SIGNING_KEY", required=False
 )
-DEMO_PASSCODE = _from_env_or_secret(
+ACCESS_PASSCODE = _from_env_or_secret(
     "DEMO_PASSCODE", "riverbank/auth", "DEMO_PASSCODE", required=False
 )
 ADDLIVETAG_API_KEY = _from_env_or_secret(

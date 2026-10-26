@@ -12,9 +12,9 @@ from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import LightGbmRiskModel, RiskInput
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
-    DemoCicSource,
-    MockLosAdapter,
-    demo_source,
+    FixedCicSource,
+    InternalLosAdapter,
+    seller_book_source,
     validate_features,
 )
 from tests.test_underwriting import NOW, plan, seller_headers
@@ -37,7 +37,7 @@ class FakeScorer:
 
 
 def build(risk, mutate=None):
-    source = demo_source(NOW)
+    source = seller_book_source(NOW)
     if mutate:
         for _, features in source.records.values():
             mutate(features)
@@ -45,8 +45,8 @@ def build(risk, mutate=None):
         MemoryCaseRepository(),
         source,
         risk,
-        DemoCicSource(),
-        MockLosAdapter(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
     )
 
@@ -188,7 +188,7 @@ def test_missing_risk_outranks_statement_request():
     ],
 )
 def test_invalid_profile_rejected(changes):
-    _, features = demo_source(NOW).records[("demo-b", "demo-b")]
+    _, features = seller_book_source(NOW).records[("demo-b", "demo-b")]
     features.update(changes)
     with pytest.raises(WorkflowError) as error:
         validate_features(features, "demo-b", "demo-b", NOW)

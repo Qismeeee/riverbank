@@ -93,8 +93,8 @@ class CicProfileBook:
         return self.sellers.get(seller_id, self.default)
 
 
-class SimulatedCicSource(CicSource):
-    name = "simulated"
+class ProfileCicSource(CicSource):
+    name = "cic_profiles"
 
     def __init__(self, book: CicProfileBook | None = None):
         self.book = book or CicProfileBook.load()
