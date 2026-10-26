@@ -49,9 +49,9 @@ class PostgresFeatureSource(FeatureSource):
         self.database_url = database_url
 
     def fetch(self, seller_id: str, shop_id: str, now: datetime) -> tuple[dict, dict]:
-        import psycopg
+        from db.pool import connect
 
-        with psycopg.connect(self.database_url) as conn:
+        with connect(self.database_url) as conn:
             owner = conn.execute(
                 "select 1 from seller_shops where seller_id=%s and shop_id=%s",
                 (seller_id, shop_id),

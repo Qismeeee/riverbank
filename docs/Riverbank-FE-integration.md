@@ -122,4 +122,5 @@ Mọi lỗi nghiệp vụ có dạng `{ "detail": { "code": "...", "details": []
 | `409 CASE_VERSION_CONFLICT` | Đọc lại hồ sơ |
 | `422 BLOCKED_INPUT` | Báo ghi chú chứa nội dung bị chặn, không tạo hồ sơ |
 | `429 TOO_MANY_ATTEMPTS` | Sai mã nhiều lần, chờ 5 phút |
+| `429 RATE_LIMITED` | Gọi quá nhanh. Đọc header `Retry-After` (giây), báo "thử lại sau N giây", không tự gọi lại liên tục |
 | `503 AUTH_NOT_CONFIGURED`, `503 OPENROUTER_KEY_REQUIRED` | Báo lỗi cấu hình server |

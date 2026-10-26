@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, Response
 
 import config
 from routers.auth import Principal, seller_of
+from routers.limits import rate_limited
 from routers.underwriting import Identifier, Service, StatementUploadForm, get_service
 from services.jobs import (
     Job,
@@ -40,7 +41,12 @@ def get_jobs() -> JobQueue:
 Jobs = Annotated[JobQueue, Depends(get_jobs)]
 
 
-@router.post("/cases/{case_id}/statements/upload-jobs", status_code=202, response_model=JobView)
+@router.post(
+    "/cases/{case_id}/statements/upload-jobs",
+    status_code=202,
+    response_model=JobView,
+    dependencies=[rate_limited("statement_upload")],
+)
 def upload_statement_job(
     case_id: Identifier,
     form: Annotated[StatementUploadForm, Form(media_type="multipart/form-data")],

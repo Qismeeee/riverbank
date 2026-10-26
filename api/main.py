@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import config
+from middleware import RequestTiming
 from routers.auth import router as auth_router
 from routers.copilot import cases_router as copilot_cases_router
 from routers.copilot import router as copilot_router
@@ -39,6 +40,7 @@ async def workflow_error_handler(request, exc: WorkflowError):
     return JSONResponse(
         status_code=exc.status,
         content={"detail": {"code": exc.code, "details": exc.details}},
+        headers=exc.headers,
     )
 
 
@@ -48,7 +50,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Retry-After"],
 )
+app.add_middleware(RequestTiming)
 
 
 def _check_db() -> str:
