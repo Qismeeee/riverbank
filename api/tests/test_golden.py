@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,13 @@ _SPEC = importlib.util.spec_from_file_location("riverbank_eval_score", ROOT / "e
 score = importlib.util.module_from_spec(_SPEC)
 assert _SPEC.loader is not None
 _SPEC.loader.exec_module(score)
+sys.modules.setdefault("score", score)
+_MEMO_SPEC = importlib.util.spec_from_file_location(
+    "riverbank_eval_memo_llm", ROOT / "eval" / "memo_llm.py"
+)
+memo_llm = importlib.util.module_from_spec(_MEMO_SPEC)
+assert _MEMO_SPEC.loader is not None
+_MEMO_SPEC.loader.exec_module(memo_llm)
 
 GOLDEN = ROOT / "eval" / "golden"
 LLM = GOLDEN / "llm"
@@ -137,6 +145,20 @@ def test_forbidden_lexicon_comes_from_guardrails():
 def test_memo_guard(path: Path):
     case = json.loads(path.read_text(encoding="utf-8"))
     assert score.score_memo(case) == case["expected"]
+
+
+def test_memo_release_gate_runs_statement_and_compares_every_expected_field():
+    case_id, inp, expected = next(row for row in CASES if row[0] == "FX-C-matched")
+    result = memo_llm.run(case_id, inp, expected, "llm")
+    assert result["passed"]
+    assert result["status"] == "PENDING_REVIEW"
+    assert result["mismatched_keys"] == []
+    assert result["attempts"][-1]["generator"] == "CODE"
+
+    bad = memo_llm.run(case_id, inp, {**expected, "amount_proposed": 1}, "llm")
+    assert not bad["passed"]
+    assert bad["mismatched_keys"] == ["amount_proposed"]
+    assert bad["errors"] == ["EXPECTED_MISMATCH:amount_proposed"]
 
 
 def test_studio_eval_report_matches_golden():

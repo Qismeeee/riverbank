@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 import config
-from llm import LlmClient, LlmError, LlmRequest, build_llm_client
-from prompts import Prompt, default_prompts
+from llm import LlmClient, LlmError, LlmRequest
+from prompts import Prompt
 from services.guard import OutputGuard, ints, numbers
 
 from .evidence import TEMPLATES, read_evidence, sentence
@@ -12,6 +12,8 @@ from .models import Case, WorkflowError
 
 AUDIENCES = ("underwriter_memo", "seller_explanation")
 SHARED_SECTIONS = (("source", "E4"), ("gap", "E5"))
+SELLER_SECTIONS = (("gap", "E5"),)
+SELLER_NO_LOAN_SECTIONS = (("gap", "E5"), ("no_loan", "E5"), ("source", "E4"))
 LOAN_SECTIONS = (("proposal", "E5"), ("deduction", "E5"))
 NO_LOAN_SECTIONS = (("no_loan", "E5"),)
 INTERNAL_SECTIONS = (("risk", "E6"), ("policy", "E7"), ("statement", "E8"))
@@ -35,6 +37,7 @@ class Slot:
     audience: str
     template: str
     evidence: dict
+    locked: bool = True
 
 
 @dataclass(frozen=True)
@@ -61,11 +64,17 @@ def variant(template: str, payload: dict) -> str:
 
 def plan_slots(run: dict, refs: dict) -> list[Slot]:
     loan = LOAN_SECTIONS if run["cashflow"]["gap"] else NO_LOAN_SECTIONS
-    shared = SHARED_SECTIONS + loan
-    internal = shared + tuple(
-        (variant(t, refs[code]["payload"]), code) for t, code in INTERNAL_SECTIONS if code in refs
+    internal = (
+        SHARED_SECTIONS
+        + loan
+        + tuple(
+            (variant(t, refs[code]["payload"]), code)
+            for t, code in INTERNAL_SECTIONS
+            if code in refs
+        )
     )
-    sections = {"underwriter_memo": internal, "seller_explanation": shared}
+    seller = SELLER_SECTIONS + loan if run["cashflow"]["gap"] else SELLER_NO_LOAN_SECTIONS
+    sections = {"underwriter_memo": internal, "seller_explanation": seller}
     return [
         Slot(f"{audience}.{index}", audience, template, refs[code])
         for audience in AUDIENCES
@@ -89,8 +98,22 @@ class TemplateMemoWriter(MemoWriter):
     version = "templates-v1"
 
     def write(self, request: MemoRequest) -> Draft:
-        rendered = group(request.slots, lambda slot: sentence(slot.template, slot.evidence))
+        rendered = group(
+            request.slots,
+            lambda slot: sentence(slot.template, slot.evidence, slot.audience),
+        )
         return Draft(rendered, "TEMPLATE", self.version)
+
+
+class CodeMemoWriter(MemoWriter):
+    version = "semantic-frames-v1"
+
+    def write(self, request: MemoRequest) -> Draft:
+        rendered = group(
+            request.slots,
+            lambda slot: sentence(slot.template, slot.evidence, slot.audience),
+        )
+        return Draft(rendered, "CODE", self.version)
 
 
 class LlmMemoWriter(MemoWriter):
@@ -115,6 +138,7 @@ class LlmMemoWriter(MemoWriter):
         self.client, self.prompt = client, prompt
 
     def _payload(self, request: MemoRequest) -> dict:
+        editable = [slot for slot in request.slots if not slot.locked]
         return {
             "status_target": request.status,
             "validator_errors": request.feedback,
@@ -126,12 +150,15 @@ class LlmMemoWriter(MemoWriter):
                     "reference": reference["text"],
                     "claims": reference["claims"],
                 }
-                for slot in request.slots
-                for reference in (sentence(slot.template, slot.evidence),)
+                for slot in editable
+                for reference in (sentence(slot.template, slot.evidence, slot.audience),)
             ],
         }
 
     def write(self, request: MemoRequest) -> Draft:
+        editable = [slot for slot in request.slots if not slot.locked]
+        if not editable:
+            return CodeMemoWriter().write(request)
         response = self.client.complete_json(
             LlmRequest(
                 system=self.prompt.system,
@@ -145,19 +172,22 @@ class LlmMemoWriter(MemoWriter):
         if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
             raise LlmError("LLM_SCHEMA_MISMATCH")
         texts = {item.get("slot_id"): item.get("text") for item in items}
-        expected = {slot.slot_id for slot in request.slots}
+        expected = {slot.slot_id for slot in editable}
         if len(items) != len(texts) or set(texts) != expected:
             raise LlmError("LLM_SLOT_MISMATCH")
         if not all(isinstance(text, str) and text.strip() for text in texts.values()):
             raise LlmError("LLM_SCHEMA_MISMATCH")
         rendered = group(
             request.slots,
-            lambda slot: {
-                **sentence(slot.template, slot.evidence),
+            lambda slot: sentence(slot.template, slot.evidence, slot.audience)
+            if slot.locked
+            else {
+                **sentence(slot.template, slot.evidence, slot.audience),
                 "text": texts[slot.slot_id].strip(),
+                "locked": False,
             },
         )
-        return Draft(rendered, "LLM", self.prompt.version, response.model)
+        return Draft(rendered, "HYBRID", self.prompt.version, response.model)
 
 
 class FallbackMemoWriter(MemoWriter):
@@ -179,30 +209,58 @@ class MemoValidator:
     def __init__(self, guard: OutputGuard):
         self.guard = guard
 
-    def sentence_errors(self, case: Case, item: dict) -> list[str]:
+    def sentence_errors(
+        self, case: Case, item: dict, audience: str = "underwriter_memo"
+    ) -> list[str]:
         try:
             evidence = read_evidence(case, item["evidence_id"])
         except WorkflowError as exc:
             return [exc.code]
         if item.get("template") not in TEMPLATES:
             return ["MEMO_TEMPLATE_UNKNOWN"]
-        claims = sentence(item["template"], evidence)["claims"]
+        expected = sentence(item["template"], evidence, audience)
+        claims = expected["claims"]
         codes = [] if item.get("claims") == claims else ["MEMO_EVIDENCE_MISMATCH"]
         text = item.get("text") or ""
         codes += [GUARD_CODES[r] for r in self.guard.check(text, ints(claims), case.status)]
         required = {v for v in claims.values() if type(v) is int}
         if not required <= set(numbers(text)):
             codes.append("MEMO_CLAIM_MISSING")
+        if (
+            item.get("locked") is not True
+            or item.get("semantic_frame") != expected["semantic_frame"]
+            or text != expected["text"]
+        ):
+            codes.append("MEMO_SEMANTIC_MISMATCH")
         return list(dict.fromkeys(codes))
 
     def errors(self, case: Case, sentences: dict[str, list[dict]]) -> list[dict]:
-        return [
+        failures = [
             {"slot_id": f"{audience}.{index}", "text": item.get("text"), "errors": codes}
             for audience in AUDIENCES
             for index, item in enumerate(sentences.get(audience, []))
-            for codes in (self.sentence_errors(case, item),)
+            for codes in (self.sentence_errors(case, item, audience),)
             if codes
         ]
+        run = case.runs[-1]
+        refs = {item["code"]: item for item in case.evidence if item["run_id"] == run["run_id"]}
+        expected = plan_slots(run, refs)
+        for audience in AUDIENCES:
+            wanted = [slot for slot in expected if slot.audience == audience]
+            actual = sentences.get(audience, [])
+            if len(actual) != len(wanted) or any(
+                item.get("template") != slot.template
+                or item.get("evidence_id") != slot.evidence["evidence_id"]
+                for item, slot in zip(actual, wanted, strict=False)
+            ):
+                failures.append(
+                    {
+                        "slot_id": audience,
+                        "text": None,
+                        "errors": ["MEMO_SLOT_MISMATCH"],
+                    }
+                )
+        return failures
 
     def validate(self, case: Case, document: dict) -> None:
         failures = self.errors(case, {a: document[a] for a in AUDIENCES})
@@ -252,10 +310,7 @@ def default_validator() -> MemoValidator:
 
 WRITERS = {
     "template": lambda: TemplateMemoWriter(),
-    "llm": lambda: FallbackMemoWriter(
-        LlmMemoWriter(build_llm_client("memo_writer"), default_prompts().get("memo-writer")),
-        TemplateMemoWriter(),
-    ),
+    "llm": lambda: CodeMemoWriter(),
 }
 
 

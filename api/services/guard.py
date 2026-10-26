@@ -2,7 +2,16 @@ import re
 from pathlib import Path
 
 _NUMBER = re.compile(r"\d{1,3}(?:\.\d{3})+|\d+")
-_APPROVED = ("đã duyệt", "được duyệt", "accepted")
+_APPROVED = (
+    "đã duyệt",
+    "được duyệt",
+    "đã chấp thuận",
+    "được chấp thuận",
+    "đã phê duyệt",
+    "được phê duyệt",
+    "accepted",
+    "approved",
+)
 _REJECTED = ("đã từ chối", "rejected")
 
 
