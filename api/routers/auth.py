@@ -5,6 +5,8 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
+from threading import Lock
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Request
@@ -16,14 +18,18 @@ from services.ratelimit import SlidingWindow
 from services.underwriting.models import WorkflowError
 from services.underwriting.service import utc_now
 
-ROLES = ("seller", "underwriter")
 MIN_SIGNING_KEY_BYTES = 32
+
+
+class Role(StrEnum):
+    SELLER = "seller"
+    UNDERWRITER = "underwriter"
 
 
 @dataclass(frozen=True)
 class Actor:
     subject: str
-    role: str
+    role: Role
 
 
 @dataclass(frozen=True)
@@ -36,9 +42,9 @@ class Credentials:
 def _actor(subject: str | None, role: str | None) -> Actor:
     if not subject or not subject.strip():
         raise WorkflowError("AUTHENTICATION_REQUIRED", 401)
-    if role not in ROLES:
+    if role not in Role:
         raise WorkflowError("ROLE_NOT_ALLOWED", 403)
-    return Actor(subject, role)
+    return Actor(subject, Role(role))
 
 
 def _b64(data: bytes) -> str:
@@ -134,19 +140,19 @@ def get_actor(
 
 
 def underwriter(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
-    if actor.role != "underwriter":
+    if actor.role != Role.UNDERWRITER:
         raise WorkflowError("UNDERWRITER_REQUIRED", 403)
     return actor
 
 
 def seller(actor: Annotated[Actor, Depends(get_actor)]) -> Actor:
-    if actor.role != "seller":
+    if actor.role != Role.SELLER:
         raise WorkflowError("SELLER_REQUIRED", 403)
     return actor
 
 
 def seller_of(actor: Actor, seller_id: str) -> None:
-    if actor.role != "seller" or actor.subject != seller_id:
+    if actor.role != Role.SELLER or actor.subject != seller_id:
         raise WorkflowError("SELLER_SCOPE_MISMATCH", 403)
 
 
@@ -158,13 +164,13 @@ Principal = Annotated[Actor, Depends(get_actor)]
 class TokenRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     subject: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
-    role: Literal["seller", "underwriter"]
+    role: Role
     passcode: str = Field(min_length=1, max_length=256)
 
 
 class ActorResponse(BaseModel):
     subject: str
-    role: str
+    role: Role
 
 
 class TokenResponse(ActorResponse):

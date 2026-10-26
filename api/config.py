@@ -55,6 +55,19 @@ JOB_LEASE_SECONDS = int(os.getenv("RIVERBANK_JOB_LEASE_SECONDS", "600"))
 STATEMENT_CLASSIFIER = os.getenv("RIVERBANK_STATEMENT_CLASSIFIER", "jev")
 STATEMENT_PAYOUT_PATTERN = os.getenv("RIVERBANK_STATEMENT_PAYOUT_PATTERN", "shopee")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+MESSAGE_BUS = os.getenv("RIVERBANK_MESSAGE_BUS", "memory")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+KAFKA_CLIENT_ID = os.getenv("KAFKA_CLIENT_ID", "riverbank-api")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "riverbank")
+KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "")
+KV_STORE = os.getenv("RIVERBANK_KV_STORE", "memory")
+VALKEY_HOST = os.getenv("VALKEY_HOST", "localhost")
+VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
+VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
+VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in {"1", "true", "yes"}
+VALKEY_KEY_PREFIX = os.getenv("VALKEY_KEY_PREFIX", "riverbank:")
+VALKEY_TIMEOUT_SECONDS = float(os.getenv("VALKEY_TIMEOUT_SECONDS", "5"))
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 ]
@@ -96,6 +109,16 @@ ACCESS_PASSCODE = _from_env_or_secret(
 ADDLIVETAG_API_KEY = _from_env_or_secret(
     "ADDLIVETAG_API_KEY", "riverbank/addlivetag", "ADDLIVETAG_API_KEY", required=False
 )
+
+
+def _service_login(service: str) -> tuple[str, str]:
+    keys = [f"{service.upper()}_{field}" for field in ("USERNAME", "PASSWORD")]
+    login = [_from_env_or_secret(k, f"riverbank/{service}", k, required=False) for k in keys]
+    return login[0], login[1]
+
+
+KAFKA_USERNAME, KAFKA_PASSWORD = _service_login("kafka")
+VALKEY_USERNAME, VALKEY_PASSWORD = _service_login("valkey")
 
 
 def database_url() -> str:

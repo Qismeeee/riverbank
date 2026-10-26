@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-llm dossiers
+.PHONY: setup db-up db-down kafka-up kafka-down valkey-up valkey-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-llm dossiers
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -11,6 +11,18 @@ db-up:
 
 db-down:
 	docker compose -f infra/docker-compose.local.yml down
+
+kafka-up:
+	docker compose -f infra/docker-compose.local.yml --profile kafka up -d kafka
+
+kafka-down:
+	docker compose -f infra/docker-compose.local.yml --profile kafka stop kafka
+
+valkey-up:
+	docker compose -f infra/docker-compose.local.yml --profile valkey up -d valkey
+
+valkey-down:
+	docker compose -f infra/docker-compose.local.yml --profile valkey stop valkey
 
 dev:
 	cd api && .venv/bin/uvicorn main:app --reload --port 8000

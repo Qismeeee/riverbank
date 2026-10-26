@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
 
 import config
 from db.migrate import apply as migrate_database
-from routers.auth import BankUser, Principal, SellerUser, seller_of
+from routers.auth import BankUser, Principal, Role, SellerUser, seller_of
 from routers.limits import rate_limited
 from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
@@ -204,7 +204,7 @@ def upload_statement(
     service: Service,
     actor: Principal,
 ) -> dict:
-    if actor.role == "seller":
+    if actor.role == Role.SELLER:
         seller_of(actor, service.repository.get(case_id).seller_id)
     content = form.file.file.read(StatementConfig().max_bytes + 1)
     request = StatementUpload(**form.model_dump(exclude={"file"}))

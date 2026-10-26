@@ -24,7 +24,7 @@ FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 ## Cấu trúc
 
 ```
-api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client), llm.py (LlmClient, một cửa gọi OpenAI hoặc OpenRouter, cache khi eval), prompts.py (nạp knowledge/prompts)
+api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client), llm.py (LlmClient, một cửa gọi OpenAI hoặc OpenRouter, cache khi eval), messaging/ (MessageClient: KafkaClient qua kafka-python, MemoryClient cho test; cấu hình ở messaging/config.py; thử broker: python -m messaging.client), kv/ (KVClient: ValkeyClient qua valkey-py, MemoryKVClient cho test; cấu hình ở kv/config.py; thử server: python -m kv.client), prompts.py (nạp knowledge/prompts)
 api/services/   engine code thuần: cashflow.py, features.py (FeatureBuilder, một nguồn feature cho train và serving), risk.py (RiskModel từ api/models/); shopee/ (schemas, weekly, seller_export, openapi_client)
 api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R10, policy.md tóm tắt; bản đầy đủ ở policy/policy.md
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
@@ -49,6 +49,8 @@ infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 ```
 make setup      tạo venv Python 3.12 bằng uv, cài dev deps, cài pre-commit
 make db-up      Postgres local trong docker
+make kafka-up   Kafka local một node tại localhost:9092
+make valkey-up  Valkey local một node tại localhost:6379
 make dev        uvicorn reload tại :8000
 make test       ruff check + ruff format --check (api, eval, data/synth) + pytest
 make fmt        ruff format
