@@ -121,14 +121,54 @@ def test_cic_inquiry_only_when_gate_skipped_cic():
     assert service.cic.calls == 1
 
 
-def test_statement_rerun_reuses_gate_snapshot():
+@pytest.mark.parametrize("p", [0.9, 0.2])
+def test_statement_case_waits_for_statement_before_gate(p):
+    jev = FakeJev(noul(p))
+    service = build(jev)
+    case = create(service, "demo-c")
+    cic = case.runs[-1]["cic"]
+    assert (case.status, case.reason) == ("AWAITING_STATEMENT", "STATEMENT_REQUIRED")
+    assert jev.calls == [] and service.cic.calls == 0
+    assert cic["source"] == "deferred_until_statement" and cic["gate"] is None
+    updated = service.submit_statement(case.case_id, statement_request(case), "uw-1")
+    gate_state = " ".join(jev.calls[0][0])
+    assert len(jev.calls) == 1 and "Sao kê ngân hàng đã đối chiếu" in gate_state
+    assert "140000000" in gate_state and "khớp trong ngưỡng" in gate_state
+    assert updated.runs[-1]["cic"]["gate"]["probability"] == p
+    if p >= 0.6:
+        assert service.cic.calls == 1 and updated.status == "PENDING_REVIEW"
+    else:
+        assert service.cic.calls == 0 and updated.status == "ESCALATED"
+        request = CicInquiry(expected_version=updated.version, reason="Đã gọi seller")
+        assert service.inquire_cic(case.case_id, request, "uw-1").status == "PENDING_REVIEW"
+
+
+def test_counter_after_statement_reuses_gate_snapshot():
     jev = FakeJev(noul(0.9))
     service = build(jev)
     case = create(service, "demo-c")
-    assert case.status == "AWAITING_STATEMENT"
     updated = service.submit_statement(case.case_id, statement_request(case), "uw-1")
+    decision = DecisionInput(
+        expected_version=updated.version,
+        decision_type="ACCEPT_COUNTER",
+        reason="giảm số tiền",
+        final_amount=updated.runs[-1]["cashflow"]["amount_proposed"] - 10_000_000,
+        final_tenor_weeks=updated.runs[-1]["cashflow"]["tenor_weeks"],
+    )
+    countered = service.decide(case.case_id, decision, "uw-1", "counter")
     assert len(jev.calls) == 1 and service.cic.calls == 1
-    assert updated.runs[-1]["cic"] == case.runs[-1]["cic"]
+    assert countered.runs[-1]["cic"] == updated.runs[-1]["cic"]
+
+
+def test_statement_mismatch_reaches_gate_state():
+    jev = FakeJev(noul(0.9))
+    service = build(jev)
+    case = create(service, "demo-c")
+    updated = service.submit_statement(
+        case.case_id, statement_request(case, marketplace_total=50_000_000), "uw-1"
+    )
+    assert "không khớp" in " ".join(jev.calls[0][0])
+    assert (updated.status, updated.reason) == ("ESCALATED", "HARD_POLICY_FAILURE")
 
 
 def test_state_holds_only_computed_numbers_and_labels():

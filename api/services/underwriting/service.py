@@ -30,6 +30,8 @@ from .sources import CicSource, FeatureSource, LosAdapter, validate_features
 ENGINE_VERSION = "cashflow-v2-base-int"
 POLICY_VERSION = "riverbank-demo-r01-r10-v3"
 NOT_QUERIED = "not_queried"
+DEFERRED = "deferred_until_statement"
+CIC_RULE_IDS = frozenset({"R06", "R07"})
 
 _UNSAFE_NOTE = re.compile(
     r"(?:ignore|bỏ\s+qua).*(?:policy|instruction|chính\s+sách|quy\s+tắc)|"
@@ -58,11 +60,13 @@ def _blocking(results: list, risk: dict) -> list:
     ]
 
 
-def _route(results: list, risk: dict, statement: dict | None) -> tuple[str, str | None]:
+def _route(
+    results: list, risk: dict, statement: dict | None, deferred: frozenset = frozenset()
+) -> tuple[str, str | None]:
     risk_missing = bool(risk.get("missing_fields"))
     failures = _blocking(results, risk)
-    awaiting_statement = bool(failures) and all(
-        r.rule_id == "R05" and r.missing_data for r in failures
+    awaiting_statement = any(r.rule_id == "R05" for r in failures) and all(
+        r.missing_data and (r.rule_id == "R05" or r.rule_id in deferred) for r in failures
     )
     if (failures and not awaiting_statement) or (statement and not statement["matched"]):
         return "ESCALATED", "HARD_POLICY_FAILURE"
@@ -166,18 +170,47 @@ class UnderwritingService:
             pd_bps=risk.get("pd_bps"),
         )
 
+    @staticmethod
+    def _skipped_cic(case: Case, source: str, gate: dict | None) -> dict:
+        return {
+            "seller_id": case.seller_id,
+            "source": source,
+            "bureau_group": None,
+            "outstanding": None,
+            "queried_at": None,
+            "gate": gate,
+        }
+
     def _inquire_cic(self, case: Case, inp: GateInput, now: datetime) -> dict:
         gate = self.cic_gate.evaluate(inp)
         if not gate.eligible:
-            return {
-                "seller_id": case.seller_id,
-                "source": NOT_QUERIED,
-                "bureau_group": None,
-                "outstanding": None,
-                "queried_at": None,
-                "gate": gate.payload(),
-            }
+            return self._skipped_cic(case, NOT_QUERIED, gate.payload())
         return {**self.cic.inquire(case.seller_id, now), "gate": gate.payload()}
+
+    def _statement_required(self, case: Case, features: dict, cf: dict, risk: dict) -> bool:
+        outcome = self.policy.evaluate(self._policy_input(case, features, cf, risk, {}, None))
+        return any(r.rule_id == "R05" and r.missing_data for r in outcome.results)
+
+    def _resolve_cic(
+        self,
+        case: Case,
+        inp: GateInput,
+        now: datetime,
+        override: dict | None,
+    ) -> dict:
+        # A gate that can decline judges a statement case only once the statement is compared.
+        if override:
+            return deepcopy(override)
+        prior = case.runs[-1]["cic"] if case.runs else None
+        if prior and prior["source"] != DEFERRED:
+            return deepcopy(prior)
+        if (
+            self.cic_gate.waits_for_statement
+            and inp.statement is None
+            and self._statement_required(case, inp.features, inp.cashflow, inp.risk)
+        ):
+            return self._skipped_cic(case, DEFERRED, None)
+        return self._inquire_cic(case, inp, now)
 
     def _assess(
         self,
@@ -246,16 +279,13 @@ class UnderwritingService:
         previous = case.status
         case.reason = None
         if result.loan_needed:
-            # PD is re-scored on each run's terms. A new run keeps the original CIC snapshot.
+            # PD is re-scored on each run's terms. A new run keeps the first CIC snapshot taken.
             risk = self.risk.predict(RiskInput(features, case.plan, cf))
             if not _valid_risk(risk):
                 raise WorkflowError("INVALID_RISK_RESULT", 422)
-            if cic_override:
-                cic = deepcopy(cic_override)
-            elif case.runs:
-                cic = deepcopy(case.runs[-1]["cic"])
-            else:
-                cic = self._inquire_cic(case, GateInput(features, cf, risk), now)
+            cic = self._resolve_cic(
+                case, GateInput(features, cf, risk, statement), now, cic_override
+            )
             if cic.get("seller_id") != case.seller_id:
                 raise WorkflowError("CIC_SCOPE_MISMATCH", 403)
             run["risk"], run["cic"] = risk, cic
@@ -291,7 +321,8 @@ class UnderwritingService:
             }
             run["policy"] = policy
             refs["E7"] = emit(case, run_id, "E7", policy, now.isoformat())
-            case.status, case.reason = _route(outcome.results, risk, statement)
+            deferred = CIC_RULE_IDS if cic["source"] == DEFERRED else frozenset()
+            case.status, case.reason = _route(outcome.results, risk, statement, deferred)
         else:
             case.status = "NO_LOAN_NEEDED"
         case.runs.append(run)
@@ -311,7 +342,7 @@ class UnderwritingService:
                 or case.decision
                 or not prior
                 or not prior["cic"]
-                or prior["cic"]["source"] != NOT_QUERIED
+                or prior["cic"]["source"] not in {NOT_QUERIED, DEFERRED}
             ):
                 raise WorkflowError("CIC_INQUIRY_NOT_ALLOWED")
             now = self.clock()

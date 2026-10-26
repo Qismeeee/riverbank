@@ -85,7 +85,7 @@ Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau 
 | Mở bằng chứng khi bấm một câu | `GET /v1/cases/{case_id}/evidence/{evidence_id}` |
 | Nhập tổng sao kê | `POST /v1/cases/{case_id}/statements` |
 | Nộp file sao kê thay seller | `POST /v1/cases/{case_id}/statements/upload`, `multipart/form-data` với `expected_version`, `period_start`, `period_end`, `file` |
-| Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source = not_queried`) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
+| Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source` là `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê chưa nộp) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
 | Chấp nhận, sửa số, từ chối | `POST /v1/cases/{case_id}/decisions` với `Idempotency-Key` |
 | Bàn giao LOS sau khi ký | `POST /v1/cases/{case_id}/handoff` |
 

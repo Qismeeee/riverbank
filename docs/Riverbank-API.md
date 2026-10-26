@@ -337,7 +337,7 @@ Một phần tử `runs`:
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
 | `cashflow` | `payout_base`, `payout_stress`, `weeks`, `stress_weeks`, `gap`, `negative_weeks`, `amount_proposed`, `tenor_weeks`, `weekly_deduction`, `weekly_deductions`, `tenor_trace`, `payout_warning_threshold` |
 | `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `demo`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
-| `cic` | `source` (`simulated`, `mock` hoặc `not_queried`), `bureau_group` (nhóm nợ hiện tại xấu nhất), `outstanding` (tổng dư nợ), `queried_at` (`null` khi không tra). Nguồn `simulated` thêm `profiles_hash` (mã băm của `api/data/cic_profiles.json` lúc tra, sửa file là mã đổi, hồ sơ cũ giữ mã cũ), `worst_group_12m`, `has_credit_history`, `recent_inquiries_90d`, `facilities` (mỗi khoản: `institution`, `product`, `limit`, `outstanding`, `group`, `opened_month`, `history_12m` 12 tháng cũ đến mới), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
+| `cic` | `source` (`simulated`, `mock`, `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê và Jev chưa được hỏi, lúc đó `gate` là `null`), `bureau_group` (nhóm nợ hiện tại xấu nhất), `outstanding` (tổng dư nợ), `queried_at` (`null` khi không tra). Nguồn `simulated` thêm `profiles_hash` (mã băm của `api/data/cic_profiles.json` lúc tra, sửa file là mã đổi, hồ sơ cũ giữ mã cũ), `worst_group_12m`, `has_credit_history`, `recent_inquiries_90d`, `facilities` (mỗi khoản: `institution`, `product`, `limit`, `outstanding`, `group`, `opened_month`, `history_12m` 12 tháng cũ đến mới), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
 | `policy` | `results[]` (`rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`), `hard_fail`, `summary` |
 | `policy_input` | Snapshot đưa vào Policy Engine |
 | `statement` | Kết quả đối chiếu sao kê, hoặc `null` |
@@ -511,7 +511,7 @@ Dùng khi Jev gate từ chối hoặc lỗi nên hệ thống chưa tra CIC (`ci
 
 **Header:** vai trò `underwriter`.
 
-**Điều kiện:** hồ sơ `ESCALATED`, chưa có quyết định, lần chạy cuối có `cic.source = not_queried`. Không thỏa thì `409 CIC_INQUIRY_NOT_ALLOWED`.
+**Điều kiện:** hồ sơ `ESCALATED`, chưa có quyết định, lần chạy cuối có `cic.source` là `not_queried` hoặc `deferred_until_statement`. Không thỏa thì `409 CIC_INQUIRY_NOT_ALLOWED`.
 
 **Thân yêu cầu** (`CicInquiry`):
 
