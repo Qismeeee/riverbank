@@ -8,7 +8,7 @@ from main import app
 from prompts import Prompt, default_prompts
 from routers import copilot as copilot_routes
 from routers import underwriting as routes
-from services.copilot.advisor import CaseAdvisor
+from services.copilot.advisor import HISTORY_TURNS, CaseAdvisor, case_facts
 from services.copilot.extractor import EXTRACTION_SCHEMA, PlanExtractor
 from services.copilot.grounding import Mentions
 from services.copilot.models import AskInput, ExtractPlanInput, KnownPlan
@@ -362,7 +362,13 @@ def case_b():
 
 
 def advisor(content=None, error=None, guard=None):
-    return CaseAdvisor(FakeLlm(content, error), QA_PROMPT, guard or FakeGuard(), QA_GUARD)
+    return CaseAdvisor(
+        FakeLlm(content, error),
+        QA_PROMPT,
+        guard or FakeGuard(),
+        QA_GUARD,
+        clock=lambda: datetime(2026, 10, 22, tzinfo=UTC),
+    )
 
 
 def test_answer_with_grounded_numbers_is_returned(case_b):
@@ -428,3 +434,78 @@ def test_ask_endpoint_is_scoped_to_case_owner(case_b, monkeypatch):
         app.dependency_overrides.clear()
     assert own.status_code == 200 and own.json()["source"] == "llm"
     assert other.json()["detail"]["code"] == "SELLER_SCOPE_MISMATCH"
+
+
+def test_case_facts_carry_reason_and_checked_explanation(case_b):
+    _, case = case_b
+    facts = case_facts(case)
+    assert facts["reason"] is None and facts["statement_window"] is None
+    assert facts["explanation"]
+    assert facts["explanation"] == [i["text"] for i in case.documents[-1]["seller_explanation"]]
+
+
+def test_statement_case_tells_seller_the_next_step(case_b):
+    service, _ = case_b
+    case = service.create(Plan(**plan("demo-c")), "qa-c")
+    assert case.status == "AWAITING_STATEMENT"
+    window = case_facts(case)["statement_window"]
+    weeks = case.runs[-1]["input_snapshot"]["features"]["weekly_payouts"]
+    assert window["start"] == datetime.fromisoformat(weeks[0]["week_start"]).strftime("%d/%m/%Y")
+    text = f"Bạn nộp sao kê trong khoảng {window['start']} đến {window['end']} nhé."
+    grounded = advisor(answer(text, "statement_window")).ask(case, AskInput(question="Cần gì?"))
+    assert (grounded.source, grounded.answer) == ("llm", text)
+    fallback = advisor(error=LlmError("LLM_TIMEOUT")).ask(case, AskInput(question="Cần gì?"))
+    assert window["start"] in fallback.answer and "statement_window" in fallback.figures_used
+
+
+def test_turns_are_stored_and_fed_back_as_history(case_b):
+    _, case = case_b
+    qa = advisor(answer("Hồ sơ đang chờ ngân hàng xem.", "status"))
+    first = qa.ask(case, AskInput(question="Hồ sơ sao rồi? Gọi 0912345678"))
+    qa.llm.error = LlmError("LLM_TIMEOUT")
+    second = qa.ask(case, AskInput(question="Còn bao lâu?"))
+    assert qa.llm.requests[0].user["history"] == []
+    assert qa.llm.requests[1].user["history"] == [
+        {"question": first.question, "answer": "Hồ sơ đang chờ ngân hàng xem."}
+    ]
+    assert "0912345678" not in first.question
+    turns = qa.turns(case, 50)
+    assert [t.turn_id for t in turns] == [first.turn_id, second.turn_id]
+    assert (turns[1].source, turns[1].guard_codes) == ("template", ["LlmError"])
+    assert turns[0].asked_at == "2026-10-22T00:00:00+00:00"
+
+
+def test_history_sent_to_llm_is_capped(case_b):
+    _, case = case_b
+    qa = advisor(answer("Hồ sơ đang chờ ngân hàng xem.", "status"))
+    for n in range(HISTORY_TURNS + 2):
+        qa.ask(case, AskInput(question=f"Câu {n}"))
+    sent = qa.llm.requests[-1].user["history"]
+    assert len(sent) == HISTORY_TURNS and sent[-1]["question"] == f"Câu {HISTORY_TURNS}"
+
+
+def test_history_endpoint_scope(case_b, monkeypatch):
+    service, case = case_b
+    monkeypatch.setattr(routes.config, "ENV", "local")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    qa = advisor(answer("Hồ sơ đang chờ ngân hàng xem.", "status"))
+    app.dependency_overrides[routes.get_service] = lambda: service
+    app.dependency_overrides[copilot_routes.get_advisor] = lambda: qa
+    try:
+        with TestClient(app) as api:
+            base = f"/v1/cases/{case.case_id}/copilot"
+            asked = api.post(f"{base}/ask", json={"question": "Sao rồi?"}, headers=seller())
+            own = api.get(f"{base}/history", headers=seller())
+            bank = api.get(
+                f"{base}/history", headers={"X-Actor-ID": "uw-1", "X-Actor-Role": "underwriter"}
+            )
+            other = api.get(f"{base}/history", headers=seller("demo-a"))
+            old_body = api.post(
+                f"{base}/ask", json={"question": "x", "history": []}, headers=seller()
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert own.json()["turns"][0]["turn_id"] == asked.json()["turn_id"]
+    assert bank.status_code == 200 and len(bank.json()["turns"]) == 1
+    assert other.json()["detail"]["code"] == "SELLER_SCOPE_MISMATCH"
+    assert old_body.status_code == 422

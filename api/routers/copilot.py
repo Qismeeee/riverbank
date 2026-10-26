@@ -1,16 +1,23 @@
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 import config
 from llm import LlmError, build_llm_client
 from prompts import default_prompts
-from routers.auth import SellerUser, seller_of
+from routers.auth import Principal, SellerUser, seller_of
 from routers.underwriting import Identifier, Service
 from services.copilot.advisor import CaseAdvisor
 from services.copilot.extractor import PlanExtractor
-from services.copilot.models import AskInput, AskResponse, ExtractPlanInput, ExtractPlanResponse
+from services.copilot.history import ChatHistory, MemoryChatHistory, PostgresChatHistory
+from services.copilot.models import (
+    AskInput,
+    AskResponse,
+    ChatHistoryResponse,
+    ExtractPlanInput,
+    ExtractPlanResponse,
+)
 from services.guard import OutputGuard
 from services.guardrail import JevInputGuard
 from services.underwriting.models import WorkflowError
@@ -33,6 +40,12 @@ def get_extractor() -> PlanExtractor:
     )
 
 
+def _history() -> ChatHistory:
+    if config.WORKFLOW_STORAGE == "postgres":
+        return PostgresChatHistory(config.database_url())
+    return MemoryChatHistory()
+
+
 @lru_cache
 def get_advisor() -> CaseAdvisor:
     return CaseAdvisor(
@@ -40,6 +53,7 @@ def get_advisor() -> CaseAdvisor:
         default_prompts().get("copilot-qa"),
         JevInputGuard(),
         OutputGuard.from_guardrails(config.KNOWLEDGE_DIR / "guardrails.md"),
+        history=_history(),
     )
 
 
@@ -62,3 +76,17 @@ def ask_about_case(
     case = service.repository.get(case_id)
     seller_of(actor, case.seller_id)
     return advisor.ask(case, request)
+
+
+@cases_router.get("/{case_id}/copilot/history", response_model=ChatHistoryResponse)
+def chat_history(
+    case_id: Identifier,
+    actor: Principal,
+    advisor: Advisor,
+    service: Service,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> ChatHistoryResponse:
+    case = service.repository.get(case_id)
+    if actor.role != "underwriter":
+        seller_of(actor, case.seller_id)
+    return ChatHistoryResponse(case_id=case.case_id, turns=advisor.turns(case, limit))

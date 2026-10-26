@@ -76,14 +76,8 @@ class ExtractPlanResponse(BaseModel):
     model: str
 
 
-class AskTurn(InputModel):
-    question: FreeText
-    answer: FreeText
-
-
 class AskInput(InputModel):
     question: Annotated[FreeText, Field(min_length=1)]
-    history: Annotated[list[AskTurn], Field(max_length=6)] = []
 
 
 class Answer(StrictOutput):
@@ -91,12 +85,23 @@ class Answer(StrictOutput):
     figures_used: list[str]
 
 
-class AskResponse(BaseModel):
-    case_id: str
-    status: str
+class ChatTurn(BaseModel):
+    turn_id: str
+    question: str
     answer: str
     figures_used: list[str]
     source: Literal["llm", "template"]
     guard_codes: list[str]
+    status: str
     prompt_version: str
     model: str | None
+    asked_at: str
+
+
+class AskResponse(ChatTurn):
+    case_id: str
+
+
+class ChatHistoryResponse(BaseModel):
+    case_id: str
+    turns: list[ChatTurn]

@@ -147,6 +147,37 @@ TableGroup source_registry {
   seller_consents
   seller_feature_snapshots
 }
+Table copilot_turns {
+  id uuid [pk]
+  seq bigserial [unique, note: 'Thứ tự lượt chat']
+  case_id uuid [not null, ref: > cases.case_id]
+  payload jsonb [not null, note: 'turn_id, question đã che PII, answer, source, figures_used, guard_codes, status, prompt_version, model, asked_at. Không sửa, không xóa.']
+  indexes {
+    (case_id, seq)
+  }
+}
+
+Table jobs {
+  id uuid [pk]
+  kind text [not null, note: 'statement_upload']
+  case_id uuid [not null, ref: > cases.case_id]
+  submitted_by text [not null]
+  payload jsonb [not null, note: 'expected_version, period_start, period_end']
+  status text [not null, note: 'QUEUED, RUNNING, SUCCEEDED, FAILED']
+  attempts integer [not null]
+  max_attempts integer [not null]
+  lease_until timestamptz [note: 'Hết hạn thì worker khác nhận lại']
+  content bytea [note: 'File gốc, xóa khi job xong']
+  result jsonb
+  error jsonb [note: 'code, status, details']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    created_at [note: 'Partial: status in QUEUED, RUNNING']
+    (case_id, created_at)
+  }
+}
+
 TableGroup underwriting {
   cases
   assessment_runs
@@ -157,4 +188,6 @@ TableGroup human_decision_and_delivery {
   decisions
   handoffs
   case_events
+  copilot_turns
+  jobs
 }

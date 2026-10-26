@@ -56,8 +56,8 @@ async function call(token, method, path, body, extraHeaders = {}) {
 | Danh sách hồ sơ của mình | `GET /v1/me/cases` |
 | Xem giải thích và quyết định | `GET /v1/cases/{case_id}/seller-view` |
 | Chat nhập kế hoạch | `POST /v1/copilot/extract-plan`. Hiện `reply` trong khung chat. Lượt sau gửi `known = draft` của lượt trước. `ready = true` thì bật nút Gửi, gửi nguyên `draft` vào `POST /v1/cases` |
-| Hỏi về hồ sơ của mình | `POST /v1/cases/{case_id}/copilot/ask` với `question` và `history` (tối đa 6 lượt gần nhất). Hiện `answer`. `source = "template"` là câu mẫu khi LLM lỗi, vẫn hiện bình thường |
-| Nộp sao kê | `POST /v1/cases/{case_id}/statements/upload`, nhận CSV, `.xlsx`, PDF, ảnh. `accept=".csv,.xlsx,.pdf,.png,.jpg,.jpeg"` |
+| Hỏi về hồ sơ của mình | Mở khung chat thì gọi `GET /v1/cases/{case_id}/copilot/history` để hiện lại các lượt cũ. Hỏi bằng `POST /v1/cases/{case_id}/copilot/ask` chỉ với `question`, server tự nhớ lịch sử. Hiện `answer`. `source = "template"` là câu mẫu khi LLM lỗi, vẫn hiện bình thường |
+| Nộp sao kê | Nên dùng `POST /v1/cases/{case_id}/statements/upload-jobs`: nhận `202` và `job_id`, gọi `GET /v1/jobs/{job_id}` mỗi 2 giây đến khi `SUCCEEDED` (tải lại hồ sơ) hoặc `FAILED` (hiện `error.code`). Bản chờ trực tiếp `POST .../statements/upload` vẫn dùng được cho CSV, Excel. Nhận CSV, `.xlsx`, `.xls`, PDF, ảnh. `accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.heic"` |
 
 Thân `POST /v1/cases`:
 

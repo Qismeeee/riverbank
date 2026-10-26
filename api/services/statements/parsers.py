@@ -3,19 +3,22 @@ import io
 import re
 import zipfile
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import islice
 
 from .documents import (
     CSV,
     PDF,
+    XLS,
     XLSX,
     ParsedStatement,
     StatementDocument,
     StatementLine,
+    StatementSummary,
     fold,
     is_negative,
     parse_date,
+    parse_signed_vnd,
     parse_vnd,
 )
 
@@ -28,6 +31,11 @@ HEADER_KEYWORDS = (
     ("amount", ("so tien", "amount")),
 )
 SHORT_KEYWORDS = frozenset({"co", "no"})
+SUMMARY_KEYWORDS = (
+    ("opening", ("so du dau ky", "so du dau", "opening balance", "beginning balance")),
+    ("closing", ("so du cuoi ky", "so du cuoi", "closing balance", "ending balance")),
+    ("total", ("tong cong", "cong phat sinh", "tong phat sinh", "total")),
+)
 DATE_COLUMN_SHARE = 0.8
 MONEY_ROLES = frozenset({"credit", "debit", "amount", "balance"})
 _NUMERIC = re.compile(r"^[(+-]?[\d.,]*\d[\d.,]*[)-]?$")
@@ -46,6 +54,12 @@ def _has_phrase(segment: str, phrase: str) -> bool:
     return f" {phrase} " in f" {segment} "
 
 
+def _is_amount(cell: object) -> bool:
+    if isinstance(cell, bool):
+        return False
+    return isinstance(cell, int | float) or bool(_NUMERIC.match(str(cell or "").strip()))
+
+
 def header_role(cell: object) -> tuple[str, int] | None:
     segments = _segments(cell)
     for role, phrases in HEADER_KEYWORDS:
@@ -58,6 +72,7 @@ def header_role(cell: object) -> tuple[str, int] | None:
 @dataclass(frozen=True)
 class ColumnMap:
     columns: dict[str, int]
+    balance: int | None = None
 
     @classmethod
     def detect(cls, row: list) -> "ColumnMap | None":
@@ -68,17 +83,17 @@ class ColumnMap:
         columns = {role: index for role, (_, index) in best.items() if role != "balance"}
         if "desc" not in columns or not ({"credit", "amount"} & columns.keys()):
             return None
-        return cls(columns)
+        return cls(columns, best["balance"][1] if "balance" in best else None)
 
     def with_date_from(self, rows: list[list]) -> "ColumnMap":
         if "date" in self.columns or not rows:
             return self
-        taken = set(self.columns.values())
+        taken = {*self.columns.values(), self.balance}
         for index in range(max(len(r) for r in rows)):
             cells = [r[index] for r in rows if index < len(r) and str(r[index] or "").strip()]
             dated = [c for c in cells if parse_date(c)]
             if index not in taken and cells and len(dated) >= DATE_COLUMN_SHARE * len(cells):
-                return ColumnMap({**self.columns, "date": index})
+                return ColumnMap({**self.columns, "date": index}, self.balance)
         return self
 
     def _cell(self, row: list, role: str) -> object:
@@ -88,6 +103,17 @@ class ColumnMap:
     def fits(self, row: list) -> bool:
         return len(row) > max(self.columns.values())
 
+    def summary(self, row: list) -> tuple[str, int | None] | None:
+        text = fold(" ".join(str(cell) for cell in row if cell is not None))
+        kind = next((k for k, phrases in SUMMARY_KEYWORDS if any(p in text for p in phrases)), None)
+        if kind is None:
+            return None
+        preferred = (
+            [row[self.balance]] if self.balance is not None and self.balance < len(row) else []
+        )
+        numbers = [c for c in [*preferred, *reversed(row)] if _is_amount(c)]
+        return kind, parse_signed_vnd(numbers[0]) if numbers else None
+
     def line(self, row: list) -> StatementLine | None:
         credit, debit = parse_vnd(self._cell(row, "credit")), parse_vnd(self._cell(row, "debit"))
         amount = self._cell(row, "amount")
@@ -96,7 +122,14 @@ class ColumnMap:
         if not credit and not debit:
             return None
         desc = " ".join(str(self._cell(row, "desc") or "").split())
-        return StatementLine(parse_date(self._cell(row, "date")), desc, credit, debit)
+        balance = self.balance is not None and self.balance < len(row)
+        return StatementLine(
+            parse_date(self._cell(row, "date")),
+            desc,
+            credit,
+            debit,
+            parse_signed_vnd(row[self.balance]) if balance else None,
+        )
 
 
 class StatementParser(ABC):
@@ -110,28 +143,97 @@ class StatementParser(ABC):
     def parse(self, document: StatementDocument) -> ParsedStatement: ...
 
 
+class PageParser(StatementParser):
+    @abstractmethod
+    def parse_pages(
+        self, document: StatementDocument, pages: tuple[int, ...]
+    ) -> ParsedStatement: ...
+
+
+@dataclass(frozen=True)
+class TableScan:
+    lines: list[StatementLine]
+    summary: StatementSummary
+
+    def parsed(self, name: str, pages: int = 0, **extra) -> ParsedStatement:
+        return ParsedStatement(name, self.lines, pages, summary=self.summary, **extra)
+
+
 class TabularStatementParser(StatementParser):
     @staticmethod
-    def lines(tables: list[list[list]]) -> list[StatementLine]:
-        found: list[StatementLine] = []
+    def scan(tables: list[list[list]], pages: list[list[int | None]] | None = None) -> TableScan:
+        lines: list[StatementLine] = []
+        summary = StatementSummary()
         mapping: ColumnMap | None = None
-        body: list[list] = []
-        for table in tables:
-            for row in table:
+        body: list[tuple[int | None, list]] = []
+        for table, table_pages in zip(
+            tables, pages or [[None] * len(t) for t in tables], strict=True
+        ):
+            for row, page in zip(table, table_pages, strict=True):
                 detected = ColumnMap.detect(row)
                 if detected:
-                    found.extend(TabularStatementParser._rows(mapping, body))
+                    found, summary = TabularStatementParser._rows(mapping, body, summary)
+                    lines.extend(found)
                     mapping, body = detected, []
                 elif mapping and mapping.fits(row):
-                    body.append(row)
-        return found + TabularStatementParser._rows(mapping, body)
+                    body.append((page, row))
+        found, summary = TabularStatementParser._rows(mapping, body, summary)
+        return TableScan(lines + found, summary)
 
     @staticmethod
-    def _rows(mapping: ColumnMap | None, body: list[list]) -> list[StatementLine]:
+    def _rows(
+        mapping: ColumnMap | None,
+        body: list[tuple[int | None, list]],
+        summary: StatementSummary,
+    ) -> tuple[list[StatementLine], StatementSummary]:
         if not mapping:
-            return []
-        mapping = mapping.with_date_from(body)
-        return [line for row in body if (line := mapping.line(row))]
+            return [], summary
+        mapping = mapping.with_date_from([row for _, row in body])
+        lines = []
+        for page, row in body:
+            found = mapping.summary(row)
+            if found is None:
+                if line := mapping.line(row):
+                    lines.append(replace(line, page=page))
+            elif found[0] == "opening" and summary.opening is None:
+                summary = StatementSummary(found[1], summary.closing)
+            elif found[0] == "closing" and found[1] is not None:
+                summary = StatementSummary(summary.opening, found[1])
+        return lines, summary
+
+
+@dataclass(frozen=True)
+class PdfPageConfig:
+    defer_images: bool = False
+    image_share: float = 0.5
+
+
+class PdfStatementParser(TabularStatementParser):
+    media_types = frozenset({PDF})
+
+    def __init__(self, pages: PdfPageConfig | None = None):
+        self.pages = pages or PdfPageConfig()
+
+    def image_pages(self, pages: list) -> tuple[int, ...]:
+        if not self.pages.defer_images:
+            return ()
+        return tuple(page.page_number for page in pages if self._is_image_page(page))
+
+    def _is_image_page(self, page) -> bool:
+        if not page.chars:
+            return True
+        if self._image_share(page) < self.pages.image_share:
+            return False
+        return not any(parse_date(word["text"]) for word in page.extract_words())
+
+    @staticmethod
+    def _image_share(page) -> float:
+        covered = sum(
+            max(0.0, min(i["x1"], page.width) - max(i["x0"], 0))
+            * max(0.0, min(i["bottom"], page.height) - max(i["top"], 0))
+            for i in page.images
+        )
+        return covered / (page.width * page.height)
 
 
 class CsvStatementParser(TabularStatementParser):
@@ -145,41 +247,84 @@ class CsvStatementParser(TabularStatementParser):
         except csv.Error:
             dialect = csv.excel
         rows = list(csv.reader(io.StringIO(text), dialect))
-        return ParsedStatement(self.name, self.lines([rows]))
+        return self.scan([rows]).parsed(self.name)
 
 
-class ExcelStatementParser(TabularStatementParser):
-    name = "xlsx"
-    media_types = frozenset({XLSX})
-
+class WorkbookStatementParser(TabularStatementParser):
     def __init__(self, max_rows: int = 50_000):
         self.max_rows = max_rows
 
+    @abstractmethod
+    def sheets(self, content: bytes) -> list[list[list]]: ...
+
     def parse(self, document: StatementDocument) -> ParsedStatement:
+        try:
+            tables = self.sheets(document.content)
+        except WorkbookUnreadable:
+            return ParsedStatement(self.name, [], notes=["WORKBOOK_UNREADABLE"])
+        scan = self.scan(tables)
+        if scan.lines:
+            return scan.parsed(self.name, len(tables))
+        return ParsedStatement(self.name, [], len(tables), notes=["NO_STATEMENT_HEADER"])
+
+
+class WorkbookUnreadable(Exception):
+    pass
+
+
+class ExcelStatementParser(WorkbookStatementParser):
+    name = "xlsx"
+    media_types = frozenset({XLSX})
+
+    def sheets(self, content: bytes) -> list[list[list]]:
         import openpyxl
         from openpyxl.utils.exceptions import InvalidFileException
 
         try:
-            book = openpyxl.load_workbook(
-                io.BytesIO(document.content), read_only=True, data_only=True
-            )
-        except (InvalidFileException, zipfile.BadZipFile, KeyError, ValueError, OSError):
-            return ParsedStatement(self.name, [], notes=["WORKBOOK_UNREADABLE"])
+            book = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        except (InvalidFileException, zipfile.BadZipFile, KeyError, ValueError, OSError) as exc:
+            raise WorkbookUnreadable from exc
         try:
-            tables = [
+            return [
                 [list(row) for row in islice(sheet.iter_rows(values_only=True), self.max_rows)]
                 for sheet in book.worksheets
             ]
         finally:
             book.close()
-        if found := self.lines(tables):
-            return ParsedStatement(self.name, found, len(tables))
-        return ParsedStatement(self.name, [], len(tables), notes=["NO_STATEMENT_HEADER"])
 
 
-class PdfTextStatementParser(TabularStatementParser):
+class LegacyExcelStatementParser(WorkbookStatementParser):
+    name = "xls"
+    media_types = frozenset({XLS})
+
+    def sheets(self, content: bytes) -> list[list[list]]:
+        import xlrd
+
+        try:
+            book = xlrd.open_workbook(file_contents=content)
+        except (xlrd.XLRDError, xlrd.compdoc.CompDocError, ValueError) as exc:
+            raise WorkbookUnreadable from exc
+        return [
+            [
+                [self._value(cell, book.datemode) for cell in sheet.row(index)]
+                for index in range(min(sheet.nrows, self.max_rows))
+            ]
+            for sheet in book.sheets()
+        ]
+
+    @staticmethod
+    def _value(cell, datemode: int) -> object:
+        import xlrd
+
+        if cell.ctype == xlrd.XL_CELL_DATE:
+            return xlrd.xldate_as_datetime(cell.value, datemode)
+        if cell.ctype == xlrd.XL_CELL_EMPTY:
+            return None
+        return cell.value
+
+
+class PdfTextStatementParser(PdfStatementParser):
     name = "pdf_text"
-    media_types = frozenset({PDF})
 
     def parse(self, document: StatementDocument) -> ParsedStatement:
         import pdfplumber
@@ -188,9 +333,17 @@ class PdfTextStatementParser(TabularStatementParser):
             pages = len(pdf.pages)
             if not any(page.chars for page in pdf.pages):
                 return ParsedStatement(self.name, [], pages, notes=["NO_TEXT_LAYER"])
-            tables = [t for page in pdf.pages for t in page.extract_tables()]
-        if found := self.lines(tables):
-            return ParsedStatement(self.name, found, pages)
+            deferred = self.image_pages(pdf.pages)
+            tables, table_pages = [], []
+            for page in pdf.pages:
+                if page.page_number in deferred:
+                    continue
+                for table in page.extract_tables():
+                    tables.append(table)
+                    table_pages.append([page.page_number] * len(table))
+        scan = self.scan(tables, table_pages)
+        if scan.lines:
+            return scan.parsed(self.name, pages, image_pages=deferred)
         return ParsedStatement(self.name, [], pages, notes=["NO_RULED_TABLE"])
 
 
@@ -216,11 +369,11 @@ class _Row:
     anchored: bool
 
 
-class PdfLayoutStatementParser(TabularStatementParser):
+class PdfLayoutStatementParser(PdfStatementParser):
     name = "pdf_layout"
-    media_types = frozenset({PDF})
 
-    def __init__(self, cfg: LayoutConfig | None = None):
+    def __init__(self, cfg: LayoutConfig | None = None, pages: PdfPageConfig | None = None):
+        super().__init__(pages)
         self.cfg = cfg or LayoutConfig()
 
     def parse(self, document: StatementDocument) -> ParsedStatement:
@@ -228,15 +381,18 @@ class PdfLayoutStatementParser(TabularStatementParser):
 
         with pdfplumber.open(io.BytesIO(document.content)) as pdf:
             pages = len(pdf.pages)
+            if not any(page.chars for page in pdf.pages):
+                return ParsedStatement(self.name, [], pages, notes=["NO_TEXT_LAYER"])
+            deferred = self.image_pages(pdf.pages)
             lines = [
-                (number, line)
-                for number, page in enumerate(pdf.pages)
+                (page.page_number, line)
+                for page in pdf.pages
+                if page.page_number not in deferred
                 for line in self._lines(page.extract_words())
             ]
-        if not lines:
-            return ParsedStatement(self.name, [], pages, notes=["NO_TEXT_LAYER"])
-        if found := self.lines(self._tables(lines)):
-            return ParsedStatement(self.name, found, pages)
+        scan = self.scan(*self._tables(lines))
+        if scan.lines:
+            return scan.parsed(self.name, pages, image_pages=deferred)
         return ParsedStatement(self.name, [], pages, notes=["NO_STATEMENT_HEADER"])
 
     def _lines(self, words: list[dict]) -> list[list[dict]]:
@@ -293,7 +449,7 @@ class PdfLayoutStatementParser(TabularStatementParser):
                 cells[target].append(text)
         return _Row(page, line[0]["top"], cells, anchored)
 
-    def _attach(self, rows: list[_Row]) -> list[list[str]]:
+    def _attach(self, rows: list[_Row]) -> list[tuple[int, list[str]]]:
         anchors = [r for r in rows if r.anchored]
         for loose in (r for r in rows if not r.anchored):
             near = [
@@ -308,19 +464,28 @@ class PdfLayoutStatementParser(TabularStatementParser):
                 target.cells[i] = (
                     words + target.cells[i] if loose.top < target.top else (target.cells[i] + words)
                 )
-        return [[" ".join(cell) for cell in a.cells] for a in anchors]
+        return [(a.page, [" ".join(cell) for cell in a.cells]) for a in anchors]
 
-    def _tables(self, lines: list[tuple[int, list[dict]]]) -> list[list[list[str]]]:
+    def _tables(
+        self, lines: list[tuple[int, list[dict]]]
+    ) -> tuple[list[list[list[str]]], list[list[int | None]]]:
         tables: list[list[list[str]]] = []
+        pages: list[list[int | None]] = []
         columns: list[_Column] | None = None
         rows: list[_Row] = []
+
+        def close() -> None:
+            attached = self._attach(rows)
+            tables.append([[c.text for c in columns], *(cells for _, cells in attached)])
+            pages.append([None, *(page for page, _ in attached)])
+
         for page, line in lines:
             if header := self._header(line):
                 if columns and rows:
-                    tables.append([[c.text for c in columns], *self._attach(rows)])
+                    close()
                 columns, rows = header, []
             elif columns:
                 rows.append(self._row(page, line, columns))
         if columns:
-            tables.append([[c.text for c in columns], *self._attach(rows)])
-        return tables
+            close()
+        return tables, pages

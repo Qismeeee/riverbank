@@ -1,4 +1,5 @@
 import socket
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
@@ -9,16 +10,28 @@ import config
 from routers.auth import router as auth_router
 from routers.copilot import cases_router as copilot_cases_router
 from routers.copilot import router as copilot_router
+from routers.jobs import router as jobs_router
+from routers.jobs import start_worker
 from routers.studio import router as studio_router
 from routers.underwriting import router as underwriting_router
 from services.underwriting.models import WorkflowError
 
-app = FastAPI(title="Riverbank API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    stop = start_worker()
+    yield
+    if stop:
+        stop.set()
+
+
+app = FastAPI(title="Riverbank API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(underwriting_router)
 app.include_router(studio_router)
 app.include_router(copilot_router)
 app.include_router(copilot_cases_router)
+app.include_router(jobs_router)
 
 
 @app.exception_handler(WorkflowError)

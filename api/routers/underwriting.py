@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
 import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
-from services.statements.factory import build_statement_reader
+from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
 from services.underwriting.cic import SimulatedCicSource
 from services.underwriting.evidence import read_evidence
@@ -89,6 +89,7 @@ def get_service() -> UnderwritingService:
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
         memo=build_composer(config.MEMO_WRITER),
         statements=build_statement_reader(),
+        documents=build_document_store(config.DOCUMENT_STORE),
     )
 
 

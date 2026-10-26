@@ -1,3 +1,7 @@
+from datetime import UTC, date, datetime, timedelta
+from typing import Callable
+from uuid import uuid4
+
 from pydantic import ValidationError
 
 from llm import LlmClient, LlmError, LlmRequest
@@ -6,12 +10,19 @@ from services.guard import OutputGuard, ints
 from services.guardrail import InputGuard, PiiRedactor
 from services.underwriting.models import Case
 
-from .models import Answer, AskInput, AskResponse
+from .history import ChatHistory, MemoryChatHistory
+from .models import Answer, AskInput, AskResponse, ChatTurn
 from .replies import vnd
 from .screening import screen
 
 ANSWER_SCHEMA = Answer.model_json_schema()
 MILLION = 1_000_000
+HISTORY_TURNS = 6
+STATEMENT_STATUSES = {"AWAITING_STATEMENT", "ESCALATED"}
+STATEMENT_STEP = (
+    "Bạn nộp sao kê tài khoản nhận payout, kỳ sao kê bắt đầu và kết thúc vào thứ Hai, "
+    "nằm trong khoảng {start} đến {end}."
+)
 STATUS_TEXT = {
     "ANALYZING": "Hồ sơ đang được hệ thống tính.",
     "BLOCKED_INPUT": "Hồ sơ chưa tính được vì nội dung gửi lên chưa hợp lệ.",
@@ -24,6 +35,29 @@ STATUS_TEXT = {
 }
 
 
+def _vn_date(day: date) -> str:
+    return day.strftime("%d/%m/%Y")
+
+
+def _explanation(case: Case) -> list[str]:
+    document = case.documents[-1] if case.documents else {}
+    if not document.get("validated"):
+        return []
+    return [item["text"] for item in document.get("seller_explanation") or []]
+
+
+def _statement_window(case: Case, run: dict) -> dict | None:
+    results = (run.get("policy") or {}).get("results") or []
+    r05_failed = any(r["rule_id"] == "R05" and not r["passed"] for r in results)
+    if case.status not in STATEMENT_STATUSES or not r05_failed:
+        return None
+    weeks = [
+        date.fromisoformat(w["week_start"])
+        for w in run["input_snapshot"]["features"]["weekly_payouts"]
+    ]
+    return {"start": _vn_date(min(weeks)), "end": _vn_date(max(weeks) + timedelta(days=7))}
+
+
 def case_facts(case: Case) -> dict:
     run = case.runs[-1] if case.runs else {}
     cashflow = run.get("cashflow") or {}
@@ -32,6 +66,9 @@ def case_facts(case: Case) -> dict:
     handoff = case.handoff or {}
     return {
         "status": case.status,
+        "reason": case.reason,
+        "explanation": _explanation(case),
+        "statement_window": _statement_window(case, run) if run else None,
         "lot_value": case.plan.get("lot_value"),
         "cash_on_hand": case.plan.get("cash_on_hand"),
         "sell_weeks": case.plan.get("sell_weeks"),
@@ -58,6 +95,9 @@ class FactsReply:
                 f"mỗi tuần trừ {vnd(facts['weekly_deduction'])} từ payout."
             )
             used += [amount, tenor, "weekly_deduction"]
+        if window := facts["statement_window"]:
+            parts.append(STATEMENT_STEP.format(**window))
+            used.append("statement_window")
         if facts["los_reference"]:
             parts.append(f"Mã tham chiếu giải ngân {facts['los_reference']}.")
             used.append("los_reference")
@@ -81,37 +121,41 @@ class CaseAdvisor:
         output: OutputGuard,
         redactor: PiiRedactor | None = None,
         fallback: FactsReply | None = None,
+        history: ChatHistory | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
         self.llm, self.prompt, self.guard, self.output = llm, prompt, guard, output
         self.redactor = redactor or PiiRedactor()
         self.fallback = fallback or FactsReply()
+        self.history = history or MemoryChatHistory()
+        self.clock = clock
 
     def ask(self, case: Case, request: AskInput) -> AskResponse:
         question = self.redactor.redact(request.question)
         screen(self.guard, question)
         facts = case_facts(case)
         try:
-            answer, model = self._ask(question, request, facts)
+            answer, model = self._ask(question, case.case_id, facts)
+            codes = self._violations(answer, facts, case.status)
         except (LlmError, ValidationError) as e:
-            return self._template(case, facts, [type(e).__name__])
-        codes = self._violations(answer, facts, case.status)
+            answer, model, codes = None, None, [type(e).__name__]
         if codes:
-            return self._template(case, facts, codes)
-        return AskResponse(
-            case_id=case.case_id,
-            status=case.status,
-            answer=answer.answer_vi,
-            figures_used=answer.figures_used,
-            source="llm",
-            guard_codes=[],
-            prompt_version=self.prompt.version,
-            model=model,
-        )
+            text, used = self.fallback.compose(facts)
+            turn = self._turn(case, question, text, used, "template", codes, None)
+        else:
+            turn = self._turn(
+                case, question, answer.answer_vi, answer.figures_used, "llm", [], model
+            )
+        self.history.append(case.case_id, turn.model_dump())
+        return AskResponse(case_id=case.case_id, **turn.model_dump())
 
-    def _ask(self, question: str, request: AskInput, facts: dict) -> tuple[Answer, str]:
+    def turns(self, case: Case, limit: int) -> list[ChatTurn]:
+        return [ChatTurn(**t) for t in self.history.recent(case.case_id, limit)]
+
+    def _ask(self, question: str, case_id: str, facts: dict) -> tuple[Answer, str]:
         history = [
-            {"question": self.redactor.redact(t.question), "answer": self.redactor.redact(t.answer)}
-            for t in request.history
+            {"question": t["question"], "answer": t["answer"]}
+            for t in self.history.recent(case_id, HISTORY_TURNS)
         ]
         response = self.llm.complete_json(
             LlmRequest(
@@ -132,15 +176,25 @@ class CaseAdvisor:
         allowed |= {v // MILLION for v in allowed if v >= MILLION and v % MILLION == 0}
         return self.output.check(answer.answer_vi, allowed, status)
 
-    def _template(self, case: Case, facts: dict, codes: list[str]) -> AskResponse:
-        text, used = self.fallback.compose(facts)
-        return AskResponse(
-            case_id=case.case_id,
-            status=case.status,
-            answer=text,
+    def _turn(
+        self,
+        case: Case,
+        question: str,
+        answer: str,
+        used: list[str],
+        source: str,
+        codes: list[str],
+        model: str | None,
+    ) -> ChatTurn:
+        return ChatTurn(
+            turn_id=str(uuid4()),
+            question=question,
+            answer=answer,
             figures_used=used,
-            source="template",
+            source=source,
             guard_codes=codes,
+            status=case.status,
             prompt_version=self.prompt.version,
-            model=None,
+            model=model,
+            asked_at=self.clock().isoformat(),
         )
