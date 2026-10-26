@@ -1,0 +1,269 @@
+{
+ "disclosure": "Seller demo giả lập. Payout tuần cũ nhất trước, 12 tuần trước tuần hiện tại.",
+ "profiles": {
+  "fashion": {
+   "archetype": "fashion",
+   "shop_age_months": 12,
+   "return_rate": 0.05,
+   "n_products": 80,
+   "top3_share": 0.3,
+   "rating": 4.7
+  },
+  "electronics": {
+   "archetype": "electronics",
+   "shop_age_months": 12,
+   "return_rate": 0.05,
+   "n_products": 40,
+   "top3_share": 0.45,
+   "rating": 4.8
+  },
+  "fashion_young": {
+   "archetype": "fashion",
+   "shop_age_months": 7,
+   "return_rate": 0.13,
+   "n_products": 12,
+   "top3_share": 0.8,
+   "rating": 4.2
+  },
+  "fashion_established": {
+   "archetype": "fashion",
+   "shop_age_months": 34,
+   "return_rate": 0.04,
+   "n_products": 120,
+   "top3_share": 0.28,
+   "rating": 4.8
+  },
+  "cosmetics": {
+   "archetype": "fmcg",
+   "shop_age_months": 26,
+   "return_rate": 0.03,
+   "n_products": 210,
+   "top3_share": 0.35,
+   "rating": 4.9
+  },
+  "accessories_new": {
+   "archetype": "electronics",
+   "shop_age_months": 8,
+   "return_rate": 0.07,
+   "n_products": 45,
+   "top3_share": 0.5,
+   "rating": 4.6
+  },
+  "home_goods": {
+   "archetype": "home",
+   "shop_age_months": 20,
+   "return_rate": 0.09,
+   "n_products": 60,
+   "top3_share": 0.4,
+   "rating": 4.5
+  },
+  "fashion_mid": {
+   "archetype": "fashion",
+   "shop_age_months": 15,
+   "return_rate": 0.08,
+   "n_products": 70,
+   "top3_share": 0.45,
+   "rating": 4.6
+  },
+  "grocery": {
+   "archetype": "fmcg",
+   "shop_age_months": 40,
+   "return_rate": 0.02,
+   "n_products": 300,
+   "top3_share": 0.22,
+   "rating": 4.9
+  }
+ },
+ "sellers": [
+  {
+   "seller_id": "demo-a",
+   "profile": "fashion",
+   "platform_supported_amount": 90000000,
+   "weekly_payouts": [
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000,
+    40000000
+   ]
+  },
+  {
+   "seller_id": "demo-b",
+   "profile": "fashion",
+   "platform_supported_amount": 90000000,
+   "weekly_payouts": [
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000
+   ]
+  },
+  {
+   "seller_id": "demo-c",
+   "profile": "electronics",
+   "platform_supported_amount": 30000000,
+   "weekly_payouts": [
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000
+   ]
+  },
+  {
+   "seller_id": "demo-d",
+   "profile": "fashion_young",
+   "platform_supported_amount": 90000000,
+   "weekly_payouts": [
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000,
+    70000000
+   ]
+  },
+  {
+   "seller_id": "demo-e",
+   "profile": "fashion_established",
+   "platform_supported_amount": 120000000,
+   "weekly_payouts": [
+    68805000,
+    69044000,
+    83222000,
+    60108000,
+    76882000,
+    60403000,
+    86588000,
+    79583000,
+    88579000,
+    74067000,
+    81106000,
+    75770000
+   ]
+  },
+  {
+   "seller_id": "demo-f",
+   "profile": "cosmetics",
+   "platform_supported_amount": 150000000,
+   "weekly_payouts": [
+    99106000,
+    75779000,
+    90242000,
+    103399000,
+    124168000,
+    108554000,
+    89298000,
+    118812000,
+    100602000,
+    138235000,
+    119710000,
+    153539000
+   ]
+  },
+  {
+   "seller_id": "demo-g",
+   "profile": "accessories_new",
+   "platform_supported_amount": 30000000,
+   "weekly_payouts": [
+    42927000,
+    49143000,
+    43169000,
+    42448000,
+    37467000,
+    43272000,
+    54007000,
+    48436000,
+    53399000,
+    47016000,
+    48198000,
+    46501000
+   ]
+  },
+  {
+   "seller_id": "demo-h",
+   "profile": "home_goods",
+   "platform_supported_amount": 80000000,
+   "weekly_payouts": [
+    64481000,
+    90397000,
+    73144000,
+    73366000,
+    67783000,
+    64615000,
+    68226000,
+    59955000,
+    51641000,
+    49650000,
+    46577000,
+    64071000
+   ]
+  },
+  {
+   "seller_id": "demo-i",
+   "profile": "fashion_mid",
+   "platform_supported_amount": 30000000,
+   "weekly_payouts": [
+    62098000,
+    71871000,
+    80865000,
+    82891000,
+    79922000,
+    70401000,
+    72768000,
+    67943000,
+    59038000,
+    66110000,
+    77931000,
+    72084000
+   ]
+  },
+  {
+   "seller_id": "demo-j",
+   "profile": "grocery",
+   "platform_supported_amount": 150000000,
+   "weekly_payouts": [
+    87752000,
+    91511000,
+    90446000,
+    92567000,
+    100485000,
+    81949000,
+    92440000,
+    91310000,
+    88284000,
+    94123000,
+    95000000,
+    113782000
+   ]
+  }
+ ]
+}

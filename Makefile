@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-llm
+.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-llm dossiers
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -56,3 +56,6 @@ notebook:
 
 eval-report:
 	cd api && PYTHONPATH=. .venv/bin/python ../eval/score.py
+
+dossiers:
+	cd api && .venv/bin/python ../eval/dossiers/make_dossiers.py --date $${DATE:-$$(date +%F)}
