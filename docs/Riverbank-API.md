@@ -24,6 +24,7 @@ Mục 4 là API đang chạy trong `api/`, viết theo code `main` commit `68588
 - Tuần là số nguyên bắt đầu từ 0. Tuần 0 là tuần nhập hàng, chưa có payout của lô.
 - `case_id` và `evidence_id` trên đường dẫn là UUID. Sai mẫu thì `422`.
 - Mọi trường thừa trong thân yêu cầu bị từ chối (`extra="forbid"`).
+- Mọi phản hồi có header `X-Request-ID`. FE gửi `X-Request-ID` (chữ, số, gạch nối, tối đa 64 ký tự) thì server dùng lại, không gửi thì server tự sinh. Báo lỗi kèm mã này để tra log CloudWatch `/riverbank/app`, mỗi request ghi một dòng JSON có `request_id`, `method`, `path`, `status`, `duration_ms`, `slow` (`slow` là true khi chậm hơn `RIVERBANK_SLOW_REQUEST_MS`, mặc định 5000).
 
 ### 1.2 Danh tính và vai trò
 
@@ -91,6 +92,7 @@ Lỗi sai kiểu dữ liệu do FastAPI trả, mã `422`:
 | `404` | Không có hồ sơ hoặc bằng chứng |
 | `409` | Trạng thái hồ sơ không cho phép thao tác, xung đột `version`, khóa idempotency bị dùng lại, rule cứng fail |
 | `422` | Đầu vào sai, bị chặn ở cổng nhập, thiếu consent, thiếu dữ liệu payout |
+| `429` | Sai mã đăng nhập nhiều lần, hoặc gọi quá ngưỡng tần suất. Có header `Retry-After` (giây) |
 | `503` | Chế độ demo chưa bật, thiếu database |
 
 Bảng mã lỗi đầy đủ ở mục 5.
@@ -687,6 +689,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
 | `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã demo |
 | `TOO_MANY_ATTEMPTS` | 429 | `/v1/auth/token` | Sai mã quá `RIVERBANK_AUTH_MAX_FAILURES` lần (mặc định 5) trong `RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS` giây (mặc định 300) từ một IP |
+| `RATE_LIMITED` | 429 | Tạo hồ sơ, nộp sao kê (cả 2 đầu), Copilot extract-plan và ask | Một người gọi vượt ngưỡng trong cửa sổ trượt. Header `Retry-After` và `details[0].retry_after_seconds` cho biết số giây phải chờ. Ngưỡng dạng `số lần/giây`: `RIVERBANK_RATE_LIMIT_CASE_CREATE` (mặc định `30/3600`), `RIVERBANK_RATE_LIMIT_STATEMENT_UPLOAD` (`20/3600`, hai đầu nộp sao kê dùng chung), `RIVERBANK_RATE_LIMIT_COPILOT` (`20/60`). `0/...` là tắt. Đếm theo từng tiến trình, server chạy 2 tiến trình nên ngưỡng thật tối đa gấp đôi |
 | `SELLER_REQUIRED` | 403 | `/v1/me/cases` | Không phải vai trò seller |
 | `EVAL_REPORT_MISSING` | 503 | `/v1/studio/eval-metrics` | Thiếu `api/studio/eval_report.json` |
 | `TOKEN_LOGIN_DISABLED` | 503 | `/v1/auth/token` | Không ở chế độ `token` |

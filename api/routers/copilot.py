@@ -7,6 +7,7 @@ import config
 from llm import LlmError, build_llm_client
 from prompts import default_prompts
 from routers.auth import Principal, SellerUser, seller_of
+from routers.limits import rate_limited
 from routers.underwriting import Identifier, Service
 from services.copilot.advisor import CaseAdvisor
 from services.copilot.extractor import PlanExtractor
@@ -61,7 +62,11 @@ Extractor = Annotated[PlanExtractor, Depends(get_extractor)]
 Advisor = Annotated[CaseAdvisor, Depends(get_advisor)]
 
 
-@router.post("/extract-plan", response_model=ExtractPlanResponse)
+@router.post(
+    "/extract-plan",
+    response_model=ExtractPlanResponse,
+    dependencies=[rate_limited("copilot")],
+)
 def extract_plan(
     request: ExtractPlanInput, actor: SellerUser, extractor: Extractor
 ) -> ExtractPlanResponse:
@@ -69,7 +74,11 @@ def extract_plan(
     return extractor.extract(request)
 
 
-@cases_router.post("/{case_id}/copilot/ask", response_model=AskResponse)
+@cases_router.post(
+    "/{case_id}/copilot/ask",
+    response_model=AskResponse,
+    dependencies=[rate_limited("copilot")],
+)
 def ask_about_case(
     case_id: Identifier, request: AskInput, actor: SellerUser, advisor: Advisor, service: Service
 ) -> AskResponse:

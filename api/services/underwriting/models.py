@@ -188,8 +188,15 @@ class Case:
 
 
 class WorkflowError(Exception):
-    def __init__(self, code: str, status: int = 409, details: list | None = None):
+    def __init__(
+        self,
+        code: str,
+        status: int = 409,
+        details: list | None = None,
+        headers: dict[str, str] | None = None,
+    ):
         self.code = code
         self.status = status
         self.details = details or []
+        self.headers = headers or {}
         super().__init__(code)

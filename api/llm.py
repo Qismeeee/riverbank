@@ -152,12 +152,9 @@ def build_llm_client(
     if provider not in PROVIDERS:
         raise LlmError("LLM_PROVIDER_UNKNOWN")
     api_key, base_url = PROVIDERS[provider]()
+    timeout, retries = config.llm_limits(purpose)
     client: LlmClient = OpenAICompatibleClient(
-        api_key,
-        model or config.LLM_MODEL,
-        base_url,
-        config.LLM_TIMEOUT_SECONDS,
-        config.LLM_MAX_RETRIES,
+        api_key, model or config.LLM_MODEL, base_url, timeout, retries
     )
     if config.LLM_CACHE_DIR:
         client = CachedLlmClient(client, Path(config.LLM_CACHE_DIR) / purpose)

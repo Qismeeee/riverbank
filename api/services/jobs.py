@@ -188,9 +188,9 @@ class PostgresJobQueue(JobQueue):
         self.database_url = database_url
 
     def _connect(self):
-        import psycopg
+        from db.pool import connect
 
-        return psycopg.connect(self.database_url)
+        return connect(self.database_url)
 
     def enqueue(self, job: Job, content: bytes) -> Job:
         from psycopg.types.json import Jsonb

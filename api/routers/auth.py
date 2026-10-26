@@ -3,10 +3,8 @@ import hashlib
 import hmac
 import json
 from abc import ABC, abstractmethod
-from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from threading import Lock
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Request
@@ -14,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
+from services.ratelimit import SlidingWindow
 from services.underwriting.models import WorkflowError
 from services.underwriting.service import utc_now
 
@@ -174,33 +173,15 @@ class TokenResponse(ActorResponse):
     expires_at: datetime
 
 
-class LoginThrottle:
-    def __init__(self, max_failures: int, window_seconds: int):
-        self.max_failures, self.window = max_failures, timedelta(seconds=window_seconds)
-        self._failures: dict[str, deque[datetime]] = defaultdict(deque)
-        self._lock = Lock()
-
-    def _recent(self, key: str, now: datetime) -> deque[datetime]:
-        failures = self._failures[key]
-        while failures and failures[0] <= now - self.window:
-            failures.popleft()
-        if not failures:
-            del self._failures[key]
-            return deque()
-        return failures
-
+class LoginThrottle(SlidingWindow):
     def check(self, key: str, now: datetime) -> None:
         with self._lock:
-            if len(self._recent(key, now)) >= self.max_failures:
+            if self._full(key, now):
                 raise WorkflowError("TOO_MANY_ATTEMPTS", 429)
 
     def fail(self, key: str, now: datetime) -> None:
         with self._lock:
-            self._failures[key].append(now)
-
-    def reset(self, key: str) -> None:
-        with self._lock:
-            self._failures.pop(key, None)
+            self._add(key, now)
 
 
 throttle = LoginThrottle(config.AUTH_MAX_FAILURES, config.AUTH_FAILURE_WINDOW_SECONDS)

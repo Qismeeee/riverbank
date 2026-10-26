@@ -83,7 +83,7 @@ class MemoryCaseRepository(CaseRepository):
                 key=lambda c: (c.created_at, c.case_id),
                 reverse=newest_first,
             )
-            return deepcopy(cases[offset : offset + limit])
+            return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
 
     def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
         with self._lock:
@@ -92,7 +92,7 @@ class MemoryCaseRepository(CaseRepository):
                 key=lambda c: (c.created_at, c.case_id),
                 reverse=True,
             )
-            return deepcopy(cases[offset : offset + limit])
+            return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:
@@ -110,9 +110,9 @@ class PostgresCaseRepository(CaseRepository):
         self.database_url = database_url
 
     def _connect(self):
-        import psycopg
+        from db.pool import connect
 
-        return psycopg.connect(self.database_url)
+        return connect(self.database_url)
 
     @staticmethod
     def _load(conn, case_id: str, lock: bool = False) -> Case:
@@ -227,20 +227,20 @@ class PostgresCaseRepository(CaseRepository):
         order = "created_at desc,case_id desc" if newest_first else "created_at,case_id"
         with self._connect() as conn:
             rows = conn.execute(
-                f"select case_id from cases where status = any(%s) "
+                f"select header from cases where status = any(%s) "
                 f"order by {order} limit %s offset %s",
                 (states, limit, offset),
             ).fetchall()
-            return [self._load(conn, row[0]) for row in rows]
+            return [Case(**row[0]) for row in rows]
 
     def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
         with self._connect() as conn:
             rows = conn.execute(
-                "select case_id from cases where seller_id=%s "
+                "select header from cases where seller_id=%s "
                 "order by created_at desc,case_id desc limit %s offset %s",
                 (seller_id, limit, offset),
             ).fetchall()
-            return [self._load(conn, row[0]) for row in rows]
+            return [Case(**row[0]) for row in rows]
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:

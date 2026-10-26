@@ -31,9 +31,9 @@ class PostgresChatHistory(ChatHistory):
         self.database_url = database_url
 
     def _connect(self):
-        import psycopg
+        from db.pool import connect
 
-        return psycopg.connect(self.database_url)
+        return connect(self.database_url)
 
     def append(self, case_id: str, turn: dict) -> None:
         from psycopg.types.json import Jsonb

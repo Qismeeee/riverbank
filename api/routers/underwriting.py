@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
 import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
+from routers.limits import rate_limited
 from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
 from services.underwriting.cic import ProfileCicSource
@@ -113,7 +114,12 @@ def summary(case: Case) -> dict:
     }
 
 
-@router.post("/cases", status_code=201, response_model=CaseSummary)
+@router.post(
+    "/cases",
+    status_code=201,
+    response_model=CaseSummary,
+    dependencies=[rate_limited("case_create")],
+)
 def create_case(plan: Plan, key: IdempotencyKey, actor: Principal, service: Service) -> dict:
     seller_of(actor, plan.seller_id)
     return summary(service.create(plan, key))
@@ -187,7 +193,11 @@ class StatementUploadForm(StatementUpload):
     file: UploadFile
 
 
-@router.post("/cases/{case_id}/statements/upload", response_model=CaseSummary)
+@router.post(
+    "/cases/{case_id}/statements/upload",
+    response_model=CaseSummary,
+    dependencies=[rate_limited("statement_upload")],
+)
 def upload_statement(
     case_id: Identifier,
     form: Annotated[StatementUploadForm, Form(media_type="multipart/form-data")],
