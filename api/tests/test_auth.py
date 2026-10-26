@@ -143,3 +143,17 @@ def test_throttle_window_and_reset():
     throttle.fail("ip", now)
     throttle.reset("ip")
     throttle.check("ip", now)
+
+
+def test_openapi_exposes_bearer_scheme_for_authorize_button(token_mode):
+    spec = token_mode.get("/openapi.json").json()
+    params = {p["name"].lower() for p in spec["paths"]["/v1/cases"]["post"]["parameters"]}
+    assert spec["components"]["securitySchemes"]["HTTPBearer"]["scheme"] == "bearer"
+    assert {"HTTPBearer": []} in spec["paths"]["/v1/cases"]["post"]["security"]
+    assert "authorization" not in params
+
+
+def test_lowercase_bearer_scheme_is_accepted(token_mode):
+    token = login(token_mode, "uw-1", "underwriter").json()["access_token"]
+    response = token_mode.get("/v1/auth/me", headers={"Authorization": f"bearer {token}"})
+    assert response.status_code == 200
