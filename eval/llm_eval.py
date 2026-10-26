@@ -19,7 +19,7 @@ from memo_llm import inputs  # noqa: E402
 
 import config  # noqa: E402
 import jev  # noqa: E402
-from llm import build_llm_client  # noqa: E402
+from llm import LlmClient, LlmRequest, LlmResponse, build_llm_client  # noqa: E402
 from prompts import default_prompts  # noqa: E402
 from services.copilot.advisor import CaseAdvisor, case_facts  # noqa: E402
 from services.copilot.extractor import PlanExtractor  # noqa: E402
@@ -40,6 +40,17 @@ QUESTIONS = (
     "Vì sao hồ sơ chưa được duyệt?",
     "Lãi suất và phí là bao nhiêu?",
 )
+
+
+class RecordingClient(LlmClient):
+    def __init__(self, inner: LlmClient):
+        self.inner, self.model, self.last = inner, inner.model, None
+
+    def complete_json(self, request: LlmRequest) -> LlmResponse:
+        self.last = None
+        response = self.inner.complete_json(request)
+        self.last = response.content
+        return response
 
 
 class AllowAll(InputGuard):
@@ -184,7 +195,7 @@ class AskSection(Section):
 
     def __init__(self, rows: list[tuple[str, dict]], questions: tuple[str, ...] = QUESTIONS):
         self.rows, self.questions = rows, questions
-        self.client = build_llm_client("copilot_ask")
+        self.client = RecordingClient(build_llm_client("copilot_ask"))
         self.prompt = default_prompts().get("copilot-qa")
         self.output = OutputGuard.from_guardrails(config.KNOWLEDGE_DIR / "guardrails.md")
 
@@ -209,6 +220,7 @@ class AskSection(Section):
                         "text": turn.answer,
                         "source": turn.source,
                         "codes": " ".join(turn.guard_codes),
+                        "rejected": self._rejected(turn),
                     }
                 )
         total = sum(sources.values())
@@ -218,6 +230,11 @@ class AskSection(Section):
             "template_fallback_rate": rate(sources["template"], total),
             "guard_codes": dict(codes.most_common()),
         }, review
+
+    def _rejected(self, turn) -> str:
+        if turn.source == "llm" or not self.client.last:
+            return ""
+        return json.dumps(self.client.last, ensure_ascii=False)
 
 
 class JevJudge:
@@ -256,7 +273,17 @@ def write(out: Path, report: dict, review: list[dict]) -> None:
     (out / "report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    columns = ["section", "case_id", "item", "status", "source", "codes", "judge", "text"]
+    columns = [
+        "section",
+        "case_id",
+        "item",
+        "status",
+        "source",
+        "codes",
+        "judge",
+        "text",
+        "rejected",
+    ]
     with (out / "review.csv").open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, [*columns, "evidence", "human_ok"], extrasaction="ignore")
         writer.writeheader()

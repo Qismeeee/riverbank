@@ -4,6 +4,7 @@ from pathlib import Path
 _NUMBER = re.compile(r"\d{1,3}(?:\.\d{3})+|\d+")
 _APPROVED = ("đã duyệt", "được duyệt", "accepted")
 _REJECTED = ("đã từ chối", "rejected")
+_NOT_YET = ("chưa được duyệt",)
 
 
 def numbers(text: str) -> list[int]:
@@ -53,6 +54,8 @@ class OutputGuard:
     @staticmethod
     def contradicts(text: str, status: str) -> bool:
         folded = text.casefold()
+        for phrase in _NOT_YET:
+            folded = folded.replace(phrase, "")
         if status != "ACCEPTED" and any(token in folded for token in _APPROVED):
             return True
         if status != "REJECTED" and any(token in folded for token in _REJECTED):

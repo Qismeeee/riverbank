@@ -509,3 +509,15 @@ def test_history_endpoint_scope(case_b, monkeypatch):
     assert bank.status_code == 200 and len(bank.json()["turns"]) == 1
     assert other.json()["detail"]["code"] == "SELLER_SCOPE_MISMATCH"
     assert old_body.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "text,status,expected",
+    [
+        ("Hồ sơ chưa được duyệt vì đang chờ ngân hàng xem.", "PENDING_REVIEW", False),
+        ("Hồ sơ đã được duyệt.", "PENDING_REVIEW", True),
+        ("Hồ sơ chưa được duyệt nhưng đã được duyệt một phần.", "ESCALATED", True),
+    ],
+)
+def test_status_guard_reads_not_yet_approved(text, status, expected):
+    assert OutputGuard.contradicts(text, status) is expected
