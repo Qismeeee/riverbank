@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
@@ -111,6 +112,8 @@ class TokenIdentity(IdentityProvider):
         return signer().verify(token.strip(), utc_now())
 
 
+BEARER = HTTPBearer(auto_error=False, description="Token từ POST /v1/auth/token")
+
 IDENTITY_PROVIDERS: dict[str, type[IdentityProvider]] = {
     "header": HeaderIdentity,
     "token": TokenIdentity,
@@ -118,7 +121,7 @@ IDENTITY_PROVIDERS: dict[str, type[IdentityProvider]] = {
 
 
 def get_actor(
-    authorization: Annotated[str | None, Header()] = None,
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER)] = None,
     actor_id: Annotated[str | None, Header(alias="X-Actor-ID")] = None,
     actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
 ) -> Actor:
@@ -127,6 +130,7 @@ def get_actor(
     provider = IDENTITY_PROVIDERS.get(config.WORKFLOW_IDENTITY)
     if provider is None:
         raise WorkflowError("INVALID_WORKFLOW_IDENTITY", 503)
+    authorization = f"{bearer.scheme} {bearer.credentials}" if bearer else None
     return provider().authenticate(Credentials(authorization, actor_id, actor_role))
 
 
