@@ -51,9 +51,9 @@ Runner release phải fail nếu human sample hoặc semantic-frame validator fa
 
 ## Sau khi sửa
 
-Nhánh `fix/memo-semantic-eval-gate` khóa toàn bộ câu chứa fact bằng code và gắn semantic frame gồm actor, relation, roles, units và audience. Seller explanation còn đúng 3 câu; câu đề xuất luôn ghi rõ "Hệ thống đề xuất", không gán thành nhu cầu của seller. Khi chưa có prose slot thuần, cấu hình writer `llm` không gọi model.
+Nhánh `fix/memo-semantic-eval-gate` khóa toàn bộ câu chứa fact bằng code và gắn semantic frame gồm actor, relation, roles, units và audience. Seller explanation còn đúng 3 câu; câu đề xuất luôn ghi rõ "Hệ thống đề xuất", không gán thành nhu cầu của seller. Tờ trình không gọi model.
 
-Đã thêm 5 adversarial golden: tráo tiền/kỳ hạn, sai chủ thể, số bằng chữ, phí bịa và diễn đạt "đã chấp thuận". Release gate chạy đủ workflow và submit statement, so toàn bộ expected field, đồng thời trả exit code khác 0 khi mismatch, lỗi validator hoặc fallback.
+Đã thêm 5 adversarial golden: tráo tiền/kỳ hạn, sai chủ thể, số bằng chữ, phí bịa và diễn đạt "đã chấp thuận". Release gate (`make memo-gate`) chạy đủ workflow và submit statement, so toàn bộ expected field, đồng thời trả exit code khác 0 khi mismatch hoặc lỗi validator.
 
 Kết quả xác nhận:
 
@@ -61,3 +61,10 @@ Kết quả xác nhận:
 - full offline suite: 343 pass, 11 Postgres test được chạy riêng sau khi bật Docker và đều pass;
 - Postgres integration: 2/2 ETL và 9/9 workflow pass;
 - diff không chứa key hoặc `.env`.
+
+## Gộp với main sau PR #31
+
+- Bỏ `LlmMemoWriter`, `FallbackMemoWriter`, `TemplateMemoWriter`, prompt `memo-writer.md`, biến `RIVERBANK_MEMO_WRITER` và giới hạn LLM `memo_writer`. Validator đòi chữ đúng nguyên văn mẫu nên câu do LLM viết lại không bao giờ qua, giữ các lớp đó là code chết.
+- Tờ trình lưu trước thay đổi này (chưa có `semantic_frame`) vẫn duyệt được: validator kiểm chúng theo luật số (số có trong evidence và đủ, đúng thứ tự, từ cấm, trạng thái). Tờ trình mới phải đúng frame và đủ slot.
+- Kết quả `make llm-eval` ngày 26/10 ghi "memo 16/16 LLM đạt lần 1" chỉ là validator theo số. Bảng review tay ở trên cho thấy con số đó không nói gì về chủ thể câu.
+

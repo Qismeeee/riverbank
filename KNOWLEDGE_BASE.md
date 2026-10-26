@@ -19,7 +19,6 @@ Quy ước cho mọi phiên viết code của sản phẩm. Từ 23/10/2026 số
 |---|---|
 | Trích 5 trường từ chat seller | `copilot-extract` |
 | Seller hỏi lại | `copilot-qa` |
-| Viết D09, D10 | `memo-writer` |
 | Viết D22 | `monitor-proposal` |
 | Bóc dòng sao kê PDF/ảnh | `statement-ocr` |
 | Injection, thuộc tính nhạy cảm, ý gian lận, phân loại dòng sao kê, chấm ngữ nghĩa eval | Jev |

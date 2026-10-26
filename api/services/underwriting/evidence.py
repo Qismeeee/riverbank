@@ -109,6 +109,5 @@ def sentence(template: str, evidence: dict, audience: str = "underwriter_memo") 
         "text": text.format(**rendered),
         "claims": claims,
         "semantic_frame": semantic_frame(template, claims, audience),
-        "locked": True,
         "evidence_id": evidence["evidence_id"],
     }

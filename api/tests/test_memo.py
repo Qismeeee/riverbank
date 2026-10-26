@@ -1,21 +1,8 @@
-import json
 from copy import deepcopy
-from types import SimpleNamespace
 
 import pytest
 
-import config
-import llm
-from llm import CachedLlmClient, LlmClient, LlmError, LlmRequest, LlmResponse
-from prompts import PromptStore, default_prompts
-from services.underwriting.memo import (
-    CodeMemoWriter,
-    LlmMemoWriter,
-    MemoComposer,
-    TemplateMemoWriter,
-    build_composer,
-    default_validator,
-)
+from services.underwriting.memo import CodeMemoWriter, MemoComposer, default_validator
 from services.underwriting.models import DecisionInput, Plan, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import BaselineRiskModel
@@ -26,22 +13,6 @@ from services.underwriting.sources import (
     seller_book_source,
 )
 from tests.test_underwriting import NOW, plan
-
-
-class ScriptedClient(LlmClient):
-    model = "scripted-model"
-
-    def __init__(self, *scripts):
-        self.scripts, self.requests = list(scripts), []
-
-    def complete_json(self, request: LlmRequest) -> LlmResponse:
-        self.requests.append(request)
-        script = self.scripts[min(len(self.requests), len(self.scripts)) - 1]
-        if isinstance(script, Exception):
-            raise script
-        slots = request.user["slots"]
-        content = {"sentences": [{"slot_id": s["slot_id"], "text": script(s)} for s in slots]}
-        return LlmResponse(content, self.model, {"total_tokens": 1})
 
 
 def _service(writer) -> UnderwritingService:
@@ -56,15 +27,12 @@ def _service(writer) -> UnderwritingService:
     )
 
 
-def test_locked_facts_are_code_rendered_without_calling_llm():
-    client = ScriptedClient(lambda slot: slot["reference"])
-    writer = LlmMemoWriter(client, default_prompts().get("memo-writer"))
-    case = _service(writer).create(Plan(**plan()), "memo-code")
+def test_memo_facts_are_code_rendered():
+    case = _service(CodeMemoWriter()).create(Plan(**plan()), "memo-code")
     doc = case.documents[-1]
     assert case.status == "PENDING_REVIEW"
     assert (doc["generator"], doc["attempt"], doc["validated"]) == ("CODE", 1, True)
     assert doc["model"] is None
-    assert client.requests == []
     gap = next(s for s in doc["seller_explanation"] if s["template"] == "gap")
     e5 = next(e for e in case.evidence if e["evidence_id"] == gap["evidence_id"])
     assert gap["claims"] == {"gap": e5["payload"]["gap"]}
@@ -77,7 +45,6 @@ def test_seller_explanation_has_three_code_owned_fact_sentences():
     case = _service(CodeMemoWriter()).create(Plan(**plan()), "memo-seller")
     seller = case.documents[-1]["seller_explanation"]
     assert [item["template"] for item in seller] == ["gap", "proposal", "deduction"]
-    assert all(item["locked"] for item in seller)
     proposal = seller[1]
     assert proposal["semantic_frame"]["relation"] == "proposes_loan_terms"
     assert proposal["semantic_frame"]["units"] == {
@@ -134,74 +101,38 @@ def test_missing_locked_slot_blocks_decision():
         service.decide(case.case_id, request, "uw", "d1")
 
 
-def test_cached_client_replays_without_calling_model(tmp_path):
-    inner = ScriptedClient(lambda slot: slot.get("reference", "safe"))
-    cached = CachedLlmClient(inner, tmp_path)
-    request = LlmRequest("system", {"slots": [{"slot_id": "a", "claims": {"x": 1}}]}, {}, "t")
-    first, second = cached.complete_json(request), cached.complete_json(request)
-    assert len(inner.requests) == 1
-    assert second.cached and second.content == first.content
+def _legacy(document: dict) -> None:
+    for audience in ("underwriter_memo", "seller_explanation"):
+        for item in document[audience]:
+            item.pop("semantic_frame")
+            item["text"] = item["text"].replace("Hệ thống đề xuất", "Đề xuất")
+    document["seller_explanation"].pop()
 
 
-def test_openai_client_maps_errors_and_parses_json(monkeypatch):
-    from openai import APIConnectionError
-
-    client = llm.OpenAICompatibleClient("sk-test", "m")
-    reply = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({"sentences": []})))],
-        model="m-2026",
-        usage=None,
-    )
-    calls = []
-
-    def create(**kwargs):
-        calls.append(kwargs)
-        return reply
-
-    client._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
-    response = client.complete_json(LlmRequest("s", {"a": 1}, {"type": "object"}, "n", None))
-    assert response.content == {"sentences": []} and response.model == "m-2026"
-    assert "temperature" not in calls[0]
-    assert calls[0]["response_format"]["json_schema"]["strict"] is True
-
-    reply.choices[0].message.content = "not json"
-    with pytest.raises(LlmError, match="LLM_INVALID_JSON"):
-        client.complete_json(LlmRequest("s", {}, {}, "n"))
-
-    def down(**kwargs):
-        raise APIConnectionError(request=None)
-
-    client._client.chat.completions.create = down
-    with pytest.raises(LlmError, match="LLM_UNAVAILABLE"):
-        client.complete_json(LlmRequest("s", {}, {}, "n"))
+def test_memo_written_before_semantic_frames_stays_decidable():
+    service = _service(CodeMemoWriter())
+    case = service.create(Plan(**plan()), "memo-legacy")
+    _legacy(service.repository._cases[case.case_id].documents[-1])
+    request = DecisionInput(expected_version=1, decision_type="ACCEPT_PROPOSAL", reason="ok")
+    assert service.decide(case.case_id, request, "uw", "d1").status == "ACCEPTED"
 
 
-def test_build_llm_client_reads_provider_from_config(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "LLM_PROVIDER", "nope")
-    with pytest.raises(LlmError, match="LLM_PROVIDER_UNKNOWN"):
-        llm.build_llm_client("memo_writer")
-    monkeypatch.setattr(config, "LLM_PROVIDER", "openrouter")
-    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
-    with pytest.raises(LlmError, match="LLM_KEY_MISSING"):
-        llm.build_llm_client("memo_writer")
-    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "sk-or-test")
-    monkeypatch.setattr(config, "LLM_CACHE_DIR", str(tmp_path))
-    client = llm.build_llm_client("memo_writer")
-    assert isinstance(client, CachedLlmClient)
-    assert str(client.inner._client.base_url).startswith(config.OPENROUTER_BASE_URL)
+def test_legacy_memo_still_checks_numbers():
+    service = _service(CodeMemoWriter())
+    case = service.create(Plan(**plan()), "memo-legacy-tamper")
+    stored = service.repository._cases[case.case_id].documents[-1]
+    _legacy(stored)
+    stored["underwriter_memo"][1]["text"] += " Thêm 5.000.000 VND."
+    request = DecisionInput(expected_version=1, decision_type="ACCEPT_PROPOSAL", reason="ok")
+    with pytest.raises(WorkflowError, match="MEMO_NUMBER_NOT_IN_EVIDENCE"):
+        service.decide(case.case_id, request, "uw", "d1")
 
 
-def test_build_composer_rejects_unknown_writer():
-    assert isinstance(build_composer("template").writer, TemplateMemoWriter)
-    with pytest.raises(WorkflowError, match="MEMO_WRITER_UNKNOWN"):
-        build_composer("freeform")
-
-
-def test_prompt_store_reads_front_matter_and_versions(tmp_path):
-    prompt = default_prompts().get("memo-writer")
-    assert prompt.temperature == 0 and "slot_id" in prompt.system
-    (tmp_path / "x.md").write_text("---\nid: y\n---\nbody", encoding="utf-8")
-    with pytest.raises(ValueError):
-        PromptStore(tmp_path).get("x")
+def test_partially_framed_memo_is_not_treated_as_legacy():
+    service = _service(CodeMemoWriter())
+    case = service.create(Plan(**plan()), "memo-partial")
+    stored = service.repository._cases[case.case_id].documents[-1]
+    stored["seller_explanation"][1].pop("semantic_frame")
+    request = DecisionInput(expected_version=1, decision_type="ACCEPT_PROPOSAL", reason="ok")
+    with pytest.raises(WorkflowError, match="MEMO_SEMANTIC_MISMATCH"):
+        service.decide(case.case_id, request, "uw", "d1")

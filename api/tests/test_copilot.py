@@ -11,8 +11,8 @@ from routers import underwriting as routes
 from services.copilot.advisor import HISTORY_TURNS, CaseAdvisor, case_facts
 from services.copilot.extractor import EXTRACTION_SCHEMA, PlanExtractor
 from services.copilot.grounding import Mentions
-from services.copilot.models import AskInput, ExtractPlanInput, KnownPlan
-from services.guard import OutputGuard
+from services.copilot.models import Answer, AskInput, ExtractPlanInput, KnownPlan
+from services.guard import OutputGuard, expand_units
 from services.guardrail import (
     GuardUnavailable,
     GuardVerdict,
@@ -509,3 +509,48 @@ def test_history_endpoint_scope(case_b, monkeypatch):
     assert bank.status_code == 200 and len(bank.json()["turns"]) == 1
     assert other.json()["detail"]["code"] == "SELLER_SCOPE_MISMATCH"
     assert old_body.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "text,status,expected",
+    [
+        ("Hồ sơ chưa được duyệt vì đang chờ ngân hàng xem.", "PENDING_REVIEW", False),
+        ("Hồ sơ đã được duyệt.", "PENDING_REVIEW", True),
+        ("Hồ sơ chưa được duyệt nhưng đã được duyệt một phần.", "ESCALATED", True),
+    ],
+)
+def test_status_guard_reads_not_yet_approved(text, status, expected):
+    assert OutputGuard.contradicts(text, status) is expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("trừ khoảng 11,25 triệu đồng", "trừ khoảng 11250000 đồng"),
+        ("vay 90 triệu trong 8 tuần", "vay 90000000 trong 8 tuần"),
+        ("lô 1.5 tỷ", "lô 1500000000"),
+        ("lô 1.250 triệu", "lô 1.250 triệu"),
+        ("ngày 27/07/2026", "ngày 27/07/2026"),
+    ],
+)
+def test_expand_units(text, expected):
+    assert expand_units(text) == expected
+
+
+def test_advisor_accepts_decimal_million_answer():
+    text = (
+        "Bạn được đề xuất vay 90 triệu đồng trong 8 tuần. Mỗi tuần bị trừ khoảng 11,25 triệu đồng."
+    )
+    facts = {"amount_proposed": 90_000_000, "tenor_weeks": 8, "weekly_deduction": 11_250_000}
+    answer = Answer(
+        answer_vi=text, figures_used=["amount_proposed", "tenor_weeks", "weekly_deduction"]
+    )
+    advisor = CaseAdvisor(None, None, None, QA_GUARD)
+    assert advisor._violations(answer, facts, "PENDING_REVIEW") == []
+    wrong = Answer(answer_vi=text.replace("11,25", "12,25"), figures_used=answer.figures_used)
+    assert advisor._violations(wrong, facts, "PENDING_REVIEW") == ["number"]
+
+
+def test_status_guard_reads_not_yet_needed():
+    assert not OutputGuard.contradicts("Hồ sơ chưa cần vay.", "NO_LOAN_NEEDED")
+    assert OutputGuard.contradicts("Hồ sơ chưa cần vay.", "PENDING_REVIEW")

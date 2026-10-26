@@ -13,7 +13,6 @@ from services.statements.reader import StatementConfig
 from services.underwriting.cic import ProfileCicSource
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
-from services.underwriting.memo import build_composer
 from services.underwriting.models import (
     Case,
     CaseDetail,
@@ -91,7 +90,6 @@ def get_service() -> UnderwritingService:
         CIC_SOURCES[config.WORKFLOW_CIC_SOURCE](),
         InternalLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
-        memo=build_composer(config.MEMO_WRITER),
         statements=build_statement_reader(),
         documents=build_document_store(config.DOCUMENT_STORE),
     )

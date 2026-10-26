@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-llm dossiers
+.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -27,8 +27,11 @@ fmt:
 jev:
 	cd api && .venv/bin/python jev.py
 
-memo-llm:
-	cd api && LLM_CACHE_DIR=$${LLM_CACHE_DIR:-../eval/.cache/llm} .venv/bin/python ../eval/memo_llm.py $(ARGS)
+memo-gate:
+	cd api && .venv/bin/python ../eval/memo_gate.py $(ARGS)
+
+llm-eval:
+	cd api && .venv/bin/python ../eval/llm_eval.py $(ARGS)
 
 synth:
 	cd api && .venv/bin/python ../data/synth/generate.py --out ../data/synth/out

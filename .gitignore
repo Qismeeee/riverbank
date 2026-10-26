@@ -32,8 +32,9 @@ data/synth/train/
 data/synth/test/
 data/exports/
 
-# llm eval cache
+# llm eval cache and reports
 eval/.cache/
+eval/out/
 
 # sample dossiers output
 eval/dossiers/out/

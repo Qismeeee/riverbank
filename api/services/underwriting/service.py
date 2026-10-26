@@ -13,7 +13,7 @@ from services.statements.storage import DocumentStore, NoDocumentStore
 
 from .evidence import digest, emit
 from .gates import CicGate, GateInput, OpenCicGate
-from .memo import MemoComposer, TemplateMemoWriter, default_validator
+from .memo import CodeMemoWriter, MemoComposer, default_validator
 from .models import (
     Case,
     CicInquiry,
@@ -97,7 +97,7 @@ class UnderwritingService:
     ):
         self.statements = statements
         self.documents = documents or NoDocumentStore()
-        self.memo = memo or MemoComposer(TemplateMemoWriter(), default_validator())
+        self.memo = memo or MemoComposer(CodeMemoWriter(), default_validator())
         self.repository, self.features = repository, features
         self.risk, self.cic, self.los, self.clock = risk, cic, los, clock
         self.cic_gate = cic_gate or OpenCicGate()

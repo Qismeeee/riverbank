@@ -9,8 +9,6 @@ sys.path.insert(0, str(ROOT / "api"))
 
 import score  # noqa: E402
 
-from services.underwriting.memo import build_composer  # noqa: E402
-
 
 def inputs(path: Path) -> list[tuple[str, dict, dict]]:
     case = json.loads(path.read_text(encoding="utf-8"))
@@ -26,10 +24,10 @@ def inputs(path: Path) -> list[tuple[str, dict, dict]]:
     ]
 
 
-def run(case_id: str, inp: dict, expected: dict, writer: str) -> dict:
+def run(case_id: str, inp: dict, expected: dict) -> dict:
     started = time.perf_counter()
     try:
-        actual, case = score.execute_case(inp, build_composer(writer), case_id)
+        actual, case = score.execute_case(inp, case_id=case_id)
     except Exception as exc:  # release report must retain the failed case
         return {
             "case_id": case_id,
@@ -49,8 +47,6 @@ def run(case_id: str, inp: dict, expected: dict, writer: str) -> dict:
             "model": document["model"],
             "validated": document["validated"],
             "errors": document["validation_errors"],
-            "usage": document.get("usage") or {},
-            "llm_seconds": document.get("llm_seconds", 0),
         }
         for document in documents
     ]
@@ -59,8 +55,6 @@ def run(case_id: str, inp: dict, expected: dict, writer: str) -> dict:
         errors.append("MEMO_MISSING")
     if documents and not documents[-1]["validated"]:
         errors.append("MEMO_NOT_VALIDATED")
-    if any(document["generator"] == "TEMPLATE" for document in documents):
-        errors.append("MEMO_FALLBACK_USED")
     if any(document["validation_errors"] for document in documents):
         errors.append("MEMO_ATTEMPT_ERROR")
 
@@ -75,51 +69,17 @@ def run(case_id: str, inp: dict, expected: dict, writer: str) -> dict:
         "errors": list(dict.fromkeys(errors)),
         "attempts": attempts,
         "underwriter_memo": [item["text"] for item in last.get("underwriter_memo", [])],
-        "seller_explanation": [
-            item["text"] for item in last.get("seller_explanation", [])
-        ],
+        "seller_explanation": [item["text"] for item in last.get("seller_explanation", [])],
     }
 
 
-def percentile(values: list[float], fraction: float) -> float:
-    if not values:
-        return 0
-    ordered = sorted(values)
-    return ordered[round((len(ordered) - 1) * fraction)]
-
-
-def summarize(
-    results: list[dict], input_price_per_million: float, output_price_per_million: float
-) -> dict:
-    attempts = [attempt for result in results for attempt in result["attempts"]]
-    input_tokens = sum(
-        int((attempt.get("usage") or {}).get("prompt_tokens", 0))
-        for attempt in attempts
-    )
-    output_tokens = sum(
-        int((attempt.get("usage") or {}).get("completion_tokens", 0))
-        for attempt in attempts
-    )
-    latencies = [
-        float(attempt["llm_seconds"]) for attempt in attempts if attempt["llm_seconds"]
-    ]
+def summarize(results: list[dict]) -> dict:
     passed = sum(result["passed"] for result in results)
     return {
         "total": len(results),
         "passed": passed,
         "failed": len(results) - passed,
-        "fallbacks": sum(attempt["generator"] == "TEMPLATE" for attempt in attempts),
-        "memo_documents": len(attempts),
-        "llm_calls": len(latencies),
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "estimated_cost_usd": round(
-            input_tokens * input_price_per_million / 1_000_000
-            + output_tokens * output_price_per_million / 1_000_000,
-            6,
-        ),
-        "llm_latency_p50_seconds": round(percentile(latencies, 0.5), 6),
-        "llm_latency_p95_seconds": round(percentile(latencies, 0.95), 6),
+        "memo_documents": sum(len(result["attempts"]) for result in results),
     }
 
 
@@ -127,11 +87,8 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--writer", default="llm", choices=("llm", "template"))
     parser.add_argument("--case", action="append", default=[])
     parser.add_argument("--out", type=Path)
-    parser.add_argument("--input-price-per-million", type=float, default=0.4)
-    parser.add_argument("--output-price-per-million", type=float, default=1.6)
     args = parser.parse_args()
     rows = [
         row
@@ -139,20 +96,8 @@ def main() -> int:
         for row in inputs(path)
         if not args.case or any(row[0].startswith(selected) for selected in args.case)
     ]
-    results = [
-        run(case_id, inp, expected, args.writer) for case_id, inp, expected in rows
-    ]
-    report = {
-        "writer": args.writer,
-        "pricing_usd_per_million_tokens": {
-            "input": args.input_price_per_million,
-            "output": args.output_price_per_million,
-        },
-        "summary": summarize(
-            results, args.input_price_per_million, args.output_price_per_million
-        ),
-        "cases": results,
-    }
+    results = [run(case_id, inp, expected) for case_id, inp, expected in rows]
+    report = {"summary": summarize(results), "cases": results}
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     print(rendered)
     if args.out:
