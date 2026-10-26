@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from llm import LlmClient, LlmError, LlmRequest
 from prompts import Prompt
-from services.guard import OutputGuard, ints
+from services.guard import OutputGuard, expand_units, ints
 from services.guardrail import InputGuard, PiiRedactor
 from services.underwriting.models import Case
 
@@ -16,7 +16,6 @@ from .replies import vnd
 from .screening import screen
 
 ANSWER_SCHEMA = Answer.model_json_schema()
-MILLION = 1_000_000
 HISTORY_TURNS = 6
 STATEMENT_STATUSES = {"AWAITING_STATEMENT", "ESCALATED"}
 STATEMENT_STEP = (
@@ -173,8 +172,7 @@ class CaseAdvisor:
         if unknown:
             return ["unknown_figure"]
         allowed = ints([facts[f] for f in answer.figures_used])
-        allowed |= {v // MILLION for v in allowed if v >= MILLION and v % MILLION == 0}
-        return self.output.check(answer.answer_vi, allowed, status)
+        return self.output.check(expand_units(answer.answer_vi), allowed, status)
 
     def _turn(
         self,

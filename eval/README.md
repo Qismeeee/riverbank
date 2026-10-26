@@ -17,6 +17,22 @@ Nhãn lấy từ `policy/worked-examples.md`, tức là hành vi của code đan
 
 `make memo-llm` chạy Memo Writer LLM thật qua các case trên, in từng lần viết, lỗi validator và câu cuối. Thêm `ARGS="--case FX-B"` để chạy một case. Kết quả cache theo hash input ở `eval/.cache/llm`, xóa thư mục đó để gọi lại model.
 
+## Đo LLM thật
+
+`make llm-eval` gọi model thật, không cache, nên mỗi lần chạy tốn tiền API (vài chục lượt gọi). Cần `OPENAI_API_KEY` hoặc `OPENROUTER_API_KEY` trong `api/.env` như khi chạy API.
+
+| Phần | Đo gì |
+|---|---|
+| `memo` | Chạy Memo Writer qua các case golden. Đếm số case LLM đạt ngay lần 1, số case phải lùi về template, mã lỗi validator. Lấy câu LLM cuối cùng, tiêm 5 kiểu lỗi trong `eval/inject.py` (đổi chỗ hai số, sửa một số, bỏ một số, chèn "đã được duyệt", chèn "gian lận") rồi đo tỷ lệ validator bắt được. |
+| `copilot_extract` | 12 tin nhắn có nhãn ở `golden/copilot/extract.json`. Mỗi trường là `correct`, `missed` (bỏ trống), `wrong` (điền sai số) hoặc `invented` (nhãn trống mà vẫn điền). |
+| `copilot_ask` | 5 câu hỏi chuẩn trên mỗi case golden. Đếm câu trả lời LLM qua được guard và mã guard khi phải lùi về template. |
+
+`ARGS="--section memo"` chạy một phần. `ARGS="--case FX-B"` chạy một case. `ARGS="--judge"` gọi thêm Jev chấm 4 câu hỏi ngữ nghĩa trong `knowledge/prompts/jev-eval-judge.md` cho mọi câu LLM viết, cờ bật khi xác suất YES trên 0,5.
+
+Kết quả ở `eval/out/<thời điểm>/`: `report.json` là số tổng, `review.csv` là từng câu kèm bằng chứng và cột `human_ok` trống để người chấm tay. Validator và Jev chỉ bắt được lỗi có quy tắc. Lỗi nghĩa không có số chỉ người đọc mới chắc.
+
+`api/tests/test_golden.py::test_memo_validator_catches_injected_errors` chạy cùng 5 kiểu lỗi trên câu template trong `make test`, không gọi mạng.
+
 `golden/llm/` khóa validator chữ: số phải có trong bằng chứng, không dùng từ trong `knowledge/guardrails.md`, không viết đã duyệt khi trạng thái chưa phải `ACCEPTED`. Jev chấm ngữ nghĩa ở ngoài CI, theo `knowledge/prompts/jev-eval-judge.md`.
 
 ## Thêm case
