@@ -9,6 +9,8 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 import config
 from db.migrate import migrate
 from db.seed_underwriting import seed
+from services.copilot.history import PostgresChatHistory
+from services.jobs import Job, JobConfig, PostgresJobQueue
 from services.underwriting.models import DecisionInput, Plan, WorkflowError
 from services.underwriting.repository import PostgresCaseRepository
 from services.underwriting.risk import DemoRiskModel
@@ -183,3 +185,43 @@ def test_etl_seed_preserves_source_and_labels_simulated_payout(database):
             ("demo-etl",),
         ).fetchall()
         assert len(rows) == 12 and all(row[0] == "simulated" for row in rows)
+
+
+def test_postgres_chat_history_keeps_order_and_is_append_only(database):
+    case = make_service(database).create(Plan(**plan()), "chat-1")
+    history = PostgresChatHistory(database)
+    ids = [str(uuid4()) for _ in range(3)]
+    for n, turn_id in enumerate(ids):
+        history.append(case.case_id, {"turn_id": turn_id, "question": f"q{n}"})
+    assert [t["turn_id"] for t in history.recent(case.case_id, 2)] == ids[1:]
+    with psycopg.connect(database) as conn, pytest.raises(psycopg.Error):
+        conn.execute("delete from copilot_turns")
+
+
+def test_postgres_job_queue_claims_once_retries_and_expires(database):
+    case = make_service(database).create(Plan(**plan()), "job-1")
+    queue = PostgresJobQueue(database)
+    cfg = JobConfig(max_attempts=2)
+    jobs = [
+        queue.enqueue(Job.new("k", case.case_id, "uw-1", {"n": n}, cfg), b"f%d" % n)
+        for n in range(2)
+    ]
+    with ThreadPoolExecutor(2) as pool:
+        claims = list(pool.map(lambda _: queue.claim(60), range(2)))
+    assert sorted(c.job.job_id for c in claims) == sorted(j.job_id for j in jobs)
+    assert queue.claim(60) is None
+    first, second = sorted(claims, key=lambda c: c.job.payload["n"])
+    assert first.content == b"f0" and first.job.status == "RUNNING"
+    queue.complete(first.job.job_id, {"ok": True})
+    done = queue.get(first.job.job_id)
+    assert (done.status, done.result) == ("SUCCEEDED", {"ok": True})
+    queue.fail(second.job.job_id, {"code": "X", "status": 503}, True)
+    assert queue.get(second.job.job_id).status == "QUEUED"
+    again = queue.claim(0)
+    assert (again.job.attempts, again.content) == (2, b"f1")
+    assert queue.claim(60) is None
+    failed = queue.get(second.job.job_id)
+    assert failed.status == "FAILED" and failed.error["code"] == "JOB_LEASE_EXPIRED"
+    with psycopg.connect(database) as conn:
+        rows = conn.execute("select count(*) from jobs where content is not null").fetchone()
+    assert rows[0] == 0

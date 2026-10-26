@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
 import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
-from services.statements.factory import build_statement_reader
+from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
+from services.underwriting.cic import SimulatedCicSource
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.memo import build_composer
@@ -34,6 +35,7 @@ from services.underwriting.repository import MemoryCaseRepository, PostgresCaseR
 from services.underwriting.risk import DemoRiskModel, LightGbmRiskModel, RiskModel
 from services.underwriting.service import UnderwritingService, utc_now
 from services.underwriting.sources import (
+    CicSource,
     DemoCicSource,
     MockLosAdapter,
     PostgresFeatureSource,
@@ -44,6 +46,7 @@ router = APIRouter(prefix="/v1", tags=["underwriting"])
 
 RISK_MODELS: dict[str, type[RiskModel]] = {"demo": DemoRiskModel, "lightgbm": LightGbmRiskModel}
 CIC_GATES: dict[str, type[CicGate]] = {"open": OpenCicGate, "jev": JevCicGate}
+CIC_SOURCES: dict[str, type[CicSource]] = {"mock": DemoCicSource, "simulated": SimulatedCicSource}
 
 
 @lru_cache
@@ -58,6 +61,8 @@ def get_service() -> UnderwritingService:
         raise WorkflowError("INVALID_WORKFLOW_RISK", 503)
     if config.WORKFLOW_CIC_GATE not in CIC_GATES:
         raise WorkflowError("INVALID_WORKFLOW_CIC_GATE", 503)
+    if config.WORKFLOW_CIC_SOURCE not in CIC_SOURCES:
+        raise WorkflowError("INVALID_WORKFLOW_CIC_SOURCE", 503)
     if config.WORKFLOW_CIC_GATE == "jev" and not config.OPENROUTER_API_KEY:
         raise WorkflowError("OPENROUTER_KEY_REQUIRED", 503)
     url = config.database_url()
@@ -79,11 +84,12 @@ def get_service() -> UnderwritingService:
         repository,
         features,
         RISK_MODELS[config.WORKFLOW_RISK](),
-        DemoCicSource(),
+        CIC_SOURCES[config.WORKFLOW_CIC_SOURCE](),
         MockLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
         memo=build_composer(config.MEMO_WRITER),
         statements=build_statement_reader(),
+        documents=build_document_store(config.DOCUMENT_STORE),
     )
 
 

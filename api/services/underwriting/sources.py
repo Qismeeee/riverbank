@@ -1,6 +1,9 @@
+import json
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from .evidence import digest
 from .models import WorkflowError
@@ -80,45 +83,21 @@ class PostgresFeatureSource(FeatureSource):
             return consent, features
 
 
-DEMO_PROFILES = {
-    "fashion": {
-        "archetype": "fashion",
-        "shop_age_months": 12,
-        "return_rate": 0.05,
-        "n_products": 80,
-        "top3_share": 0.3,
-        "rating": 4.7,
-    },
-    "electronics": {
-        "archetype": "electronics",
-        "shop_age_months": 12,
-        "return_rate": 0.05,
-        "n_products": 40,
-        "top3_share": 0.45,
-        "rating": 4.8,
-    },
-    "fashion_young": {
-        "archetype": "fashion",
-        "shop_age_months": 7,
-        "return_rate": 0.13,
-        "n_products": 12,
-        "top3_share": 0.8,
-        "rating": 4.2,
-    },
-}
+SELLERS_PATH = Path(__file__).resolve().parents[2] / "data" / "demo_sellers.json"
+HISTORY_WEEKS = 12
 
 
-def demo_source(now: datetime) -> MappingFeatureSource:
-    monday = now.date() - timedelta(days=now.weekday())
-    records = {}
-    for seller, payout, support, profile in (
-        ("demo-a", 40_000_000, 90_000_000, DEMO_PROFILES["fashion"]),
-        ("demo-b", 70_000_000, 90_000_000, DEMO_PROFILES["fashion"]),
-        ("demo-c", 70_000_000, 30_000_000, DEMO_PROFILES["electronics"]),
-        ("demo-d", 70_000_000, 90_000_000, DEMO_PROFILES["fashion_young"]),
-    ):
+@dataclass(frozen=True)
+class DemoSeller:
+    seller_id: str
+    profile: dict
+    platform_supported_amount: int
+    weekly_payouts: tuple[int, ...]
+
+    def records(self, now: datetime) -> tuple[dict, dict]:
+        monday = now.date() - timedelta(days=now.weekday())
         consent = {
-            "reference": f"demo-consent-{seller}",
+            "reference": f"demo-consent-{self.seller_id}",
             "source": "synthetic",
             "purpose": "WORKING_CAPITAL_UNDERWRITING",
             "granted_at": (now - timedelta(days=1)).isoformat(),
@@ -126,22 +105,55 @@ def demo_source(now: datetime) -> MappingFeatureSource:
             "revoked_at": None,
         }
         features = {
-            "seller_id": seller,
-            "shop_id": seller,
+            "seller_id": self.seller_id,
+            "shop_id": self.seller_id,
             "source": "synthetic",
             "payout_origin": "simulated",
             "disclosure": "synthetic; payout mô phỏng",
-            "platform_supported_amount": support,
-            **profile,
+            "platform_supported_amount": self.platform_supported_amount,
+            **self.profile,
             "weekly_payouts": [
-                {"week_start": (monday - timedelta(weeks=12 - i)).isoformat(), "amount": payout}
-                for i in range(12)
+                {
+                    "week_start": (monday - timedelta(weeks=HISTORY_WEEKS - i)).isoformat(),
+                    "amount": amount,
+                }
+                for i, amount in enumerate(self.weekly_payouts)
             ],
             "raw_refs": [],
             "etl_run_id": None,
         }
-        records[(seller, seller)] = (consent, features)
-    return MappingFeatureSource(records)
+        return consent, features
+
+
+class DemoSellerBook:
+    def __init__(self, sellers: list[DemoSeller]):
+        self.sellers = list(sellers)
+
+    @classmethod
+    def load(cls, path: Path = SELLERS_PATH) -> "DemoSellerBook":
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            return cls([cls._parse(item, raw["profiles"]) for item in raw["sellers"]])
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise WorkflowError("DEMO_SELLERS_INVALID", 503, [type(exc).__name__]) from exc
+
+    @staticmethod
+    def _parse(item: dict, profiles: dict) -> DemoSeller:
+        payouts = tuple(item["weekly_payouts"])
+        support = item["platform_supported_amount"]
+        if len(payouts) != HISTORY_WEEKS or any(
+            type(p) is not int or p < 0 for p in (*payouts, support)
+        ):
+            raise ValueError(item["seller_id"])
+        profile = dict(profiles[item["profile"]])
+        if not _valid_profile(profile):
+            raise ValueError(item["seller_id"])
+        return DemoSeller(item["seller_id"], profile, support, payouts)
+
+
+def demo_source(now: datetime, book: DemoSellerBook | None = None) -> MappingFeatureSource:
+    sellers = (book or DemoSellerBook.load()).sellers
+    return MappingFeatureSource({(s.seller_id, s.seller_id): s.records(now) for s in sellers})
 
 
 PROFILE_RANGES = {
@@ -225,11 +237,18 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
 
 
 class CicSource(ABC):
+    name: str
+
     @abstractmethod
     def inquire(self, seller_id: str, now: datetime) -> dict: ...
 
+    def describe(self) -> dict:
+        return {"source": self.name}
+
 
 class DemoCicSource(CicSource):
+    name = "mock"
+
     def inquire(self, seller_id: str, now: datetime) -> dict:
         return {
             "seller_id": seller_id,

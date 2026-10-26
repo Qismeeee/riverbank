@@ -26,6 +26,7 @@ class StudioPolicy(BaseModel):
     rules: list[RuleInfo]
     risk_model: dict
     cic_gate: dict
+    cic_source: dict
 
 
 class EvalCase(BaseModel):
@@ -65,6 +66,7 @@ def policy_snapshot(service: UnderwritingService) -> dict:
         ],
         "risk_model": service.risk.describe(),
         "cic_gate": service.cic_gate.describe(),
+        "cic_source": service.cic.describe(),
     }
 
 

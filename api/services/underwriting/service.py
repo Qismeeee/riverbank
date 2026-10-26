@@ -9,6 +9,7 @@ from uuid import uuid4
 from policy import RISK_RULE_IDS, PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
 from services.statements.reader import StatementReader
+from services.statements.storage import DocumentStore, NoDocumentStore
 
 from .evidence import digest, emit
 from .gates import CicGate, GateInput, OpenCicGate
@@ -88,8 +89,10 @@ class UnderwritingService:
         cic_gate: CicGate | None = None,
         memo: MemoComposer | None = None,
         statements: StatementReader | None = None,
+        documents: DocumentStore | None = None,
     ):
         self.statements = statements
+        self.documents = documents or NoDocumentStore()
         self.memo = memo or MemoComposer(TemplateMemoWriter(), default_validator())
         self.repository, self.features = repository, features
         self.risk, self.cic, self.los, self.clock = risk, cic, los, clock
@@ -387,18 +390,31 @@ class UnderwritingService:
             self._record_statement(case, period, request.marketplace_total, details, actor)
         return self.repository.get(case_id)
 
-    def upload_statement(
-        self, case_id: str, request: StatementUpload, content: bytes, actor: str
-    ) -> Case:
+    def check_upload(self, case_id: str, request: StatementUpload, content: bytes) -> tuple:
         if self.statements is None:
             raise WorkflowError("STATEMENT_READER_UNAVAILABLE", 503)
         current = self.repository.get(case_id)
         if current.version != request.expected_version:
             raise WorkflowError("CASE_VERSION_CONFLICT")
         period = self._statement_period(current, request.period_start, request.period_end)
+        self.statements.inspect(content)
+        return period
+
+    def upload_statement(
+        self,
+        case_id: str,
+        request: StatementUpload,
+        content: bytes,
+        actor: str,
+        job_id: str | None = None,
+    ) -> Case:
+        period = self.check_upload(case_id, request, content)
         read = self.statements.read(content)
         details = self.statements.reconcile(read, period[0], period[1])
         total = details.pop("marketplace_total")
+        details["original"] = self.documents.put(read.document, case_id)
+        if job_id:
+            details["job_id"] = job_id
         with self.repository.transaction(case_id, request.expected_version) as case:
             period = self._statement_period(case, request.period_start, request.period_end)
             self._record_statement(

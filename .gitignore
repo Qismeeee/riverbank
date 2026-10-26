@@ -34,3 +34,6 @@ data/exports/
 
 # llm eval cache
 eval/.cache/
+
+# sample dossiers output
+eval/dossiers/out/

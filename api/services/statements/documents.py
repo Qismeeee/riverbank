@@ -1,13 +1,26 @@
 import hashlib
+import io
 import re
 import unicodedata
+import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from services.underwriting.models import WorkflowError
 
 CSV, PDF, PNG, JPEG = "text/csv", "application/pdf", "image/png", "image/jpeg"
-SIGNATURES = ((b"%PDF-", PDF), (b"\x89PNG\r\n\x1a\n", PNG), (b"\xff\xd8\xff", JPEG))
+WEBP, HEIC = "image/webp", "image/heic"
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+XLS = "application/vnd.ms-excel"
+IMAGES = frozenset({PNG, JPEG, WEBP, HEIC})
+SIGNATURES = (
+    (b"%PDF-", PDF),
+    (b"\x89PNG\r\n\x1a\n", PNG),
+    (b"\xff\xd8\xff", JPEG),
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", XLS),
+)
+HEIC_BRANDS = frozenset({b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"})
+ZIP_SIGNATURE, XLSX_PART = b"PK\x03\x04", "xl/workbook.xml"
 DATE_FORMATS = ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%y")
 _DECIMAL_TAIL = re.compile(r"[.,]\d{1,2}$")
 _NEGATIVE = re.compile(r"^\(.*\)$|^-|-$")
@@ -23,11 +36,27 @@ class StatementDocument:
         for signature, media_type in SIGNATURES:
             if content.startswith(signature):
                 return cls(content, media_type)
+        if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+            return cls(content, WEBP)
+        if content[4:8] == b"ftyp" and content[8:12] in HEIC_BRANDS:
+            return cls(content, HEIC)
+        if content.startswith(ZIP_SIGNATURE):
+            return cls._workbook(content)
         try:
             content.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
             raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415) from exc
         return cls(content, CSV)
+
+    @classmethod
+    def _workbook(cls, content: bytes) -> "StatementDocument":
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                if XLSX_PART in archive.namelist():
+                    return cls(content, XLSX)
+        except zipfile.BadZipFile as exc:
+            raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415) from exc
+        raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415)
 
     @property
     def ref(self) -> str:
@@ -40,6 +69,20 @@ class StatementLine:
     raw_desc: str
     credit: int | None
     debit: int | None
+    balance: int | None = None
+    page: int | None = None
+
+
+@dataclass(frozen=True)
+class StatementSummary:
+    opening: int | None = None
+    closing: int | None = None
+
+    def merge(self, later: "StatementSummary") -> "StatementSummary":
+        return StatementSummary(
+            self.opening if self.opening is not None else later.opening,
+            later.closing if later.closing is not None else self.closing,
+        )
 
 
 @dataclass(frozen=True)
@@ -50,6 +93,8 @@ class ParsedStatement:
     model: str | None = None
     prompt_version: str | None = None
     notes: list[str] = field(default_factory=list)
+    image_pages: tuple[int, ...] = ()
+    summary: StatementSummary = field(default_factory=StatementSummary)
 
 
 def fold(text: str) -> str:
@@ -59,8 +104,8 @@ def fold(text: str) -> str:
 
 
 def parse_vnd(text: object) -> int | None:
-    if isinstance(text, int):
-        return abs(text)
+    if isinstance(text, int | float):
+        return abs(int(text))
     raw = str(text or "").strip().replace(" ", "")
     if not raw or not any(c.isdigit() for c in raw):
         return None
@@ -72,7 +117,18 @@ def is_negative(text: object) -> bool:
     return bool(_NEGATIVE.search(str(text or "").strip()))
 
 
+def parse_signed_vnd(text: object) -> int | None:
+    if isinstance(text, int | float):
+        return int(text)
+    value = parse_vnd(text)
+    return -value if value is not None and is_negative(text) else value
+
+
 def parse_date(text: object) -> str | None:
+    if isinstance(text, datetime):
+        return text.date().isoformat()
+    if isinstance(text, date):
+        return text.isoformat()
     head = str(text or "").strip().split(" ")[0]
     for fmt in DATE_FORMATS:
         try:
