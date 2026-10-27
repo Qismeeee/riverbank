@@ -121,11 +121,7 @@ def jev_block_details(flags: dict[str, float], threshold: float) -> list[dict]:
 
 
 def note_block_details(text: str) -> list[dict]:
-    return [
-        block_detail(reason, "note")
-        for reason, pattern in NOTE_RULES
-        if pattern.search(text)
-    ]
+    return [block_detail(reason, "note") for reason, pattern in NOTE_RULES if pattern.search(text)]
 
 
 class GuardUnavailable(Exception):

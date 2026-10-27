@@ -33,6 +33,7 @@ NOT_QUERIED = "not_queried"
 DEFERRED = "deferred_until_statement"
 CIC_RULE_IDS = frozenset({"R06", "R07"})
 
+
 def _valid_risk(risk: dict) -> bool:
     if risk.get("missing_fields"):
         return risk["pd_bps"] is None and not risk["factors"]
