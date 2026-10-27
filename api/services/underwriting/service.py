@@ -8,8 +8,10 @@ from uuid import uuid4
 from policy import RISK_RULE_IDS, PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
 from services.guardrail import note_block_details
+from services.metering import bind_run, open_scope, reset_meter
 from services.statements.reader import StatementReader
 from services.statements.storage import DocumentStore, NoDocumentStore
+from services.traffic import MAX_TRAFFIC_CASES, build_traffic, parse_window
 
 from .evidence import digest, emit
 from .gates import CicGate, GateInput, OpenCicGate
@@ -214,6 +216,28 @@ class UnderwritingService:
     ) -> dict:
         now = self.clock()
         run_id = str(uuid4())
+        token, bucket = bind_run(case.case_id, run_id, self.clock)
+        try:
+            run = self._compose_run(case, features, statement, counter, cic_override, now, run_id)
+            finished = self.clock()
+            run["started_at"] = now.isoformat()
+            run["finished_at"] = finished.isoformat()
+            run["duration_ms"] = (finished - now) // timedelta(milliseconds=1)
+            run["model_calls"] = bucket.snapshot(run_id)
+            return run
+        finally:
+            reset_meter(token)
+
+    def _compose_run(
+        self,
+        case: Case,
+        features: dict,
+        statement: dict | None,
+        counter: DecisionInput | None,
+        cic_override: dict | None,
+        now: datetime,
+        run_id: str,
+    ) -> dict:
         inp = CashFlowInput(
             cash_on_hand=case.plan["cash_on_hand"],
             supplier_schedule=case.plan["supplier_schedule"],
@@ -432,21 +456,25 @@ class UnderwritingService:
         job_id: str | None = None,
     ) -> Case:
         period = self.check_upload(case_id, request, content)
-        read = self.statements.read(content)
-        details = self.statements.reconcile(read, period[0], period[1])
-        total = details.pop("marketplace_total")
-        details["original"] = self.documents.put(read.document, case_id)
-        if job_id:
-            details["job_id"] = job_id
-        with self.repository.transaction(case_id, request.expected_version) as case:
-            period = self._statement_period(case, request.period_start, request.period_end)
-            self._record_statement(
-                case,
-                period,
-                total,
-                {**details, "source": "uploaded_file", "submitted_by": actor},
-                actor,
-            )
+        token = open_scope(case_id, self.clock)
+        try:
+            read = self.statements.read(content)
+            details = self.statements.reconcile(read, period[0], period[1])
+            total = details.pop("marketplace_total")
+            details["original"] = self.documents.put(read.document, case_id)
+            if job_id:
+                details["job_id"] = job_id
+            with self.repository.transaction(case_id, request.expected_version) as case:
+                period = self._statement_period(case, request.period_start, request.period_end)
+                self._record_statement(
+                    case,
+                    period,
+                    total,
+                    {**details, "source": "uploaded_file", "submitted_by": actor},
+                    actor,
+                )
+        finally:
+            reset_meter(token)
         return self.repository.get(case_id)
 
     def decide(self, case_id: str, request: DecisionInput, actor: str, key: str) -> Case:
@@ -587,3 +615,12 @@ class UnderwritingService:
                 "HANDOFF_ERROR" if error else "HANDOFF_OK",
             )
         return self.repository.get(case_id)
+
+    def traffic(self, window_from: str | None, window_to: str | None, recent: int) -> dict:
+        start, end = parse_window(window_from, window_to)
+        if self.repository.count_created(start, end) > MAX_TRAFFIC_CASES:
+            raise WorkflowError("TRAFFIC_WINDOW_TOO_WIDE", 503)
+        cases = self.repository.list_created(start, end)
+        if len(cases) > MAX_TRAFFIC_CASES:
+            raise WorkflowError("TRAFFIC_WINDOW_TOO_WIDE", 503)
+        return build_traffic(cases, self.clock(), recent)

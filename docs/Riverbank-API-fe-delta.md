@@ -49,7 +49,7 @@ Việc backend phải làm:
 
 Không gộp hai trạng thái thành một mã `DECIDED` trên API. FE tự ghép hai danh sách.
 
-## 3. Lưu lượng Studio — cần đầu mới
+## 3. Lưu lượng Studio
 
 Tab Lưu lượng trên Studio đang tự ghép dữ liệu:
 
@@ -62,6 +62,6 @@ GET /v1/cases/{case_id}    # từng hồ sơ
 
 Thời gian trên màn hình là hiệu hai `events` đầu nếu hiệu dưới 3 phút. Chi phí luôn để trống.
 
-Hợp đồng đúng là `GET /v1/studio/traffic` trong `Riverbank-API.md` mục 6.8. Chưa có code. Khi có, FE bỏ vòng đọc từng hồ sơ và chỉ gọi đầu này.
+Hợp đồng là `GET /v1/studio/traffic` trong `Riverbank-API.md` mục 6.8. Backend đã có đầu này. FE bỏ vòng đọc từng hồ sơ và chỉ gọi đầu này.
 
-Backend phải giữ `LlmResponse.usage` theo từng lần chạy. Hiện `documents[].model` có tên model, không có token, nên không tính được USD.
+Token và tiền nằm trên dòng gọi của từng `run`, không nằm trên `documents[]`. Hồ sơ ghi trước khi có metering vẫn trả về, với `duration_ms` null và `cost_known` false.

@@ -161,7 +161,7 @@ POST /cases ──> NO_LOAN_NEEDED
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
 | `GET` | `/v1/studio/policy` | underwriter | Có | FR-18 |
 | `GET` | `/v1/studio/eval-metrics` | underwriter | Có | NFR-01..NFR-06 |
-| `GET` | `/v1/studio/traffic` | underwriter | Chưa có | NFR-01, NFR-06, mục 6.8 |
+| `GET` | `/v1/studio/traffic` | underwriter | Có | NFR-01, NFR-06, mục 6.8 |
 
 ---
 
@@ -840,7 +840,7 @@ Người ngân hàng duyệt hoặc giữ nguyên đề xuất D22.
 
 ### 6.8 `GET /v1/studio/traffic`
 
-Chưa có code. Chỉ đọc, vai trò `underwriter`, cùng cách xác thực với mục 6.7. Không có thân yêu cầu. Không sửa hồ sơ, không ghi `case_events`.
+Chỉ đọc, vai trò `underwriter`, cùng cách xác thực với mục 6.7. Không có thân yêu cầu. Không sửa hồ sơ, không ghi `case_events`.
 
 Đầu này trả lưu lượng hồ sơ, thời gian lần tính, và chi phí model. Ba số đó là code tính. LLM không ghi thời gian, không ghi token, không ghi tiền.
 
@@ -991,4 +991,3 @@ Ngày 23/10/2026 team chốt: số và rule theo code đang chạy. `policy/poli
 | Sao kê | Seller upload file lên S3, mục 6.3 | Người thẩm định nhập tổng |
 | Tiền ngoài sàn | `R06_OFF_PLATFORM_NOT_EVIDENCE` | Chưa phân biệt |
 | Monitor | Mục 6 | Chưa có |
-| Lưu lượng Studio | `GET /v1/studio/traffic`, mục 6.8 | FE tự đọc hàng đợi rồi đọc từng hồ sơ. Token của `LlmResponse.usage` bị bỏ trước khi ghi `documents` |

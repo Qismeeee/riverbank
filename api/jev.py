@@ -1,4 +1,5 @@
 import base64
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,23 @@ import config
 
 URL = "https://openrouter.ai/api/alpha/decisions"
 MODEL = "typesafe/jev-1.14"
+_last: ContextVar[tuple[str, dict] | None] = ContextVar("jev_usage", default=None)
+
+
+def forget_last() -> None:
+    _last.set(None)
+
+
+def note_usage(model: str, usage: dict | None) -> None:
+    _last.set((model, usage if isinstance(usage, dict) else {}))
+
+
+def take_last() -> tuple[str | None, dict]:
+    item = _last.get()
+    _last.set(None)
+    if item is None:
+        return None, {}
+    return item
 
 
 def image_part(path: str | Path) -> dict:
@@ -44,7 +62,12 @@ def decide(
             json={"model": MODEL, "state": state, "questions": questions},
         )
     r.raise_for_status()
-    return r.json()["answers"]
+    payload = r.json()
+    answers = payload["answers"]
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+    model = payload.get("model")
+    note_usage(model if isinstance(model, str) and model else MODEL, usage)
+    return answers
 
 
 def noul_probability(answers: dict, name: str) -> float:

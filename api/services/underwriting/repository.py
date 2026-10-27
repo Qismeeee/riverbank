@@ -2,8 +2,11 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import asdict
+from datetime import datetime
 from threading import RLock
 from typing import Iterator
+
+from services.traffic import in_created_window
 
 from .models import Case, WorkflowError
 
@@ -40,6 +43,12 @@ class CaseRepository(ABC):
 
     @abstractmethod
     def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]: ...
+
+    @abstractmethod
+    def count_created(self, start: datetime | None, end: datetime | None) -> int: ...
+
+    @abstractmethod
+    def list_created(self, start: datetime | None, end: datetime | None) -> list[Case]: ...
 
     @abstractmethod
     def transaction(self, case_id: str, version: int): ...
@@ -93,6 +102,22 @@ class MemoryCaseRepository(CaseRepository):
                 reverse=True,
             )
             return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
+
+    def count_created(self, start: datetime | None, end: datetime | None) -> int:
+        with self._lock:
+            return sum(
+                in_created_window(case.created_at, start, end) for case in self._cases.values()
+            )
+
+    def list_created(self, start: datetime | None, end: datetime | None) -> list[Case]:
+        with self._lock:
+            return deepcopy(
+                [
+                    case
+                    for case in self._cases.values()
+                    if in_created_window(case.created_at, start, end)
+                ]
+            )
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:
@@ -241,6 +266,27 @@ class PostgresCaseRepository(CaseRepository):
                 (seller_id, limit, offset),
             ).fetchall()
             return [Case(**row[0]) for row in rows]
+
+    def count_created(self, start: datetime | None, end: datetime | None) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "select count(*) from cases where "
+                "(%s::timestamptz is null or created_at >= %s) and "
+                "(%s::timestamptz is null or created_at < %s)",
+                (start, start, end, end),
+            ).fetchone()
+            return row[0]
+
+    def list_created(self, start: datetime | None, end: datetime | None) -> list[Case]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "select case_id from cases where "
+                "(%s::timestamptz is null or created_at >= %s) and "
+                "(%s::timestamptz is null or created_at < %s) "
+                "order by created_at desc, case_id desc",
+                (start, start, end, end),
+            ).fetchall()
+            return [self._load(conn, row[0]) for row in rows]
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:
