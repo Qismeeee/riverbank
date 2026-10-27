@@ -3,6 +3,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
 import jev
+from services.metering import record_usage
 
 CIC_QUESTION = jev.noul(
     "Hồ sơ vay vốn lưu động này đã đủ điều kiện để tra cứu CIC tốn phí chưa?",
@@ -64,12 +65,15 @@ class JevCicGate(CicGate):
 
     def evaluate(self, inp: GateInput) -> GateDecision:
         try:
+            jev.forget_last()
             answers = self.decide(state(inp), {"eligible": CIC_QUESTION}, timeout=self.timeout)
             probability = jev.noul_probability(answers, "eligible")
         except Exception as exc:
             return GateDecision(
                 self.name, False, self.threshold, self.model, error=type(exc).__name__
             )
+        model, usage = jev.take_last()
+        record_usage("cic_gate", "openrouter", model or self.model, usage, False)
         return GateDecision(
             self.name, probability >= self.threshold, self.threshold, self.model, probability
         )

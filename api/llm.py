@@ -56,11 +56,13 @@ class OpenAICompatibleClient(LlmClient):
         base_url: str | None = None,
         timeout: float = 30.0,
         max_retries: int = 2,
+        provider: str = "openai",
     ):
         if not api_key:
             raise LlmError("LLM_KEY_MISSING")
         from openai import OpenAI
 
+        self.provider = provider
         self.model = model
         self._client = OpenAI(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries
@@ -128,6 +130,7 @@ def _parse_json(text: str) -> object:
 class CachedLlmClient(LlmClient):
     def __init__(self, inner: LlmClient, directory: Path):
         self.inner, self.model, self.directory = inner, inner.model, Path(directory)
+        self.provider = getattr(inner, "provider", "openai")
 
     def complete_json(self, request: LlmRequest) -> LlmResponse:
         path = self.directory / f"{request.fingerprint(self.model)}.json"
@@ -154,7 +157,7 @@ def build_llm_client(
     api_key, base_url = PROVIDERS[provider]()
     timeout, retries = config.llm_limits(purpose)
     client: LlmClient = OpenAICompatibleClient(
-        api_key, model or config.LLM_MODEL, base_url, timeout, retries
+        api_key, model or config.LLM_MODEL, base_url, timeout, retries, provider=provider
     )
     if config.LLM_CACHE_DIR:
         client = CachedLlmClient(client, Path(config.LLM_CACHE_DIR) / purpose)

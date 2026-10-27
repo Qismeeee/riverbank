@@ -101,6 +101,7 @@ Nút "Giữ để ký số" gọi `decisions` với `ACCEPT_PROPOSAL` hoặc `AC
 |---|---|
 | Bộ rule, ngưỡng, mã băm, model PD, Jev gate | `GET /v1/studio/policy` |
 | Kết quả golden eval | `GET /v1/studio/eval-metrics` |
+| Lưu lượng, thời gian, chi phí | `GET /v1/studio/traffic`, `Riverbank-API.md` mục 6.8 |
 
 ## 4. Trạng thái và lý do
 

@@ -1,0 +1,15 @@
+# micro-USD cho 1.000.000 token. 1 USD = 1.000.000 micro-USD.
+# cost_micro_usd = làm tròn (prompt * input + completion * output) / 1.000.000.
+# Model không có dòng thì cost_micro_usd là null. Không ước token từ số ký tự.
+# gpt-4.1-mini: 0,40 USD vào và 1,60 USD ra cho một triệu token (bảng giá OpenAI).
+# Chưa có đơn giá công bố cho typesafe/jev-1.14 và google/gemini-3.1-flash-lite.
+models:
+  gpt-4.1-mini:
+    input: 400000
+    output: 1600000
+  gpt-4.1-mini-2025-04-14:
+    input: 400000
+    output: 1600000
+  openai/gpt-4.1-mini:
+    input: 400000
+    output: 1600000

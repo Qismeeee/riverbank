@@ -1,10 +1,12 @@
 import base64
 import io
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 
 from llm import LlmClient, LlmError, LlmRequest
 from prompts import Prompt
+from services.metering import record_usage
 from services.underwriting.models import WorkflowError
 
 from .balance import check_balances
@@ -171,8 +173,11 @@ class VisionStatementParser(PageParser):
         retry: bool,
     ) -> dict[int, PageResult]:
         urls = render_pages(document, numbers, scale, self.images)
+        jobs = [(number, copy_context()) for number in numbers]
         with ThreadPoolExecutor(max_workers=self.cfg.workers) as pool:
-            found = pool.map(lambda n: self._ask(urls[n], n, total, retry), numbers)
+            found = pool.map(
+                lambda job: job[1].run(self._ask, urls[job[0]], job[0], total, retry), jobs
+            )
             return dict(zip(numbers, found, strict=True))
 
     def _ask(self, url: str, number: int, total: int, retry: bool) -> PageResult:
@@ -192,6 +197,13 @@ class VisionStatementParser(PageParser):
             )
         except LlmError as exc:
             raise WorkflowError("STATEMENT_OCR_UNAVAILABLE", 503, [exc.code]) from exc
+        record_usage(
+            "statement_ocr",
+            getattr(self.client, "provider", "openai"),
+            response.model,
+            response.usage,
+            response.cached,
+        )
         content = response.content
         lines = [self._line(item, number) for item in content.get("lines", [])]
         summary = StatementSummary(

@@ -76,6 +76,7 @@ def test_build_llm_client_reads_provider_from_config(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "LLM_CACHE_DIR", str(tmp_path))
     client = llm.build_llm_client("copilot_ask")
     assert isinstance(client, CachedLlmClient)
+    assert client.provider == "openrouter" and client.inner.provider == "openrouter"
     assert str(client.inner._client.base_url).startswith(config.OPENROUTER_BASE_URL)
 
 
