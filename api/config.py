@@ -61,6 +61,11 @@ KAFKA_CLIENT_ID = os.getenv("KAFKA_CLIENT_ID", "riverbank-api")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "riverbank")
 KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
 KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "")
+EVENT_RELAY = os.getenv("RIVERBANK_EVENT_RELAY", "off")
+CASE_EVENTS_TOPIC = os.getenv("RIVERBANK_CASE_EVENTS_TOPIC", "riverbank.case-events")
+EVENT_RELAY_BATCH_SIZE = int(os.getenv("RIVERBANK_EVENT_RELAY_BATCH_SIZE", "100"))
+EVENT_RELAY_IDLE_SECONDS = float(os.getenv("RIVERBANK_EVENT_RELAY_IDLE_SECONDS", "1"))
+EVENT_RELAY_RETRY_SECONDS = float(os.getenv("RIVERBANK_EVENT_RELAY_RETRY_SECONDS", "10"))
 KV_STORE = os.getenv("RIVERBANK_KV_STORE", "memory")
 VALKEY_HOST = os.getenv("VALKEY_HOST", "localhost")
 VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
@@ -68,6 +73,9 @@ VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
 VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in {"1", "true", "yes"}
 VALKEY_KEY_PREFIX = os.getenv("VALKEY_KEY_PREFIX", "riverbank:")
 VALKEY_TIMEOUT_SECONDS = float(os.getenv("VALKEY_TIMEOUT_SECONDS", "5"))
+MODEL_GATE = os.getenv("RIVERBANK_MODEL_GATE", "on")
+MODEL_GATE_STORE = os.getenv("RIVERBANK_MODEL_GATE_STORE", KV_STORE)
+MODEL_GATE_DEFAULTS = {"openai": (8, 120), "openrouter": (8, 120), "jev": (8, 120)}
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 ]
@@ -142,3 +150,19 @@ def llm_limits(purpose: str) -> tuple[float, int]:
 
 def rate_limit(scope: str) -> str:
     return os.getenv(f"RIVERBANK_RATE_LIMIT_{scope.upper()}", RATE_LIMIT_DEFAULTS[scope])
+
+
+def model_gate_limits(provider: str) -> dict:
+    concurrency, per_minute = MODEL_GATE_DEFAULTS.get(provider, (8, 120))
+    prefix = f"RIVERBANK_MODEL_GATE_{provider.upper()}"
+    return {
+        "concurrency": int(os.getenv(f"{prefix}_CONCURRENCY", concurrency)),
+        "per_minute": int(os.getenv(f"{prefix}_PER_MINUTE", per_minute)),
+        "breaker_failures": int(os.getenv("RIVERBANK_MODEL_GATE_BREAKER_FAILURES", "5")),
+        "breaker_window_seconds": int(
+            os.getenv("RIVERBANK_MODEL_GATE_BREAKER_WINDOW_SECONDS", "60")
+        ),
+        "breaker_open_seconds": int(os.getenv("RIVERBANK_MODEL_GATE_BREAKER_OPEN_SECONDS", "30")),
+        "wait_seconds": float(os.getenv("RIVERBANK_MODEL_GATE_WAIT_SECONDS", "2")),
+        "lease_seconds": int(os.getenv("RIVERBANK_MODEL_GATE_LEASE_SECONDS", "120")),
+    }

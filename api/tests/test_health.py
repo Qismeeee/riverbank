@@ -1,16 +1,18 @@
-import os
+import pytest
+from fastapi.testclient import TestClient
 
-# Ép local trước khi import app, để test không chạm AWS dù laptop có .env cloud
-# Đặt chuỗi rỗng thay vì xóa: load_dotenv không ghi đè biến đã có
-os.environ["RIVERBANK_ENV"] = "local"
-os.environ["S3_BUCKET"] = ""
-os.environ["DATABASE_URL"] = ""
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from main import app  # noqa: E402
+import config
+from main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def local_only(monkeypatch):
+    # Ép local để test không chạm AWS hay DB dù laptop có .env cloud; chỉ trong file này
+    monkeypatch.setattr(config, "ENV", "local")
+    monkeypatch.setattr(config, "S3_BUCKET", "")
+    monkeypatch.setenv("DATABASE_URL", "")
 
 
 def test_health_local_skips_external_checks():

@@ -229,3 +229,20 @@ def test_postgres_job_queue_claims_once_retries_and_expires(database):
 
 def test_postgres_queue_lists_decided_cases_newest_first(database):
     check_queue_scopes(make_service(database))
+
+
+def test_postgres_outbox_queues_events_once_and_relays_one_at_a_time(database):
+    service = make_service(database)
+    case = service.create(Plan(**plan()), "create-1")
+    repository = service.repository
+    with repository.publishing(100) as batch:
+        assert [m["event_id"] for m in batch] == [e["event_id"] for e in case.events]
+        assert {m["case_id"] for m in batch} == {case.case_id}
+        with PostgresCaseRepository(database).publishing(100) as other:
+            assert other == []
+    with repository.transaction(case.case_id, case.version) as locked:
+        locked.events.append({**locked.events[-1], "event_id": str(uuid4()), "reason": "TEST"})
+    with repository.publishing(100) as batch:
+        assert [m["reason"] for m in batch] == ["TEST"]
+    with repository.publishing(100) as batch:
+        assert batch == []

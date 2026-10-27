@@ -35,6 +35,8 @@ api/services/statements/    đọc sao kê: documents.py (nhận loại file, đ
 api/services/copilot/      extractor.py (chat ra bản nháp kế hoạch, nhớ `known`), replies.py (câu chat do code ghép), advisor.py (hỏi đáp trên số đã khóa, câu mẫu khi LLM lỗi), history.py (lưu lượt chat theo hồ sơ, memory hoặc Postgres), grounding.py, screening.py (Jev chặn câu hỏi)
 api/services/jobs.py        hàng đợi job (memory hoặc Postgres SKIP LOCKED, lease, thử lại lỗi 5xx) và JobWorker. Handler nộp sao kê ở underwriting/uploads.py, worker bật trong lifespan của main.py
 api/services/guard.py       OutputGuard: số phải có trong bằng chứng, từ cấm, câu nói ngược trạng thái. Dùng cho memo, eval và Copilot
+api/services/events.py      EventRelay: đọc event_outbox (ghi cùng transaction với case_events), đẩy sang Kafka topic riverbank.case-events, key case_id. Bật bằng RIVERBANK_EVENT_RELAY=on, chạy trong lifespan qua routers/events.py. Xem docs/Riverbank-case-events.md
+api/services/modelgate.py   ModelGate: mọi lượt gọi OpenAI, OpenRouter, Jev đi qua đây. Giới hạn song song, lượt/phút, cầu dao khi nhà cung cấp lỗi; trạng thái ở kv/ (memory hoặc valkey). Xem docs/Riverbank-model-gateway.md
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động
 eval/pdlib.py, train_pd.py, train_pd.ipynb   metric, trainer, calibration dùng chung; train headless; notebook đầy đủ (xem docs/Riverbank-risk-model.md)
@@ -49,7 +51,8 @@ infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 ```
 make setup      tạo venv Python 3.12 bằng uv, cài dev deps, cài pre-commit
 make db-up      Postgres local trong docker
-make kafka-up   Kafka local một node tại localhost:9092
+make kafka-up   Kafka local một node tại localhost:9092, tạo luôn topic qua make kafka-topics
+make kafka-topics  tạo riverbank.case-events (6 partition, giữ 14 ngày) nếu chưa có
 make valkey-up  Valkey local một node tại localhost:6379
 make dev        uvicorn reload tại :8000
 make test       ruff check + ruff format --check (api, eval, data/synth) + pytest

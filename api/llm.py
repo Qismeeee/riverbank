@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import config
+from services.modelgate import GateRejected, ModelGate, model_gate
 
 SCHEMA_HINT = "Return exactly one JSON object that matches this JSON Schema, with no other text:"
 _FENCED = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
@@ -56,12 +57,14 @@ class OpenAICompatibleClient(LlmClient):
         base_url: str | None = None,
         timeout: float = 30.0,
         max_retries: int = 2,
+        gate: ModelGate | None = None,
+        provider: str = "openai",
     ):
         if not api_key:
             raise LlmError("LLM_KEY_MISSING")
         from openai import OpenAI
 
-        self.model = model
+        self.model, self._gate, self._provider = model, gate, provider
         self._client = OpenAI(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries
         )
@@ -94,6 +97,22 @@ class OpenAICompatibleClient(LlmClient):
     def _create(self, request: LlmRequest, response_format: dict, system: str):
         from openai import BadRequestError, OpenAIError
 
+        try:
+            if self._gate is None:
+                return self._send(request, response_format, system)
+            return self._gate.call(
+                self._provider, lambda: self._send(request, response_format, system), transient
+            )
+        except GateRejected as exc:
+            raise LlmError(exc.code) from exc
+        except BadRequestError as exc:
+            if response_format["type"] == "json_schema":
+                raise
+            raise LlmError("LLM_UNAVAILABLE") from exc
+        except OpenAIError as exc:
+            raise LlmError("LLM_UNAVAILABLE") from exc
+
+    def _send(self, request: LlmRequest, response_format: dict, system: str):
         options = {} if request.temperature is None else {"temperature": request.temperature}
         text = json.dumps(request.user, ensure_ascii=False)
         content = (
@@ -102,22 +121,21 @@ class OpenAICompatibleClient(LlmClient):
             if request.images
             else text
         )
-        try:
-            return self._client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": content},
-                ],
-                response_format=response_format,
-                **options,
-            )
-        except BadRequestError as exc:
-            if response_format["type"] == "json_schema":
-                raise
-            raise LlmError("LLM_UNAVAILABLE") from exc
-        except OpenAIError as exc:
-            raise LlmError("LLM_UNAVAILABLE") from exc
+        return self._client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": content},
+            ],
+            response_format=response_format,
+            **options,
+        )
+
+
+def transient(exc: Exception) -> bool:
+    from openai import APIConnectionError, InternalServerError, RateLimitError
+
+    return isinstance(exc, APIConnectionError | InternalServerError | RateLimitError)
 
 
 def _parse_json(text: str) -> object:
@@ -154,7 +172,7 @@ def build_llm_client(
     api_key, base_url = PROVIDERS[provider]()
     timeout, retries = config.llm_limits(purpose)
     client: LlmClient = OpenAICompatibleClient(
-        api_key, model or config.LLM_MODEL, base_url, timeout, retries
+        api_key, model or config.LLM_MODEL, base_url, timeout, retries, model_gate(), provider
     )
     if config.LLM_CACHE_DIR:
         client = CachedLlmClient(client, Path(config.LLM_CACHE_DIR) / purpose)

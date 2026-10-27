@@ -10,7 +10,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - rb-pg-data:/var/lib/postgresql/data
+      # Postgres 18 cần mount ở /var/lib/postgresql, dữ liệu nằm trong 18/docker
+      - rb-pg-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U riverbank"]
       interval: 5s
