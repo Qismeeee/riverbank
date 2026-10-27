@@ -153,10 +153,13 @@ class MemoryCaseRepository(CaseRepository):
 
     @contextmanager
     def publishing(self, limit: int) -> Iterator[list[dict]]:
+        # Publish outside the lock: a slow broker must not stall case reads and writes.
         with self._lock:
             batch = deepcopy(self._outbox[:limit])
-            yield batch
-            del self._outbox[: len(batch)]
+        yield batch
+        sent = {message["event_id"] for message in batch}
+        with self._lock:
+            self._outbox = [m for m in self._outbox if m["event_id"] not in sent]
 
 
 class PostgresCaseRepository(CaseRepository):

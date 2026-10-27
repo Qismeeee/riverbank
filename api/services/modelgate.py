@@ -2,7 +2,7 @@ import logging
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import TypeVar
 from uuid import uuid4
@@ -45,11 +45,17 @@ class ModelGate:
         self.clock, self.sleep = clock, sleep
 
     def call(
-        self, provider: str, fn: Callable[[], T], is_failure: Callable[[Exception], bool]
+        self,
+        provider: str,
+        fn: Callable[[], T],
+        is_failure: Callable[[Exception], bool],
+        wait_seconds: float | None = None,
     ) -> T:
         if not self.enabled:
             return fn()
         limits = self.limits(provider)
+        if wait_seconds is not None:
+            limits = replace(limits, wait_seconds=wait_seconds)
         if self._store(lambda kv: kv.exists(f"gate:open:{provider}"), False):
             raise GateRejected("MODEL_CIRCUIT_OPEN")
         with self._slot(provider, limits):

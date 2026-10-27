@@ -1,4 +1,4 @@
-from threading import Event
+from threading import Event, Thread
 
 import pytest
 
@@ -16,7 +16,7 @@ TOPIC = "riverbank.case-events"
 @pytest.fixture(autouse=True)
 def demo_mode(monkeypatch):
     monkeypatch.setattr(config, "ENV", "local")
-    monkeypatch.setattr(config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(config, "WORKFLOW_MODE", "enabled")
     monkeypatch.setattr(config, "EVENT_RELAY", "off")
 
 
@@ -78,6 +78,21 @@ def test_failed_batch_stays_pending():
     assert len(drain(service.repository)) == len(case.events)
 
 
+def test_publishing_does_not_block_cases_and_keeps_new_events():
+    service = build(BaselineRiskModel())
+    first = create(service)
+    created = []
+    with service.repository.publishing(100) as batch:
+        worker = Thread(target=lambda: created.append(create(service, "ducthinh.tech")))
+        worker.start()
+        worker.join(timeout=5)
+        assert created, "case write blocked while a batch was being published"
+    assert len(batch) == len(first.events)
+    assert [m["event_id"] for m in drain(service.repository)] == [
+        e["event_id"] for e in created[0].events
+    ]
+
+
 def test_message_carries_only_the_event():
     service = build(BaselineRiskModel())
     case = create(service)
@@ -90,7 +105,7 @@ def test_message_carries_only_the_event():
 
 def test_relay_publishes_in_order_keyed_by_case():
     service = build(BaselineRiskModel())
-    first, second = create(service), create(service, "demo-a")
+    first, second = create(service), create(service, "ducthinh.tech")
     bus = MemoryClient()
     sent = relay(service.repository, bus).run_once()
     log = bus.topics[TOPIC]

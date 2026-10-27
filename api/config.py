@@ -78,6 +78,8 @@ VALKEY_TIMEOUT_SECONDS = float(os.getenv("VALKEY_TIMEOUT_SECONDS", "5"))
 MODEL_GATE = os.getenv("RIVERBANK_MODEL_GATE", "on")
 MODEL_GATE_STORE = os.getenv("RIVERBANK_MODEL_GATE_STORE", KV_STORE)
 MODEL_GATE_DEFAULTS = {"openai": (8, 120), "openrouter": (8, 120), "jev": (8, 120)}
+# OCR chạy song song từng trang, một trang bị MODEL_BUSY là hỏng cả sao kê, nên chờ slot lâu hơn
+MODEL_GATE_PURPOSE_WAIT = {"statement_ocr": 60.0}
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 ]
@@ -171,3 +173,8 @@ def model_gate_limits(provider: str) -> dict:
         "wait_seconds": float(os.getenv("RIVERBANK_MODEL_GATE_WAIT_SECONDS", "2")),
         "lease_seconds": int(os.getenv("RIVERBANK_MODEL_GATE_LEASE_SECONDS", "120")),
     }
+
+
+def model_gate_wait(purpose: str) -> float | None:
+    wait = os.getenv(f"RIVERBANK_MODEL_GATE_{purpose.upper()}_WAIT_SECONDS")
+    return float(wait) if wait else MODEL_GATE_PURPOSE_WAIT.get(purpose)

@@ -59,12 +59,14 @@ class OpenAICompatibleClient(LlmClient):
         max_retries: int = 2,
         gate: ModelGate | None = None,
         provider: str = "openai",
+        gate_wait: float | None = None,
     ):
         if not api_key:
             raise LlmError("LLM_KEY_MISSING")
         from openai import OpenAI
 
         self.model, self.provider, self._gate = model, provider, gate
+        self._gate_wait = gate_wait
         self._client = OpenAI(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries
         )
@@ -101,7 +103,10 @@ class OpenAICompatibleClient(LlmClient):
             if self._gate is None:
                 return self._send(request, response_format, system)
             return self._gate.call(
-                self.provider, lambda: self._send(request, response_format, system), transient
+                self.provider,
+                lambda: self._send(request, response_format, system),
+                transient,
+                self._gate_wait,
             )
         except GateRejected as exc:
             raise LlmError(exc.code) from exc
@@ -173,7 +178,14 @@ def build_llm_client(
     api_key, base_url = PROVIDERS[provider]()
     timeout, retries = config.llm_limits(purpose)
     client: LlmClient = OpenAICompatibleClient(
-        api_key, model or config.LLM_MODEL, base_url, timeout, retries, model_gate(), provider
+        api_key,
+        model or config.LLM_MODEL,
+        base_url,
+        timeout,
+        retries,
+        model_gate(),
+        provider,
+        config.model_gate_wait(purpose),
     )
     if config.LLM_CACHE_DIR:
         client = CachedLlmClient(client, Path(config.LLM_CACHE_DIR) / purpose)

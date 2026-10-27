@@ -6,7 +6,6 @@ import jev
 from kv import MemoryKVClient, ValkeyClientError
 from llm import LlmError, LlmRequest, OpenAICompatibleClient
 from services.modelgate import GateLimits, GateRejected, ModelGate, configured_limits, model_gate
-from services.underwriting.memo import Draft, FallbackMemoWriter, MemoRequest, MemoWriter
 
 
 class Clock:
@@ -71,6 +70,15 @@ def test_waits_for_slot_to_free():
     g = gate(clock, concurrency=1, wait_seconds=1)
     g.kv.set("gate:slot:p:0", "other", ttl=1)
     assert g.call("p", lambda: "ok", transient) == "ok"
+
+
+def test_call_can_wait_longer_than_default():
+    clock = Clock()
+    g = gate(clock, concurrency=1, wait_seconds=1)
+    g.kv.set("gate:slot:p:0", "other", ttl=30)
+    with pytest.raises(GateRejected, match="MODEL_BUSY"):
+        g.call("p", lambda: "ok", transient)
+    assert g.call("p", lambda: "ok", transient, wait_seconds=60) == "ok"
 
 
 def test_expired_lease_frees_slot():
@@ -183,6 +191,22 @@ def test_configured_limits_read_env(monkeypatch):
     assert configured_limits("openai").concurrency == config.MODEL_GATE_DEFAULTS["openai"][0]
 
 
+def test_statement_ocr_waits_longer_for_a_slot(monkeypatch):
+    assert config.model_gate_wait("copilot_ask") is None
+    assert config.model_gate_wait("statement_ocr") == 60
+    monkeypatch.setenv("RIVERBANK_MODEL_GATE_STATEMENT_OCR_WAIT_SECONDS", "15")
+    assert config.model_gate_wait("statement_ocr") == 15
+
+
+def test_llm_client_passes_its_wait_to_the_gate():
+    clock = Clock()
+    g = gate(clock, concurrency=1)
+    g.kv.set("gate:slot:openai:0", "other", ttl=30)
+    client = OpenAICompatibleClient("sk-test", "m", gate=g, provider="openai", gate_wait=60)
+    client._client.chat.completions.create = lambda **kwargs: None
+    assert client._create(LlmRequest("s", {}, {}, "n"), {"type": "json_object"}, "s") is None
+
+
 def test_model_gate_follows_config(monkeypatch):
     monkeypatch.setattr(config, "MODEL_GATE", "off")
     monkeypatch.setattr(config, "MODEL_GATE_STORE", "memory")
@@ -239,16 +263,3 @@ def test_llm_outage_opens_breaker():
         codes.append(err.value.code)
     assert codes == ["LLM_UNAVAILABLE", "LLM_UNAVAILABLE", "MODEL_CIRCUIT_OPEN"]
     assert len(calls) == 2
-
-
-def test_memo_falls_back_when_breaker_open():
-    class Primary(MemoWriter):
-        def write(self, request):
-            raise LlmError("MODEL_CIRCUIT_OPEN")
-
-    class Template(MemoWriter):
-        def write(self, request):
-            return Draft({}, "template", "v1")
-
-    draft = FallbackMemoWriter(Primary(), Template()).write(MemoRequest("REVIEW", [], [], 1, 2))
-    assert draft.generator == "template" and draft.notes == ["MODEL_CIRCUIT_OPEN"]

@@ -5,8 +5,8 @@ Protects traffic going into the external models (OpenAI, OpenRouter, Jev) and ma
 ## Problem today
 
 - Every model call is synchronous inside the request. Nothing caps how many run at once or how many run per minute, per process or across processes.
-- When a provider is down, every request waits for the full timeout (memo 15s, Copilot 20s, Jev 10–20s, plus retries) before the fallback runs. Under load this ties up the uvicorn thread pool and DB connections held by the request.
-- The fallbacks already exist: `FallbackMemoWriter` writes the template memo, `CaseAdvisor` answers with `FactsReply`, `JevCicGate` closes the gate, the job queue retries 5xx. They just trigger too late.
+- When a provider is down, every request waits for the full timeout (Copilot 20s, OCR 30s, Jev 10–20s, plus retries) before the fallback runs. Under load this ties up the uvicorn thread pool and DB connections held by the request.
+- The fallbacks already exist: `CaseAdvisor` answers with `FactsReply`, `JevCicGate` closes the gate, the job queue retries 5xx. They just trigger too late.
 
 ## Design
 
@@ -35,13 +35,13 @@ The gate key is the provider, not the purpose, because quotas and outages are pe
 | `openrouter` | same, when the provider is `openrouter` |
 | `jev` | `jev.decide()`: CIC gate, input guard, payout classifier |
 
-Jev goes through OpenRouter but has its own key, so a Jev outage does not block the memo LLM and the other way round.
+Jev goes through OpenRouter but has its own key, so a Jev outage does not block Copilot or OCR and the other way round.
 
 ### Concurrency slots
 
 N slot keys per provider: `gate:slot:{provider}:{0..N-1}`. Acquire = `SET key token NX EX lease_seconds` on the first free one. Release = delete only if the value is still our token (`KVClient.delete_if`, a Lua compare-and-delete on Valkey). If a process dies mid-call, its slot frees itself when the lease expires. No counter that can leak.
 
-When all slots are taken the caller polls every 100 ms up to `wait_seconds` (default 2s), then gets `MODEL_BUSY`. A short wait smooths bursts without holding a request for the whole model timeout.
+When all slots are taken the caller polls every 100 ms up to `wait_seconds` (default 2s), then gets `MODEL_BUSY`. A short wait smooths bursts without holding a request for the whole model timeout. Statement OCR is the exception: it sends pages in parallel and one `MODEL_BUSY` page fails the whole statement, so `statement_ocr` waits up to 60s (`config.MODEL_GATE_PURPOSE_WAIT`).
 
 ### Calls per minute
 
@@ -70,10 +70,9 @@ Rejections reuse the error paths that exist today, so no caller logic changes.
 
 | Caller | Rejected or breaker open → |
 |---|---|
-| Memo (`LlmMemoWriter`) | `LlmError(code)` → `FallbackMemoWriter` writes the template, code recorded in `validation_errors` |
 | Copilot ask (`CaseAdvisor`) | `LlmError` → `FactsReply` template answer |
 | Copilot extract (`PlanExtractor`) | `LlmError` → 503 `EXTRACTION_UNAVAILABLE` with the code in details (no fallback today) |
-| Statement OCR (`VisionStatementParser`) | `LlmError` → existing OCR error handling |
+| Statement OCR (`VisionStatementParser`) | `LlmError` → 503 `STATEMENT_OCR_UNAVAILABLE`; one page failing fails the statement, hence the longer wait |
 | CIC gate (`JevCicGate`) | exception → gate closed, CIC not queried, `error=GateRejected` |
 | Input guard (`JevInputGuard`) | `GuardUnavailable` → 503 `GUARD_UNAVAILABLE` |
 | Payout classifier (`JevPayoutClassifier`) | 503 `STATEMENT_CLASSIFIER_UNAVAILABLE` → job queue retries (5xx) |
@@ -101,6 +100,7 @@ All env reads stay in `config.py`.
 | `RIVERBANK_MODEL_GATE_BREAKER_WINDOW_SECONDS` | 60 | failure counting window |
 | `RIVERBANK_MODEL_GATE_BREAKER_OPEN_SECONDS` | 30 | how long the breaker stays open |
 | `RIVERBANK_MODEL_GATE_WAIT_SECONDS` | 2 | max wait for a free slot |
+| `RIVERBANK_MODEL_GATE_<PURPOSE>_WAIT_SECONDS` | `statement_ocr` 60, others unset | per-purpose override of the wait |
 | `RIVERBANK_MODEL_GATE_LEASE_SECONDS` | 120 | slot lease, longer than timeout × (retries + 1) |
 
 With `memory` and `--workers 2` every limit is per process, so the real cap is 2×. Set `RIVERBANK_MODEL_GATE_STORE=valkey` for exact shared limits.
@@ -109,12 +109,12 @@ With `memory` and `--workers 2` every limit is per process, so the real cap is 2
 
 `MemoryKVClient` with a fake clock and fake sleep:
 
-- slots: N+1th concurrent call gets `MODEL_BUSY`; slot is freed after success and after an exception; a waiter gets the slot when it frees within `wait_seconds`; an expired lease frees itself
+- slots: N+1th concurrent call gets `MODEL_BUSY`; slot is freed after success and after an exception; a waiter gets the slot when it frees within `wait_seconds`; a per-call wait overrides it; an expired lease frees itself
 - per minute: call N+1 in the same minute is rejected, next minute passes
 - breaker: opens after N transient failures, rejects while open, half-open re-trips on one failure, success closes it; non-transient errors do not count
 - fail open: a store that raises `ValkeyClientError` lets calls through
 - disabled gate calls `fn` directly
-- `OpenAICompatibleClient` maps `GateRejected` to `LlmError(code)`; `FallbackMemoWriter` records `MODEL_CIRCUIT_OPEN`
+- `OpenAICompatibleClient` maps `GateRejected` to `LlmError(code)` and passes its per-purpose wait to the gate
 - `jev.transient` classifies httpx errors
 
 ## Not in scope
