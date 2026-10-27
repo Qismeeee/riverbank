@@ -50,7 +50,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "Retry-After"],
+    expose_headers=["X-Request-ID", "Retry-After", "Content-Disposition"],
 )
 app.add_middleware(RequestTiming)
 

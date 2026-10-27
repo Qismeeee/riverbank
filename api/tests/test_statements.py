@@ -47,7 +47,7 @@ from services.statements.parsers import (
     PdfTextStatementParser,
 )
 from services.statements.reader import StatementConfig, StatementReader
-from services.statements.storage import NoDocumentStore, S3DocumentStore
+from services.statements.storage import LocalDocumentStore, NoDocumentStore, S3DocumentStore
 from services.statements.vision import VisionConfig, VisionStatementParser
 from services.underwriting.models import WorkflowError
 from tests.test_underwriting import (  # noqa: F401
@@ -939,13 +939,21 @@ def test_ocr_page_limit_comes_from_config(monkeypatch):
 
 class FakeS3:
     def __init__(self, error=None):
-        self.error, self.calls = error, []
+        self.error, self.calls, self.objects = error, [], {}
 
     def put_object(self, **kw):
         self.calls.append(kw)
         if self.error:
             raise self.error
+        self.objects[(kw["Bucket"], kw["Key"])] = kw
         return {"VersionId": "v1"}
+
+    def get_object(self, **kw):
+        self.calls.append(kw)
+        if self.error:
+            raise self.error
+        stored = self.objects[(kw["Bucket"], kw["Key"])]
+        return {"Body": io.BytesIO(stored["Body"]), "ContentType": stored["ContentType"]}
 
 
 def test_s3_store_keeps_original_encrypted_and_content_addressed():
@@ -991,3 +999,61 @@ def test_uploaded_original_is_recorded_on_the_statement(client, upload_service):
     assert statement["original"]["key"].startswith(f"statements/{case.case_id}/")
     assert isinstance(upload_service.documents, S3DocumentStore)
     assert NoDocumentStore().name == "none"
+    content_back, media = upload_service.documents.get(statement["original"])
+    assert content_back == content and media == "text/csv"
+
+
+def test_local_store_round_trip_rejects_a_path_outside_the_root(tmp_path):
+    store = LocalDocumentStore(tmp_path)
+    document = StatementDocument.sniff(PNG_BYTES)
+    record = store.put(document, "case-1")
+    assert store.get(record) == (PNG_BYTES, document.media_type)
+    with pytest.raises(WorkflowError) as escaped:
+        store.get({**record, "path": "../outside"})
+    assert escaped.value.code == "STATEMENT_FILE_NOT_STORED"
+    with pytest.raises(WorkflowError) as missing:
+        NoDocumentStore().get(record)
+    assert missing.value.code == "STATEMENT_FILE_NOT_STORED"
+    assert factory.build_document_store("local").name == "local"
+
+
+def test_statement_file_and_reading_can_be_downloaded(client, upload_service, tmp_path):  # noqa: F811
+    upload_service.documents = LocalDocumentStore(tmp_path)
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
+    missing = client.get(f"/v1/cases/{case.case_id}/statements/reading", headers=BANK)
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "STATEMENT_NOT_FOUND"
+    _, _, (first_day, _) = period_rows(case)
+    content = csv_bytes([[first_day, "SHOPEE VN THANH TOAN", "", "70.000.000"]])
+    assert upload(client, case, content).status_code == 200
+    original = client.get(f"/v1/cases/{case.case_id}/statements/original", headers=BANK)
+    assert original.status_code == 200
+    assert original.content == content
+    assert "attachment" in original.headers["content-disposition"]
+    assert original.headers["content-disposition"].endswith('-sao-ke.csv"')
+    owner = seller_headers("ducthinh.tech")
+    reading = client.get(f"/v1/cases/{case.case_id}/statements/reading", headers=owner)
+    assert reading.status_code == 200
+    body = reading.json()
+    assert body["statement_lines"] and "original" not in body
+    assert "ket-qua-doc.json" in reading.headers["content-disposition"]
+    other = client.get(f"/v1/cases/{case.case_id}/statements/original", headers=seller_headers())
+    assert other.status_code == 403
+    view = client.get(f"/v1/cases/{case.case_id}/seller-view", headers=owner)
+    assert view.json()["statement_file"]["stored"] is True
+
+
+def test_unstored_original_still_returns_the_reading(client, upload_service):  # noqa: F811
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
+    _, _, (first_day, _) = period_rows(case)
+    content = csv_bytes([[first_day, "SHOPEE VN THANH TOAN", "", "70.000.000"]])
+    assert upload(client, case, content).status_code == 200
+    missing = client.get(f"/v1/cases/{case.case_id}/statements/original", headers=BANK)
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "STATEMENT_FILE_NOT_STORED"
+    reading = client.get(f"/v1/cases/{case.case_id}/statements/reading", headers=BANK)
+    assert reading.status_code == 200 and reading.json()["marketplace_total"] == 70_000_000
+    view = client.get(
+        f"/v1/cases/{case.case_id}/seller-view", headers=seller_headers("ducthinh.tech")
+    )
+    assert view.json()["statement_file"]["stored"] is False

@@ -138,9 +138,18 @@ class SellerDecision(BaseModel):
     final_tenor_weeks: int | None
 
 
+class StatementFile(BaseModel):
+    media_type: str | None = None
+    pages: int | None = None
+    parser: str | None = None
+    lines: int | None = None
+    stored: bool
+
+
 class SellerView(CaseSummary):
     explanation: list[MemoSentence]
     decision: SellerDecision | None
+    statement_file: StatementFile | None = None
 
 
 class QueueResponse(BaseModel):

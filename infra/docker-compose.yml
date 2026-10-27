@@ -46,6 +46,10 @@ services:
       RIVERBANK_STATEMENT_OCR: llm
       STATEMENT_OCR_PROVIDER: openrouter
       STATEMENT_OCR_MODEL: google/gemini-3.1-flash-lite
+      RIVERBANK_DOCUMENT_STORE: local
+      RIVERBANK_DOCUMENT_DIR: /var/lib/riverbank/statements
+    volumes:
+      - statement_files:/var/lib/riverbank/statements
     deploy:
       resources:
         limits:
@@ -69,3 +73,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  statement_files:

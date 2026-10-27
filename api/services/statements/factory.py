@@ -19,7 +19,7 @@ from .parsers import (
     StatementParser,
 )
 from .reader import StatementReader
-from .storage import DocumentStore, NoDocumentStore, S3DocumentStore
+from .storage import DocumentStore, LocalDocumentStore, NoDocumentStore, S3DocumentStore
 from .vision import VisionConfig, VisionStatementParser
 
 OCR_MODES = ("off", "llm")
@@ -68,6 +68,8 @@ def build_parsers(ocr: str) -> list[StatementParser]:
 def build_document_store(kind: str) -> DocumentStore:
     if kind == "none":
         return NoDocumentStore()
+    if kind == "local":
+        return LocalDocumentStore(config.DOCUMENT_DIR)
     if kind == "s3":
         return S3DocumentStore(config.S3_BUCKET, config.AWS_REGION)
     raise WorkflowError("DOCUMENT_STORE_UNKNOWN", 503)
