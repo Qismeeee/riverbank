@@ -55,6 +55,9 @@ async function call(token, method, path, body, extraHeaders = {}) {
 | Gửi kế hoạch lô hàng | `POST /v1/cases` với `Idempotency-Key: crypto.randomUUID()` (giữ nguyên khóa khi bấm lại) |
 | Danh sách hồ sơ của mình | `GET /v1/me/cases` |
 | Xem giải thích và quyết định | `GET /v1/cases/{case_id}/seller-view` |
+| Chat nhập kế hoạch | `POST /v1/copilot/extract-plan`. Hiện `reply` trong khung chat. Lượt sau gửi `known = draft` của lượt trước. `ready = true` thì bật nút Gửi, gửi nguyên `draft` vào `POST /v1/cases` |
+| Hỏi về hồ sơ của mình | Mở khung chat thì gọi `GET /v1/cases/{case_id}/copilot/history` để hiện lại các lượt cũ. Hỏi bằng `POST /v1/cases/{case_id}/copilot/ask` chỉ với `question`, server tự nhớ lịch sử. Hiện `answer`. `source = "template"` là câu mẫu khi LLM lỗi, vẫn hiện bình thường |
+| Nộp sao kê | Nên dùng `POST /v1/cases/{case_id}/statements/upload-jobs`: nhận `202` và `job_id`, gọi `GET /v1/jobs/{job_id}` mỗi 2 giây đến khi `SUCCEEDED` (tải lại hồ sơ) hoặc `FAILED` (hiện `error.code`). Bản chờ trực tiếp `POST .../statements/upload` vẫn dùng được cho CSV, Excel. Nhận CSV, `.xlsx`, `.xls`, PDF, ảnh. `accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.heic"` |
 
 Thân `POST /v1/cases`:
 
@@ -82,7 +85,7 @@ Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau 
 | Mở bằng chứng khi bấm một câu | `GET /v1/cases/{case_id}/evidence/{evidence_id}` |
 | Nhập tổng sao kê | `POST /v1/cases/{case_id}/statements` |
 | Nộp file sao kê thay seller | `POST /v1/cases/{case_id}/statements/upload`, `multipart/form-data` với `expected_version`, `period_start`, `period_end`, `file` |
-| Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source = not_queried`) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
+| Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source` là `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê chưa nộp) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
 | Chấp nhận, sửa số, từ chối | `POST /v1/cases/{case_id}/decisions` với `Idempotency-Key` |
 | Bàn giao LOS sau khi ký | `POST /v1/cases/{case_id}/handoff` |
 
@@ -119,4 +122,5 @@ Mọi lỗi nghiệp vụ có dạng `{ "detail": { "code": "...", "details": []
 | `409 CASE_VERSION_CONFLICT` | Đọc lại hồ sơ |
 | `422 BLOCKED_INPUT` | Báo ghi chú chứa nội dung bị chặn, không tạo hồ sơ |
 | `429 TOO_MANY_ATTEMPTS` | Sai mã nhiều lần, chờ 5 phút |
+| `429 RATE_LIMITED` | Gọi quá nhanh. Đọc header `Retry-After` (giây), báo "thử lại sau N giây", không tự gọi lại liên tục |
 | `503 AUTH_NOT_CONFIGURED`, `503 OPENROUTER_KEY_REQUIRED` | Báo lỗi cấu hình server |

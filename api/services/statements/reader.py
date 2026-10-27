@@ -4,9 +4,10 @@ from datetime import date
 from services.guardrail import PiiRedactor
 from services.underwriting.models import WorkflowError
 
+from .balance import check_balances
 from .classifiers import PayoutClassifier
 from .documents import ParsedStatement, StatementDocument, within
-from .parsers import StatementParser
+from .parsers import PageParser, StatementParser
 
 
 @dataclass(frozen=True)
@@ -32,22 +33,50 @@ class StatementReader:
         self.redactor = redactor or PiiRedactor()
         self.cfg = cfg or StatementConfig()
 
-    def read(self, content: bytes) -> ReadStatement:
+    def inspect(self, content: bytes) -> StatementDocument:
         if not content:
             raise WorkflowError("STATEMENT_EMPTY")
         if len(content) > self.cfg.max_bytes:
             raise WorkflowError("STATEMENT_TOO_LARGE", 413, [{"max_bytes": self.cfg.max_bytes}])
         document = StatementDocument.sniff(content)
-        candidates = [p for p in self.parsers if p.accepts(document)]
-        if not candidates:
+        if not self._candidates(document):
             raise WorkflowError("STATEMENT_FORMAT_UNSUPPORTED", 415, [document.media_type])
+        return document
+
+    def _candidates(self, document: StatementDocument) -> list[StatementParser]:
+        return [p for p in self.parsers if p.accepts(document)]
+
+    def read(self, content: bytes) -> ReadStatement:
+        document = self.inspect(content)
+        candidates = self._candidates(document)
         attempts = []
         for parser in candidates:
             parsed = parser.parse(document)
             if parsed.lines:
-                return ReadStatement(document, self._redact(parsed))
+                return ReadStatement(document, self._redact(self._complete(document, parsed)))
             attempts.append({"parser": parser.name, "notes": parsed.notes})
         raise WorkflowError("STATEMENT_UNREADABLE", 422, attempts)
+
+    def _complete(self, document: StatementDocument, parsed: ParsedStatement) -> ParsedStatement:
+        if not parsed.image_pages:
+            return parsed
+        pager = next(
+            (p for p in self.parsers if isinstance(p, PageParser) and p.accepts(document)), None
+        )
+        if pager is None:
+            skipped = [f"PAGE_{n}_NOT_READ" for n in parsed.image_pages]
+            return replace(parsed, notes=[*parsed.notes, *skipped])
+        extra = pager.parse_pages(document, parsed.image_pages)
+        return ParsedStatement(
+            f"{parsed.parser}+{extra.parser}",
+            sorted([*parsed.lines, *extra.lines], key=lambda line: line.page or 0),
+            parsed.pages,
+            extra.model,
+            extra.prompt_version,
+            [*parsed.notes, *extra.notes],
+            parsed.image_pages,
+            parsed.summary.merge(extra.summary),
+        )
 
     def _redact(self, parsed: ParsedStatement) -> ParsedStatement:
         return replace(
@@ -102,6 +131,8 @@ class StatementReader:
                 "model": parsed.model,
                 "prompt_version": parsed.prompt_version,
                 "notes": parsed.notes,
+                "image_pages": list(parsed.image_pages),
+                "balance_check": check_balances(parsed.lines, parsed.summary).payload(),
             },
             "classifier": {"name": self.classifier.name, "model": self.classifier.model},
             "coverage": {

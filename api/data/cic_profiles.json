@@ -1,0 +1,162 @@
+{
+  "disclosure": "Hồ sơ tín dụng CIC theo seller. Tên tổ chức tín dụng là tên chung.",
+  "default": {"facilities": [], "recent_inquiries_90d": 0},
+  "sellers": {
+    "demo-a": {"facilities": [], "recent_inquiries_90d": 0},
+    "demo-b": {
+      "recent_inquiries_90d": 1,
+      "facilities": [
+        {
+          "institution": "Ngân hàng A",
+          "product": "Thẻ tín dụng",
+          "limit": 50000000,
+          "outstanding": 12000000,
+          "group": 1,
+          "opened_months_ago": 30
+        }
+      ]
+    },
+    "demo-c": {
+      "recent_inquiries_90d": 2,
+      "facilities": [
+        {
+          "institution": "Ngân hàng B",
+          "product": "Vay kinh doanh hộ cá thể",
+          "limit": 200000000,
+          "outstanding": 120000000,
+          "group": 1,
+          "opened_months_ago": 18,
+          "history": [1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1]
+        },
+        {
+          "institution": "Công ty tài chính C",
+          "product": "Thẻ tín dụng",
+          "limit": 30000000,
+          "outstanding": 8000000,
+          "group": 1,
+          "opened_months_ago": 9
+        }
+      ]
+    },
+    "demo-d": {
+      "recent_inquiries_90d": 5,
+      "facilities": [
+        {
+          "institution": "Công ty tài chính D",
+          "product": "Vay tiêu dùng",
+          "limit": 60000000,
+          "outstanding": 45000000,
+          "group": 2,
+          "opened_months_ago": 11,
+          "history": [1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2]
+        },
+        {
+          "institution": "Công ty F",
+          "product": "Vay qua ứng dụng",
+          "limit": 20000000,
+          "outstanding": 18000000,
+          "group": 1,
+          "opened_months_ago": 14,
+          "history": [1, 1, 1, 3, 2, 1, 1, 1, 1, 1, 1, 1]
+        }
+      ]
+    },
+    "demo-e": {
+      "recent_inquiries_90d": 1,
+      "facilities": [
+        {
+          "institution": "Ngân hàng A",
+          "product": "Thẻ tín dụng",
+          "limit": 80000000,
+          "outstanding": 15000000,
+          "group": 1,
+          "opened_months_ago": 40
+        },
+        {
+          "institution": "Ngân hàng B",
+          "product": "Vay kinh doanh hộ cá thể",
+          "limit": 300000000,
+          "outstanding": 90000000,
+          "group": 1,
+          "opened_months_ago": 20,
+          "history": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        }
+      ]
+    },
+    "demo-f": {
+      "recent_inquiries_90d": 3,
+      "facilities": [
+        {
+          "institution": "Ngân hàng C",
+          "product": "Vay bổ sung vốn lưu động",
+          "limit": 400000000,
+          "outstanding": 160000000,
+          "group": 1,
+          "opened_months_ago": 14,
+          "history": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        },
+        {
+          "institution": "Ngân hàng A",
+          "product": "Thẻ tín dụng",
+          "limit": 100000000,
+          "outstanding": 32000000,
+          "group": 1,
+          "opened_months_ago": 26
+        }
+      ]
+    },
+    "demo-g": {
+      "recent_inquiries_90d": 0,
+      "facilities": []
+    },
+    "demo-h": {
+      "recent_inquiries_90d": 4,
+      "facilities": [
+        {
+          "institution": "Công ty tài chính D",
+          "product": "Vay tiêu dùng",
+          "limit": 150000000,
+          "outstanding": 120000000,
+          "group": 2,
+          "opened_months_ago": 16,
+          "history": [1, 1, 3, 2, 1, 1, 1, 1, 1, 1, 2, 2]
+        },
+        {
+          "institution": "Ngân hàng B",
+          "product": "Thẻ tín dụng",
+          "limit": 60000000,
+          "outstanding": 55000000,
+          "group": 1,
+          "opened_months_ago": 30
+        }
+      ]
+    },
+    "demo-i": {
+      "recent_inquiries_90d": 1,
+      "facilities": [
+        {
+          "institution": "Ngân hàng A",
+          "product": "Thẻ tín dụng",
+          "limit": 50000000,
+          "outstanding": 9000000,
+          "group": 1,
+          "opened_months_ago": 22
+        }
+      ]
+    },
+    "demo-j": {
+      "recent_inquiries_90d": 0,
+      "facilities": [
+        {
+          "institution": "Ngân hàng C",
+          "product": "Vay kinh doanh hộ cá thể",
+          "limit": 500000000,
+          "outstanding": 210000000,
+          "group": 1,
+          "opened_months_ago": 36,
+          "history": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        }
+      ]
+    }
+  }
+}

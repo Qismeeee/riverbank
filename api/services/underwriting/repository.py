@@ -15,6 +15,16 @@ def case_header(case: Case) -> dict:
     return header
 
 
+OPEN_STATES = ("PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT")
+DECIDED_STATES = ("ACCEPTED", "REJECTED")
+
+
+def queue_scope(status: str | None) -> tuple[list[str], bool]:
+    if status is None:
+        return list(OPEN_STATES), False
+    return [status], status in DECIDED_STATES
+
+
 class CaseRepository(ABC):
     @abstractmethod
     def create(self, case: Case, key: str, request_hash: str) -> Case: ...
@@ -66,14 +76,14 @@ class MemoryCaseRepository(CaseRepository):
             return deepcopy(self._cases[case_id])
 
     def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]:
-        states = {"PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT"}
+        states, newest_first = queue_scope(status)
         with self._lock:
-            cases = sorted(self._cases.values(), key=lambda c: (c.created_at, c.case_id))
-            return deepcopy(
-                [c for c in cases if c.status in states and (status is None or c.status == status)][
-                    offset : offset + limit
-                ]
+            cases = sorted(
+                (c for c in self._cases.values() if c.status in states),
+                key=lambda c: (c.created_at, c.case_id),
+                reverse=newest_first,
             )
+            return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
 
     def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
         with self._lock:
@@ -82,7 +92,7 @@ class MemoryCaseRepository(CaseRepository):
                 key=lambda c: (c.created_at, c.case_id),
                 reverse=True,
             )
-            return deepcopy(cases[offset : offset + limit])
+            return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:
@@ -100,9 +110,9 @@ class PostgresCaseRepository(CaseRepository):
         self.database_url = database_url
 
     def _connect(self):
-        import psycopg
+        from db.pool import connect
 
-        return psycopg.connect(self.database_url)
+        return connect(self.database_url)
 
     @staticmethod
     def _load(conn, case_id: str, lock: bool = False) -> Case:
@@ -213,28 +223,24 @@ class PostgresCaseRepository(CaseRepository):
             return self._load(conn, case_id)
 
     def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]:
+        states, newest_first = queue_scope(status)
+        order = "created_at desc,case_id desc" if newest_first else "created_at,case_id"
         with self._connect() as conn:
             rows = conn.execute(
-                "select case_id from cases where status = any(%s) "
-                "order by created_at,case_id limit %s offset %s",
-                (
-                    [status]
-                    if status
-                    else ["PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT"],
-                    limit,
-                    offset,
-                ),
+                f"select header from cases where status = any(%s) "
+                f"order by {order} limit %s offset %s",
+                (states, limit, offset),
             ).fetchall()
-            return [self._load(conn, row[0]) for row in rows]
+            return [Case(**row[0]) for row in rows]
 
     def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
         with self._connect() as conn:
             rows = conn.execute(
-                "select case_id from cases where seller_id=%s "
+                "select header from cases where seller_id=%s "
                 "order by created_at desc,case_id desc limit %s offset %s",
                 (seller_id, limit, offset),
             ).fetchall()
-            return [self._load(conn, row[0]) for row in rows]
+            return [Case(**row[0]) for row in rows]
 
     @contextmanager
     def transaction(self, case_id: str, version: int) -> Iterator[Case]:

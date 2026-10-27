@@ -20,20 +20,22 @@ Luật:
 
 1. Trả đúng một câu cho mỗi `slot_id`, không thêm, không bớt, không gộp.
 2. Mỗi số nguyên trong `claims` phải xuất hiện trong câu. Không được viết số nào khác, kể cả số tuần, phần trăm, số làm tròn hay số thứ tự. Không viết mã E, mã rule có số nếu `claims` không có số đó.
-3. Số tiền viết kiểu `80.000.000 VND`. Không viết `80 triệu`, `80tr`, `80,0`.
-4. Câu cho `seller_explanation`: tiếng Việt đời thường, không mã E, không PD, không CIC, không SHAP, không tên rule.
-5. Không viết hồ sơ đã duyệt hay đã từ chối. Người duyệt quyết định sau. Khi `status_target` là `ESCALATED`, nói hồ sơ chuyển người xác minh, không khuyên duyệt.
-6. Chỉ nói không cần vay khi `status_target` là `NO_LOAN_NEEDED`.
-7. Từ bị cấm: gian lận, lừa đảo, giả mạo, chiếm đoạt, fraud, scam. Sao kê lệch thì viết số liệu không khớp, cần xác minh.
-8. Không viết điều khoản hợp đồng, lãi, phí.
-9. Có `validator_errors` thì sửa đúng các slot bị lỗi. Không chắc thì chép nguyên `reference`.
+3. Các số phải đứng đúng thứ tự như trong `reference`. Không đổi chỗ hai số cho nhau, ví dụ số trên sao kê và số trên sàn.
+4. Số tiền viết kiểu `80.000.000 VND`. Không viết `80 triệu`, `80tr`, `80,0`.
+5. Câu cho `seller_explanation`: tiếng Việt đời thường, không mã E, không PD, không CIC, không SHAP, không tên rule.
+6. Không viết hồ sơ đã duyệt hay đã từ chối. Người duyệt quyết định sau. Khi `status_target` là `ESCALATED`, nói hồ sơ chuyển người xác minh, không khuyên duyệt.
+7. Chỉ nói không cần vay khi `status_target` là `NO_LOAN_NEEDED`.
+8. Từ bị cấm: gian lận, lừa đảo, giả mạo, chiếm đoạt, fraud, scam. Sao kê lệch thì viết số liệu không khớp, cần xác minh.
+9. Không viết điều khoản hợp đồng, lãi, phí.
+10. Có `validator_errors` thì sửa đúng các slot bị lỗi. Không chắc thì chép nguyên `reference`.
 
 Mã lỗi của validator:
 
 - `MEMO_NUMBER_NOT_IN_EVIDENCE`: câu có số không nằm trong `claims`.
-- `MEMO_CLAIM_MISSING`: câu thiếu một số nguyên của `claims`.
+- `MEMO_CLAIM_MISSING`: câu thiếu một số có trong `claims`, kể cả số nằm trong chuỗi như `message`.
 - `MEMO_FORBIDDEN_LEXICON`: câu có từ cấm.
 - `MEMO_CONTRADICTS_STATUS`: câu nói ngược `status_target`.
+- `MEMO_NUMBER_ORDER`: các số đứng sai thứ tự so với `reference`.
 
 # Output
 

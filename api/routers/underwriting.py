@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
 import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
-from services.statements.factory import build_statement_reader
+from routers.limits import rate_limited
+from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
+from services.underwriting.cic import ProfileCicSource
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
 from services.underwriting.memo import build_composer
@@ -31,25 +33,30 @@ from services.underwriting.models import (
     WorkflowError,
 )
 from services.underwriting.repository import MemoryCaseRepository, PostgresCaseRepository
-from services.underwriting.risk import DemoRiskModel, LightGbmRiskModel, RiskModel
+from services.underwriting.risk import BaselineRiskModel, LightGbmRiskModel, RiskModel
 from services.underwriting.service import UnderwritingService, utc_now
 from services.underwriting.sources import (
-    DemoCicSource,
-    MockLosAdapter,
+    CicSource,
+    FixedCicSource,
+    InternalLosAdapter,
     PostgresFeatureSource,
-    demo_source,
+    seller_book_source,
 )
 
 router = APIRouter(prefix="/v1", tags=["underwriting"])
 
-RISK_MODELS: dict[str, type[RiskModel]] = {"demo": DemoRiskModel, "lightgbm": LightGbmRiskModel}
+RISK_MODELS: dict[str, type[RiskModel]] = {
+    "baseline": BaselineRiskModel,
+    "lightgbm": LightGbmRiskModel,
+}
 CIC_GATES: dict[str, type[CicGate]] = {"open": OpenCicGate, "jev": JevCicGate}
+CIC_SOURCES: dict[str, type[CicSource]] = {"fixed": FixedCicSource, "profiles": ProfileCicSource}
 
 
 @lru_cache
 def get_service() -> UnderwritingService:
     if config.WORKFLOW_MODE != "demo":
-        raise WorkflowError("WORKFLOW_DEMO_DISABLED", 503)
+        raise WorkflowError("WORKFLOW_DISABLED", 503)
     if config.WORKFLOW_STORAGE not in {"memory", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_STORAGE", 503)
     if config.WORKFLOW_FEATURES not in {"demo", "postgres"}:
@@ -58,6 +65,8 @@ def get_service() -> UnderwritingService:
         raise WorkflowError("INVALID_WORKFLOW_RISK", 503)
     if config.WORKFLOW_CIC_GATE not in CIC_GATES:
         raise WorkflowError("INVALID_WORKFLOW_CIC_GATE", 503)
+    if config.WORKFLOW_CIC_SOURCE not in CIC_SOURCES:
+        raise WorkflowError("INVALID_WORKFLOW_CIC_SOURCE", 503)
     if config.WORKFLOW_CIC_GATE == "jev" and not config.OPENROUTER_API_KEY:
         raise WorkflowError("OPENROUTER_KEY_REQUIRED", 503)
     url = config.database_url()
@@ -73,17 +82,18 @@ def get_service() -> UnderwritingService:
     features = (
         PostgresFeatureSource(url)
         if config.WORKFLOW_FEATURES == "postgres"
-        else demo_source(utc_now())
+        else seller_book_source(utc_now())
     )
     return UnderwritingService(
         repository,
         features,
         RISK_MODELS[config.WORKFLOW_RISK](),
-        DemoCicSource(),
-        MockLosAdapter(),
+        CIC_SOURCES[config.WORKFLOW_CIC_SOURCE](),
+        InternalLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
         memo=build_composer(config.MEMO_WRITER),
         statements=build_statement_reader(),
+        documents=build_document_store(config.DOCUMENT_STORE),
     )
 
 
@@ -101,11 +111,15 @@ def summary(case: Case) -> dict:
         "version": case.version,
         "reason": case.reason,
         "created_at": case.created_at,
-        "demo": True,
     }
 
 
-@router.post("/cases", status_code=201, response_model=CaseSummary)
+@router.post(
+    "/cases",
+    status_code=201,
+    response_model=CaseSummary,
+    dependencies=[rate_limited("case_create")],
+)
 def create_case(plan: Plan, key: IdempotencyKey, actor: Principal, service: Service) -> dict:
     seller_of(actor, plan.seller_id)
     return summary(service.create(plan, key))
@@ -160,7 +174,7 @@ def my_cases(
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)
 def detail(case_id: Identifier, service: Service, actor: BankUser) -> dict:
-    return {**asdict(service.repository.get(case_id)), "demo": True}
+    return asdict(service.repository.get(case_id))
 
 
 @router.get("/cases/{case_id}/evidence/{evidence_id}", response_model=EvidenceResponse)
@@ -179,7 +193,11 @@ class StatementUploadForm(StatementUpload):
     file: UploadFile
 
 
-@router.post("/cases/{case_id}/statements/upload", response_model=CaseSummary)
+@router.post(
+    "/cases/{case_id}/statements/upload",
+    response_model=CaseSummary,
+    dependencies=[rate_limited("statement_upload")],
+)
 def upload_statement(
     case_id: Identifier,
     form: Annotated[StatementUploadForm, Form(media_type="multipart/form-data")],

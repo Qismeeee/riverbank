@@ -6,7 +6,7 @@ from services.features import payout_profile
 from services.risk import RiskModel as PdScorer
 
 PROFILE_FIELDS = ("archetype", "shop_age_months", "n_products", "top3_share", "rating")
-SIMULATION_DISCLOSURE = "PD ước lượng trên dữ liệu mô phỏng"
+RISK_DISCLOSURE = "PD ước lượng"
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,7 @@ class RiskAssessment:
     pd_bps: int | None = None
     factors: list[RiskFactor] = field(default_factory=list)
     missing_fields: list[str] = field(default_factory=list)
-    disclosure: str = SIMULATION_DISCLOSURE
+    disclosure: str = RISK_DISCLOSURE
 
     @property
     def available(self) -> bool:
@@ -52,18 +52,18 @@ class RiskModel(ABC):
     def describe(self) -> dict: ...
 
 
-class DemoRiskModel(RiskModel):
-    model_version = "demo-fixed-v1"
+class BaselineRiskModel(RiskModel):
+    model_version = "baseline-v1"
 
     def describe(self) -> dict:
-        return {"source": "demo", "model_version": self.model_version}
+        return {"source": "baseline", "model_version": self.model_version}
 
     def assess(self, inp: RiskInput) -> RiskAssessment:
         return RiskAssessment(
             model_version=self.model_version,
-            source="demo",
+            source="baseline",
             pd_bps=500,
-            factors=[RiskFactor("demo_baseline", "increase", 1.0)],
+            factors=[RiskFactor("baseline", "increase", 1.0)],
         )
 
 

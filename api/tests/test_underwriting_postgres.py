@@ -9,17 +9,19 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 import config
 from db.migrate import migrate
 from db.seed_underwriting import seed
+from services.copilot.history import PostgresChatHistory
+from services.jobs import Job, JobConfig, PostgresJobQueue
 from services.underwriting.models import DecisionInput, Plan, WorkflowError
 from services.underwriting.repository import PostgresCaseRepository
-from services.underwriting.risk import DemoRiskModel
+from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
 from services.underwriting.sources import (
-    DemoCicSource,
-    MockLosAdapter,
+    FixedCicSource,
+    InternalLosAdapter,
     PostgresFeatureSource,
-    demo_source,
+    seller_book_source,
 )
-from tests.test_underwriting import NOW, plan
+from tests.test_underwriting import NOW, check_queue_scopes, plan
 
 pytestmark = pytest.mark.skipif(
     not config.WORKFLOW_TEST_DATABASE_URL,
@@ -52,10 +54,10 @@ def database():
 def make_service(database):
     return UnderwritingService(
         PostgresCaseRepository(database),
-        demo_source(NOW),
-        DemoRiskModel(),
-        DemoCicSource(),
-        MockLosAdapter(),
+        seller_book_source(NOW),
+        BaselineRiskModel(),
+        FixedCicSource(),
+        InternalLosAdapter(),
         clock=lambda: NOW,
     )
 
@@ -148,20 +150,20 @@ def test_postgres_concurrent_decisions_and_atomic_rollback(database):
         assert sorted(pool.map(decide, ["one", "two"])) == ["conflict", "ok"]
 
 
-def test_demo_seed_and_postgres_source(database):
+def test_seller_book_seed_and_postgres_source(database):
     from services.underwriting.service import utc_now
 
     with psycopg.connect(database) as conn:
         seed(conn)
     source = PostgresFeatureSource(database)
     consent, features = source.fetch("demo-b", "demo-b", utc_now())
-    assert consent["source"] == "synthetic"
-    assert features["payout_origin"] == "simulated"
+    assert consent["source"] == "seller_book"
+    assert features["payout_origin"] == "estimated"
     with pytest.raises(WorkflowError, match="SCOPE"):
         source.fetch("demo-a", "demo-b", utc_now())
 
 
-def test_etl_seed_preserves_source_and_labels_simulated_payout(database):
+def test_etl_seed_preserves_source_and_labels_estimated_payout(database):
     from db.seed_underwriting import seed
     from etl.load import PostgresLoader
     from services.underwriting.service import utc_now
@@ -173,13 +175,57 @@ def test_etl_seed_preserves_source_and_labels_simulated_payout(database):
         loader.load(MANIFEST, TRANSFORMER.transform(_run(), "2026-10-22"))
         seed(conn, "demo-etl", 984839978)
     consent, feature = PostgresFeatureSource(database).fetch("demo-etl", "984839978", utc_now())
-    assert feature["source"] == "addlivetag" and feature["payout_origin"] == "simulated"
+    assert feature["source"] == "addlivetag" and feature["payout_origin"] == "estimated"
     assert feature["source_snapshot"]["gmv_30d"] == 100_620_000
     assert feature["weekly_payouts"][0]["amount"] == 100_620_000 * 7 * 85 // 3000
-    assert feature["raw_refs"] and consent["source"] == "synthetic"
+    assert feature["raw_refs"] and consent["source"] == "seller_book"
     with psycopg.connect(database) as conn:
         rows = conn.execute(
             "select payout_origin,payout_vnd from v_seller_payout_weekly where seller_id=%s",
             ("demo-etl",),
         ).fetchall()
-        assert len(rows) == 12 and all(row[0] == "simulated" for row in rows)
+        assert len(rows) == 12 and all(row[0] == "estimated" for row in rows)
+
+
+def test_postgres_chat_history_keeps_order_and_is_append_only(database):
+    case = make_service(database).create(Plan(**plan()), "chat-1")
+    history = PostgresChatHistory(database)
+    ids = [str(uuid4()) for _ in range(3)]
+    for n, turn_id in enumerate(ids):
+        history.append(case.case_id, {"turn_id": turn_id, "question": f"q{n}"})
+    assert [t["turn_id"] for t in history.recent(case.case_id, 2)] == ids[1:]
+    with psycopg.connect(database) as conn, pytest.raises(psycopg.Error):
+        conn.execute("delete from copilot_turns")
+
+
+def test_postgres_job_queue_claims_once_retries_and_expires(database):
+    case = make_service(database).create(Plan(**plan()), "job-1")
+    queue = PostgresJobQueue(database)
+    cfg = JobConfig(max_attempts=2)
+    jobs = [
+        queue.enqueue(Job.new("k", case.case_id, "uw-1", {"n": n}, cfg), b"f%d" % n)
+        for n in range(2)
+    ]
+    with ThreadPoolExecutor(2) as pool:
+        claims = list(pool.map(lambda _: queue.claim(60), range(2)))
+    assert sorted(c.job.job_id for c in claims) == sorted(j.job_id for j in jobs)
+    assert queue.claim(60) is None
+    first, second = sorted(claims, key=lambda c: c.job.payload["n"])
+    assert first.content == b"f0" and first.job.status == "RUNNING"
+    queue.complete(first.job.job_id, {"ok": True})
+    done = queue.get(first.job.job_id)
+    assert (done.status, done.result) == ("SUCCEEDED", {"ok": True})
+    queue.fail(second.job.job_id, {"code": "X", "status": 503}, True)
+    assert queue.get(second.job.job_id).status == "QUEUED"
+    again = queue.claim(0)
+    assert (again.job.attempts, again.content) == (2, b"f1")
+    assert queue.claim(60) is None
+    failed = queue.get(second.job.job_id)
+    assert failed.status == "FAILED" and failed.error["code"] == "JOB_LEASE_EXPIRED"
+    with psycopg.connect(database) as conn:
+        rows = conn.execute("select count(*) from jobs where content is not null").fetchone()
+    assert rows[0] == 0
+
+
+def test_postgres_queue_lists_decided_cases_newest_first(database):
+    check_queue_scopes(make_service(database))

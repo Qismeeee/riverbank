@@ -1,0 +1,325 @@
+{
+ "disclosure": "HỒ SƠ MẪU, DỮ LIỆU GIẢ LẬP. Tên người, tên hộ kinh doanh, ngân hàng, nhà cung cấp đều là tên chung, không phải người hay tổ chức thật.",
+ "lender": "Ngân hàng TMCP Mẫu",
+ "account_bank": "Ngân hàng TMCP Mẫu",
+ "cases": [
+  {
+   "seller_id": "demo-e",
+   "code": "HS01",
+   "title": "Duyệt bình thường",
+   "story": "Shop thời trang 34 tháng tuổi, payout ổn định quanh 75 triệu một tuần. Nhập lô hàng đông 220 triệu, xưởng đòi trả 2 đợt trong 2 tuần đầu. Tự có 80 triệu.",
+   "owner": {
+    "name": "Trần Thị Mai Anh",
+    "birth_year": 1991,
+    "id_tail": "0412",
+    "phone_tail": "8821"
+   },
+   "business": {
+    "name": "Hộ kinh doanh Mai Anh Fashion",
+    "shop_name": "maianh.fashion",
+    "category": "Bán lẻ quần áo, phụ kiện thời trang qua sàn TMĐT",
+    "address": "Số 18, Đường Mẫu 1, Phường An Khánh, TP. Hồ Chí Minh",
+    "registered": "03/2023"
+   },
+   "supplier": {
+    "name": "Xưởng may Mẫu Thành Công",
+    "goods": "Áo khoác, áo len dệt kim mùa đông",
+    "units": 4400,
+    "unit_price": 50000,
+    "rep": "Nguyễn Văn Thành",
+    "address": "Lô B3, Khu công nghiệp Mẫu, Bình Dương"
+   },
+   "plan": {
+    "lot_value": 220000000,
+    "cash_on_hand": 80000000,
+    "supplier_schedule": [
+     {
+      "week": 0,
+      "amount": 150000000
+     },
+     {
+      "week": 1,
+      "amount": 70000000
+     }
+    ],
+    "sell_weeks": 6,
+    "requested_amount": 100000000
+   },
+   "chat": "Mình nhập lô áo đông 220 triệu, trả xưởng 150 triệu tuần này và 70 triệu tuần sau. Mình đang có sẵn 80 triệu, bán trong 6 tuần, muốn vay 100 triệu.",
+   "statement": {
+    "mode": "match"
+   },
+   "demo_steps": [
+    "Seller tạo hồ sơ bằng chat hoặc form",
+    "Người duyệt mở hồ sơ, xem tờ trình và PD",
+    "Duyệt theo đề xuất",
+    "Bàn giao LOS"
+   ],
+   "paper": {
+    "05": "scan"
+   }
+  },
+  {
+   "seller_id": "demo-f",
+   "code": "HS02",
+   "title": "Mùa sale, đề xuất thấp hơn số xin",
+   "story": "Shop mỹ phẩm chuẩn bị 11.11, payout đang tăng. Xin 150 triệu cho chắc nhưng thiếu hụt thật chỉ 80 triệu, hệ thống đề xuất theo thiếu hụt thật.",
+   "owner": {
+    "name": "Lê Hoàng Phúc",
+    "birth_year": 1994,
+    "id_tail": "7730",
+    "phone_tail": "5512"
+   },
+   "business": {
+    "name": "Hộ kinh doanh Phúc An Beauty",
+    "shop_name": "phucan.beauty",
+    "category": "Bán lẻ mỹ phẩm, chăm sóc da qua sàn TMĐT",
+    "address": "Số 7, Đường Mẫu 2, Phường Dịch Vọng, Hà Nội",
+    "registered": "08/2024"
+   },
+   "supplier": {
+    "name": "Công ty TNHH Phân phối Mẫu Việt",
+    "goods": "Combo chăm sóc da mùa sale 11.11",
+    "units": 2500,
+    "unit_price": 120000,
+    "rep": "Hoàng Thị Thu Trang",
+    "address": "Tầng 5, Tòa nhà Mẫu, Cầu Giấy, Hà Nội"
+   },
+   "plan": {
+    "lot_value": 300000000,
+    "cash_on_hand": 220000000,
+    "supplier_schedule": [
+     {
+      "week": 0,
+      "amount": 300000000
+     }
+    ],
+    "sell_weeks": 4,
+    "requested_amount": 150000000
+   },
+   "chat": "Shop mình nhập hàng sale 11.11 hết 300 triệu, trả nhà phân phối luôn tuần này. Có sẵn 220 triệu, bán trong 4 tuần, cho mình vay 150 triệu.",
+   "statement": {
+    "mode": "match"
+   },
+   "demo_steps": [
+    "Seller tạo hồ sơ",
+    "Chỉ ra số đề xuất khác số xin và câu giải thích cho seller",
+    "Seller hỏi Copilot vì sao đề xuất thấp hơn",
+    "Người duyệt duyệt theo đề xuất"
+   ],
+   "paper": {
+    "05": "scan"
+   }
+  },
+  {
+   "seller_id": "demo-g",
+   "code": "HS03",
+   "title": "Shop mới phải nộp sao kê",
+   "story": "Shop phụ kiện điện thoại 8 tháng tuổi. Sàn chỉ xác nhận 30 triệu nên xin trên 75 triệu phải nộp sao kê. Sao kê khớp với payout sàn.",
+   "owner": {
+    "name": "Phạm Minh Khang",
+    "birth_year": 1998,
+    "id_tail": "2205",
+    "phone_tail": "3307"
+   },
+   "business": {
+    "name": "Hộ kinh doanh Khang Phụ Kiện",
+    "shop_name": "khang.phukien",
+    "category": "Bán lẻ phụ kiện điện thoại qua sàn TMĐT",
+    "address": "Số 25, Đường Mẫu 3, Phường Hải Châu, Đà Nẵng",
+    "registered": "02/2026"
+   },
+   "supplier": {
+    "name": "Công ty TNHH Linh kiện Mẫu",
+    "goods": "Ốp lưng, cáp sạc, tai nghe",
+    "units": 6000,
+    "unit_price": 25000,
+    "rep": "Lâm Quốc Bảo",
+    "address": "Số 112, Đường Mẫu 8, Quận 5, TP. Hồ Chí Minh"
+   },
+   "plan": {
+    "lot_value": 150000000,
+    "cash_on_hand": 60000000,
+    "supplier_schedule": [
+     {
+      "week": 0,
+      "amount": 150000000
+     }
+    ],
+    "sell_weeks": 6,
+    "requested_amount": 90000000
+   },
+   "chat": "Mình nhập lô phụ kiện 150 triệu, trả ngay tuần này. Có sẵn 60 triệu, bán 6 tuần, muốn vay 90 triệu.",
+   "statement": {
+    "mode": "match"
+   },
+   "demo_steps": [
+    "Seller tạo hồ sơ, ra AWAITING_STATEMENT",
+    "Seller hỏi Copilot cần làm gì tiếp",
+    "Nộp file sao kê PDF hoặc ảnh chụp",
+    "Hồ sơ lên PENDING_REVIEW, người duyệt duyệt"
+   ],
+   "paper": {
+    "01": "hand",
+    "02": "hand",
+    "05": "scan"
+   }
+  },
+  {
+   "seller_id": "demo-h",
+   "code": "HS04",
+   "title": "Đang có nợ nhóm 2",
+   "story": "Shop đồ gia dụng 20 tháng tuổi. Một khoản vay tiêu dùng đang quá hạn nhóm 2, từng xuống nhóm 3 khoảng 10 tháng trước. Rule vẫn cho qua vì chính sách nhận đến nhóm 2, người duyệt phải cân nhắc.",
+   "owner": {
+    "name": "Võ Thanh Tùng",
+    "birth_year": 1987,
+    "id_tail": "5519",
+    "phone_tail": "9024"
+   },
+   "business": {
+    "name": "Hộ kinh doanh Tùng Gia Dụng",
+    "shop_name": "tung.giadung",
+    "category": "Bán lẻ đồ gia dụng qua sàn TMĐT",
+    "address": "Số 41, Đường Mẫu 4, Phường Ninh Kiều, Cần Thơ",
+    "registered": "02/2025"
+   },
+   "supplier": {
+    "name": "Công ty CP Gia dụng Mẫu",
+    "goods": "Nồi, chảo, hộp đựng thực phẩm",
+    "units": 3000,
+    "unit_price": 60000,
+    "rep": "Đặng Minh Quân",
+    "address": "Lô C2, Khu công nghiệp Mẫu, Long An"
+   },
+   "plan": {
+    "lot_value": 180000000,
+    "cash_on_hand": 100000000,
+    "supplier_schedule": [
+     {
+      "week": 0,
+      "amount": 180000000
+     }
+    ],
+    "sell_weeks": 6,
+    "requested_amount": 90000000
+   },
+   "chat": "Mình nhập lô đồ gia dụng 180 triệu trả luôn tuần này, có sẵn 100 triệu, bán 6 tuần, vay 90 triệu.",
+   "statement": {
+    "mode": "match"
+   },
+   "demo_steps": [
+    "Seller tạo hồ sơ, ra PENDING_REVIEW",
+    "Người duyệt mở báo cáo tín dụng: nhóm 2 hiện tại, nhóm 3 trong 12 tháng",
+    "Người duyệt từ chối hoặc duyệt kèm ghi chú"
+   ],
+   "paper": {
+    "01": "hand",
+    "05": "scan"
+   }
+  },
+  {
+   "seller_id": "demo-i",
+   "code": "HS05",
+   "title": "Sao kê không khớp, nghi khai khống",
+   "story": "Shop thời trang 15 tháng tuổi. Phải nộp sao kê. Sao kê chỉ có khoảng 60% tiền sàn so với số liệu sàn, phần còn lại là các khoản chuyển khoản cá nhân ghi chữ shopee để làm đẹp dòng tiền.",
+   "owner": {
+    "name": "Đỗ Ngọc Hân",
+    "birth_year": 1996,
+    "id_tail": "8846",
+    "phone_tail": "1176"
+   },
+   "business": {
+    "name": "Hộ kinh doanh Hân Store",
+    "shop_name": "han.store",
+    "category": "Bán lẻ quần áo nữ qua sàn TMĐT",
+    "address": "Số 9, Đường Mẫu 5, Phường Lê Chân, Hải Phòng",
+    "registered": "07/2025"
+   },
+   "supplier": {
+    "name": "Xưởng may Mẫu Phát Đạt",
+    "goods": "Đầm, chân váy công sở",
+    "units": 2500,
+    "unit_price": 80000,
+    "rep": "Bùi Văn Phát",
+    "address": "Số 56, Đường Mẫu 9, Kiến An, Hải Phòng"
+   },
+   "plan": {
+    "lot_value": 200000000,
+    "cash_on_hand": 110000000,
+    "supplier_schedule": [
+     {
+      "week": 0,
+      "amount": 200000000
+     }
+    ],
+    "sell_weeks": 6,
+    "requested_amount": 90000000
+   },
+   "chat": "Mình nhập lô đầm công sở 200 triệu trả ngay, có sẵn 110 triệu, bán 6 tuần, vay 90 triệu.",
+   "statement": {
+    "mode": "inflated",
+    "payout_share": 0.6,
+    "fake_note": "chuyen tien hang shopee"
+   },
+   "demo_steps": [
+    "Seller tạo hồ sơ, ra AWAITING_STATEMENT",
+    "Nộp sao kê",
+    "Jev loại các khoản chuyển khoản cá nhân, tổng tiền sàn lệch quá 15%",
+    "Hồ sơ ESCALATED, người duyệt xem từng dòng sao kê"
+   ],
+   "paper": {
+    "01": "hand",
+    "02": "hand",
+    "05": "scan"
+   },
+   "scan_quality": "poor"
+  },
+  {
+   "seller_id": "demo-j",
+   "code": "HS06",
+   "title": "Không cần vay",
+   "story": "Shop tạp hóa online 40 tháng tuổi, tiền mặt 260 triệu đủ trả lô hàng 180 triệu. Hệ thống báo không cần vay và cho mức payout tối thiểu để vẫn đủ tiền.",
+   "owner": {
+    "name": "Nguyễn Văn Hậu",
+    "birth_year": 1983,
+    "id_tail": "1093",
+    "phone_tail": "6640"
+   },
+   "business": {
+    "name": "Hộ kinh doanh Hậu Mart",
+    "shop_name": "hau.mart",
+    "category": "Bán lẻ thực phẩm khô, đồ dùng gia đình qua sàn TMĐT",
+    "address": "Số 3, Đường Mẫu 6, Phường Vĩnh Ninh, Huế",
+    "registered": "06/2023"
+   },
+   "supplier": {
+    "name": "Công ty TNHH Thực phẩm Mẫu",
+    "goods": "Thực phẩm khô, gia vị",
+    "units": 9000,
+    "unit_price": 20000,
+    "rep": "Trịnh Thị Hồng",
+    "address": "Số 20, Đường Mẫu 10, Hương Thủy, Huế"
+   },
+   "plan": {
+    "lot_value": 180000000,
+    "cash_on_hand": 260000000,
+    "supplier_schedule": [
+     {
+      "week": 0,
+      "amount": 180000000
+     }
+    ],
+    "sell_weeks": 4,
+    "requested_amount": 100000000
+   },
+   "chat": "Mình nhập hàng 180 triệu trả tuần này, đang có 260 triệu, bán 4 tuần, muốn vay 100 triệu.",
+   "statement": {
+    "mode": "match"
+   },
+   "demo_steps": [
+    "Seller tạo hồ sơ",
+    "Hệ thống trả NO_LOAN_NEEDED kèm ngưỡng payout cảnh báo"
+   ]
+  }
+ ]
+}

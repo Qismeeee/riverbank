@@ -1,10 +1,14 @@
 import hashlib
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import config
+
+SCHEMA_HINT = "Return exactly one JSON object that matches this JSON Schema, with no other text:"
+_FENCED = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
 
 class LlmError(Exception):
@@ -63,7 +67,32 @@ class OpenAICompatibleClient(LlmClient):
         )
 
     def complete_json(self, request: LlmRequest) -> LlmResponse:
-        from openai import OpenAIError
+        from openai import BadRequestError
+
+        try:
+            completion = self._create(request, self._strict_format(request), request.system)
+        except BadRequestError:
+            schema = json.dumps(request.schema, ensure_ascii=False)
+            hint = f"{request.system}\n\n{SCHEMA_HINT}\n{schema}"
+            completion = self._create(request, {"type": "json_object"}, hint)
+        try:
+            content = _parse_json(completion.choices[0].message.content or "")
+        except (IndexError, ValueError) as exc:
+            raise LlmError("LLM_INVALID_JSON") from exc
+        if not isinstance(content, dict):
+            raise LlmError("LLM_INVALID_JSON")
+        usage = completion.usage.model_dump() if completion.usage else {}
+        return LlmResponse(content, completion.model or self.model, usage)
+
+    @staticmethod
+    def _strict_format(request: LlmRequest) -> dict:
+        return {
+            "type": "json_schema",
+            "json_schema": {"name": request.schema_name, "strict": True, "schema": request.schema},
+        }
+
+    def _create(self, request: LlmRequest, response_format: dict, system: str):
+        from openai import BadRequestError, OpenAIError
 
         options = {} if request.temperature is None else {"temperature": request.temperature}
         text = json.dumps(request.user, ensure_ascii=False)
@@ -74,32 +103,26 @@ class OpenAICompatibleClient(LlmClient):
             else text
         )
         try:
-            completion = self._client.chat.completions.create(
+            return self._client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": request.system},
+                    {"role": "system", "content": system},
                     {"role": "user", "content": content},
                 ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": request.schema_name,
-                        "strict": True,
-                        "schema": request.schema,
-                    },
-                },
+                response_format=response_format,
                 **options,
             )
+        except BadRequestError as exc:
+            if response_format["type"] == "json_schema":
+                raise
+            raise LlmError("LLM_UNAVAILABLE") from exc
         except OpenAIError as exc:
             raise LlmError("LLM_UNAVAILABLE") from exc
-        try:
-            content = json.loads(completion.choices[0].message.content or "")
-        except (IndexError, ValueError) as exc:
-            raise LlmError("LLM_INVALID_JSON") from exc
-        if not isinstance(content, dict):
-            raise LlmError("LLM_INVALID_JSON")
-        usage = completion.usage.model_dump() if completion.usage else {}
-        return LlmResponse(content, completion.model or self.model, usage)
+
+
+def _parse_json(text: str) -> object:
+    match = _FENCED.fullmatch(text.strip())
+    return json.loads(match.group(1) if match else text)
 
 
 class CachedLlmClient(LlmClient):
@@ -129,12 +152,9 @@ def build_llm_client(
     if provider not in PROVIDERS:
         raise LlmError("LLM_PROVIDER_UNKNOWN")
     api_key, base_url = PROVIDERS[provider]()
+    timeout, retries = config.llm_limits(purpose)
     client: LlmClient = OpenAICompatibleClient(
-        api_key,
-        model or config.LLM_MODEL,
-        base_url,
-        config.LLM_TIMEOUT_SECONDS,
-        config.LLM_MAX_RETRIES,
+        api_key, model or config.LLM_MODEL, base_url, timeout, retries
     )
     if config.LLM_CACHE_DIR:
         client = CachedLlmClient(client, Path(config.LLM_CACHE_DIR) / purpose)

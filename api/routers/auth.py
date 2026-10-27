@@ -3,16 +3,16 @@ import hashlib
 import hmac
 import json
 from abc import ABC, abstractmethod
-from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from threading import Lock
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
+from services.ratelimit import SlidingWindow
 from services.underwriting.models import WorkflowError
 from services.underwriting.service import utc_now
 
@@ -111,6 +111,8 @@ class TokenIdentity(IdentityProvider):
         return signer().verify(token.strip(), utc_now())
 
 
+BEARER = HTTPBearer(auto_error=False, description="Token từ POST /v1/auth/token")
+
 IDENTITY_PROVIDERS: dict[str, type[IdentityProvider]] = {
     "header": HeaderIdentity,
     "token": TokenIdentity,
@@ -118,15 +120,16 @@ IDENTITY_PROVIDERS: dict[str, type[IdentityProvider]] = {
 
 
 def get_actor(
-    authorization: Annotated[str | None, Header()] = None,
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER)] = None,
     actor_id: Annotated[str | None, Header(alias="X-Actor-ID")] = None,
     actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
 ) -> Actor:
     if config.WORKFLOW_MODE != "demo":
-        raise WorkflowError("WORKFLOW_DEMO_DISABLED", 503)
+        raise WorkflowError("WORKFLOW_DISABLED", 503)
     provider = IDENTITY_PROVIDERS.get(config.WORKFLOW_IDENTITY)
     if provider is None:
         raise WorkflowError("INVALID_WORKFLOW_IDENTITY", 503)
+    authorization = f"{bearer.scheme} {bearer.credentials}" if bearer else None
     return provider().authenticate(Credentials(authorization, actor_id, actor_role))
 
 
@@ -170,33 +173,15 @@ class TokenResponse(ActorResponse):
     expires_at: datetime
 
 
-class LoginThrottle:
-    def __init__(self, max_failures: int, window_seconds: int):
-        self.max_failures, self.window = max_failures, timedelta(seconds=window_seconds)
-        self._failures: dict[str, deque[datetime]] = defaultdict(deque)
-        self._lock = Lock()
-
-    def _recent(self, key: str, now: datetime) -> deque[datetime]:
-        failures = self._failures[key]
-        while failures and failures[0] <= now - self.window:
-            failures.popleft()
-        if not failures:
-            del self._failures[key]
-            return deque()
-        return failures
-
+class LoginThrottle(SlidingWindow):
     def check(self, key: str, now: datetime) -> None:
         with self._lock:
-            if len(self._recent(key, now)) >= self.max_failures:
+            if self._full(key, now):
                 raise WorkflowError("TOO_MANY_ATTEMPTS", 429)
 
     def fail(self, key: str, now: datetime) -> None:
         with self._lock:
-            self._failures[key].append(now)
-
-    def reset(self, key: str) -> None:
-        with self._lock:
-            self._failures.pop(key, None)
+            self._add(key, now)
 
 
 throttle = LoginThrottle(config.AUTH_MAX_FAILURES, config.AUTH_FAILURE_WINDOW_SECONDS)
@@ -214,11 +199,11 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 def issue_token(request: TokenRequest, http: Request) -> dict:
     if config.WORKFLOW_MODE != "demo" or config.WORKFLOW_IDENTITY != "token":
         raise WorkflowError("TOKEN_LOGIN_DISABLED", 503)
-    if not config.DEMO_PASSCODE:
+    if not config.ACCESS_PASSCODE:
         raise WorkflowError("AUTH_NOT_CONFIGURED", 503)
     key, now = client_key(http), utc_now()
     throttle.check(key, now)
-    if not hmac.compare_digest(request.passcode.encode(), config.DEMO_PASSCODE.encode()):
+    if not hmac.compare_digest(request.passcode.encode(), config.ACCESS_PASSCODE.encode()):
         throttle.fail(key, now)
         raise WorkflowError("INVALID_CREDENTIALS", 401)
     throttle.reset(key)

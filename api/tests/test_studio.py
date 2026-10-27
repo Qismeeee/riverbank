@@ -20,8 +20,9 @@ def test_policy_snapshot_reflects_running_service(client, service):  # noqa: F81
     assert [r["rule_id"] for r in body["rules"]] == [r.rule_id for r in RULES]
     assert body["policy_config"]["max_amount"] == service.policy.cfg.max_amount
     assert body["cashflow_config"]["stress_factor"] == service.engine.cfg.stress_factor
-    assert body["risk_model"]["source"] == "demo"
+    assert body["risk_model"]["source"] == "baseline"
     assert body["cic_gate"] == {"gate": "cic", "model": "open", "threshold": 0.0}
+    assert body["cic_source"] == service.cic.describe()
 
 
 def test_eval_metrics_cover_every_golden_case(client):  # noqa: F811

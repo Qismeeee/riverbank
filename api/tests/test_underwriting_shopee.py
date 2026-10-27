@@ -6,7 +6,7 @@ from services.shopee.schemas import EscrowDetail, ShopData
 from services.shopee.source import ShopeeSource
 from services.underwriting.models import WorkflowError
 from services.underwriting.shopee_features import ShopeeFeatureSource, ShopeeRegistration
-from services.underwriting.sources import demo_source, validate_features
+from services.underwriting.sources import seller_book_source, validate_features
 
 NOW = datetime(2026, 10, 22, tzinfo=UTC)
 
@@ -33,7 +33,7 @@ class FakeShopeeSource(ShopeeSource):
 
 def test_shopee_adapter_uses_release_time_and_completed_weeks():
     source = FakeShopeeSource()
-    consent = demo_source(NOW).records[("demo-b", "demo-b")][0]
+    consent = seller_book_source(NOW).records[("demo-b", "demo-b")][0]
     adapter = ShopeeFeatureSource(
         {
             ("demo-b", "shop"): ShopeeRegistration(
@@ -56,7 +56,7 @@ def test_shopee_adapter_uses_release_time_and_completed_weeks():
 
 def test_shopee_adapter_checks_consent_before_fetch():
     source = FakeShopeeSource()
-    consent = demo_source(NOW).records[("demo-b", "demo-b")][0]
+    consent = seller_book_source(NOW).records[("demo-b", "demo-b")][0]
     consent["revoked_at"] = NOW.isoformat()
     adapter = ShopeeFeatureSource(
         {

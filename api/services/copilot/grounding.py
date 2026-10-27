@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from .models import Extraction
+from .models import Extraction, KnownPlan
 
 UNITS = {
     "tỷ": 10**9,
@@ -64,17 +64,27 @@ class PlanGrounder:
     money_fields = ("lot_value", "cash_on_hand", "requested_amount")
     count_fields = ("sell_weeks",)
 
-    def ground(self, extraction: Extraction, text: str) -> dict:
+    def ground(self, extraction: Extraction, text: str, known: KnownPlan | None = None) -> dict:
         mentions = Mentions.parse(text)
+        prior = known.model_dump() if known else {}
         values = extraction.model_dump(include={*self.money_fields, *self.count_fields})
         for name in self.money_fields:
             if values[name] not in mentions.amounts:
-                values[name] = None
+                values[name] = prior.get(name)
         for name in self.count_fields:
             if values[name] not in mentions.counts:
-                values[name] = None
-        values["supplier_schedule"] = self._schedule(extraction, values["lot_value"], mentions)
+                values[name] = prior.get(name)
+        lot_value = values["lot_value"]
+        values["supplier_schedule"] = self._schedule(
+            extraction, lot_value, mentions
+        ) or self._carried(prior.get("supplier_schedule"), lot_value)
         return values
+
+    @staticmethod
+    def _carried(rows: list[dict] | None, lot_value: int | None) -> list[dict] | None:
+        if not rows or lot_value is None or sum(r["amount"] for r in rows) != lot_value:
+            return None
+        return rows
 
     @staticmethod
     def _schedule(extraction: Extraction, lot_value: int | None, mentions: Mentions):

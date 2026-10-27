@@ -30,8 +30,10 @@ api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R1
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
 api/db/         schema.sql, một DB Postgres cho feature lẫn trạng thái app
 api/routers/    HTTP endpoint, mỏng, gọi services
-api/services/underwriting/  luồng hồ sơ: service.py, models.py, repository.py, evidence.py (evidence và template câu), memo.py (MemoWriter template hoặc LLM, MemoValidator, MemoComposer), sources.py
-api/services/statements/    đọc sao kê: documents.py (nhận loại file, đọc số VND, ngày), parsers.py (CSV, PDF kẻ bảng, PDF theo vị trí chữ), vision.py (OCR qua LlmClient), classifiers.py (dòng tiền sàn: regex lọc rồi Jev quyết), reader.py (đọc, che PII, cộng tổng), factory.py
+api/services/underwriting/  luồng hồ sơ: service.py, models.py, repository.py, evidence.py (evidence và template câu), memo.py (MemoWriter template hoặc LLM, MemoValidator, MemoComposer), sources.py, cic.py (ProfileCicSource đọc api/data/cic_profiles.json, báo cáo nhiều khoản vay, nhóm nợ 12 tháng)
+api/services/statements/    đọc sao kê: documents.py (nhận loại file, đọc số VND, ngày), parsers.py (CSV, Excel xlsx và xls, PDF kẻ bảng, PDF theo vị trí chữ), vision.py (OCR qua LlmClient, chỉ trang ảnh, đọc lại khi lệch số dư hoặc lệch tổng), images.py (xoay EXIF, HEIC và WEBP sang JPEG, thu nhỏ), balance.py (kiểm số dư từng dòng và tổng đầu cuối kỳ), storage.py (lưu file gốc: none hoặc S3), classifiers.py (dòng tiền sàn: regex lọc rồi Jev quyết), reader.py (đọc, che PII, cộng tổng), factory.py
+api/services/copilot/      extractor.py (chat ra bản nháp kế hoạch, nhớ `known`), replies.py (câu chat do code ghép), advisor.py (hỏi đáp trên số đã khóa, câu mẫu khi LLM lỗi), history.py (lưu lượt chat theo hồ sơ, memory hoặc Postgres), grounding.py, screening.py (Jev chặn câu hỏi)
+api/services/jobs.py        hàng đợi job (memory hoặc Postgres SKIP LOCKED, lease, thử lại lỗi 5xx) và JobWorker. Handler nộp sao kê ở underwriting/uploads.py, worker bật trong lifespan của main.py
 api/services/guard.py       OutputGuard: số phải có trong bằng chứng, từ cấm, câu nói ngược trạng thái. Dùng cho memo, eval và Copilot
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động

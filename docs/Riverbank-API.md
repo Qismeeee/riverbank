@@ -24,10 +24,11 @@ Mục 4 là API đang chạy trong `api/`, viết theo code `main` commit `68588
 - Tuần là số nguyên bắt đầu từ 0. Tuần 0 là tuần nhập hàng, chưa có payout của lô.
 - `case_id` và `evidence_id` trên đường dẫn là UUID. Sai mẫu thì `422`.
 - Mọi trường thừa trong thân yêu cầu bị từ chối (`extra="forbid"`).
+- Mọi phản hồi có header `X-Request-ID`. FE gửi `X-Request-ID` (chữ, số, gạch nối, tối đa 64 ký tự) thì server dùng lại, không gửi thì server tự sinh. Báo lỗi kèm mã này để tra log CloudWatch `/riverbank/app`, mỗi request ghi một dòng JSON có `request_id`, `method`, `path`, `status`, `duration_ms`, `slow` (`slow` là true khi chậm hơn `RIVERBANK_SLOW_REQUEST_MS`, mặc định 5000).
 
 ### 1.2 Danh tính và vai trò
 
-Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DEMO_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
+Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
 
 | Chế độ | Dùng ở | Cách gửi |
 |---|---|---|
@@ -91,6 +92,7 @@ Lỗi sai kiểu dữ liệu do FastAPI trả, mã `422`:
 | `404` | Không có hồ sơ hoặc bằng chứng |
 | `409` | Trạng thái hồ sơ không cho phép thao tác, xung đột `version`, khóa idempotency bị dùng lại, rule cứng fail |
 | `422` | Đầu vào sai, bị chặn ở cổng nhập, thiếu consent, thiếu dữ liệu payout |
+| `429` | Sai mã đăng nhập nhiều lần, hoặc gọi quá ngưỡng tần suất. Có header `Retry-After` (giây) |
 | `503` | Chế độ demo chưa bật, thiếu database |
 
 Bảng mã lỗi đầy đủ ở mục 5.
@@ -146,11 +148,14 @@ POST /cases ──> NO_LOAN_NEEDED
 | `GET` | `/v1/cases/{case_id}/evidence/{evidence_id}` | underwriter | Có | FR-07, FR-30 |
 | `POST` | `/v1/cases/{case_id}/statements` | underwriter | Có | FR-21..FR-23 |
 | `POST` | `/v1/cases/{case_id}/statements/upload` | seller của hồ sơ, underwriter | Có | FR-22, FR-23 |
+| `POST` | `/v1/cases/{case_id}/statements/upload-jobs` | seller của hồ sơ, underwriter | Có | FR-22, FR-23 |
+| `GET` | `/v1/jobs/{job_id}` | seller của hồ sơ, underwriter | Có | FR-22 |
 | `POST` | `/v1/cases/{case_id}/cic-inquiry` | underwriter | Có | FR-16b |
 | `POST` | `/v1/cases/{case_id}/decisions` | underwriter | Có | FR-31..FR-34 |
 | `POST` | `/v1/cases/{case_id}/handoff` | underwriter | Có | FR-35, FR-36 |
 | `POST` | `/v1/copilot/extract-plan` | seller | Có | FR-02, FR-03 |
-| `POST` | `/v1/cases/{case_id}/copilot/ask` | seller | Chưa có | FR-27 |
+| `POST` | `/v1/cases/{case_id}/copilot/ask` | seller của hồ sơ | Có | FR-27 |
+| `GET` | `/v1/cases/{case_id}/copilot/history` | seller của hồ sơ, underwriter | Có | FR-27 |
 | `POST` | `/v1/webhooks/los-status` | LOS ngân hàng | Chưa có | FR-36 |
 | `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter (demo) | Chưa có | FR-37 |
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
@@ -225,7 +230,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 1. Quét `note`. Có lệnh bỏ qua chính sách hoặc ép duyệt, có SĐT, CCCD, số tài khoản, hoặc nhắc thuộc tính nhạy cảm thì trả `422 BLOCKED_INPUT`. `details` liệt kê từng lý do khớp, theo thứ tự `PHONE`, `NATIONAL_ID`, `ACCOUNT`, `PROMPT_INJECTION`, `PROHIBITED_ATTRIBUTE`. Mỗi phần tử có `reason`, `field: "note"` và `message`. Không tạo hồ sơ.
 2. Kiểm tra khóa idempotency.
 3. Đọc consent và feature của đúng `seller_id` + `shop_id`. Consent phải có `reference`, mục đích `WORKING_CAPITAL_UNDERWRITING`, chưa thu hồi, còn hạn. Thiếu thì `422 CONSENT_REQUIRED`.
-4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `simulated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
+4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `estimated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
 5. Chạy CashFlow Engine. Lưu bằng chứng `E4` (feature) và `E5` (dòng tiền).
 6. Gap = 0: trạng thái `NO_LOAN_NEEDED`. Dừng ở đây, không gọi CIC.
 7. Gap > 0: chấm PD (`E6`), hỏi Jev gate, đủ điều kiện mới tra CIC (`E6a`), chạy Policy Engine (`E7`). Gate từ chối hoặc lỗi thì không tra CIC, R06 fail thiếu dữ liệu.
@@ -245,8 +250,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
   "status": "PENDING_REVIEW",
   "version": 1,
   "reason": null,
-  "created_at": "2026-10-23T08:00:00+00:00",
-  "demo": true
+  "created_at": "2026-10-23T08:00:00+00:00"
 }
 ```
 
@@ -298,7 +302,11 @@ Vai trò `seller`. Trả hồ sơ của chính `subject`, mới nhất trước,
 | `limit` | 1–100 | 50 |
 | `offset` | ≥ 0 | 0 |
 
-Hàng đợi chỉ chứa `PENDING_REVIEW`, `ESCALATED`, `NO_LOAN_NEEDED`, `AWAITING_STATEMENT`, sắp theo `created_at` tăng dần.
+Không truyền `status`: hàng đợi mặc định chỉ chứa hồ sơ chưa quyết (`PENDING_REVIEW`, `ESCALATED`, `NO_LOAN_NEEDED`, `AWAITING_STATEMENT`), sắp `created_at` tăng dần, `case_id` tăng dần (hồ sơ cũ lên trước).
+
+`status=ACCEPTED` hoặc `status=REJECTED` là lối đọc hồ sơ đã thẩm định: trả đúng hồ sơ ở trạng thái đó, sắp `created_at` giảm dần, `case_id` giảm dần (hồ sơ mới lên trước). FE tự ghép hai danh sách, API không có mã gộp.
+
+`status` là mã khác: trả hồ sơ ở trạng thái đó, sắp tăng dần.
 
 ```json
 { "items": [ { "case_id": "...", "status": "ESCALATED", "version": 1, "...": "..." } ], "limit": 50, "offset": 0 }
@@ -333,8 +341,8 @@ Một phần tử `runs`:
 | `engine_version`, `config` | Phiên bản và cấu hình CashFlow Engine |
 | `policy_version`, `policy_hash` | Bộ rule đã chạy |
 | `cashflow` | `payout_base`, `payout_stress`, `weeks`, `stress_weeks`, `gap`, `negative_weeks`, `amount_proposed`, `tenor_weeks`, `weekly_deduction`, `weekly_deductions`, `tenor_trace`, `payout_warning_threshold` |
-| `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `demo`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
-| `cic` | `source` (`mock` hoặc `not_queried`), `bureau_group`, `outstanding`, `queried_at` (`null` khi không tra), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
+| `risk` | `pd_bps` (`null` khi thiếu dữ liệu), `model_version`, `source` (`lightgbm` hoặc `baseline`), `factors[]` (`name`, `direction`, `contribution`, `value`), `missing_fields[]`, `disclosure`. `null` khi Gap = 0 |
+| `cic` | `source` (`cic_profiles`, `fixed`, `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê và Jev chưa được hỏi, lúc đó `gate` là `null`), `bureau_group` (nhóm nợ hiện tại xấu nhất), `outstanding` (tổng dư nợ), `queried_at` (`null` khi không tra). Nguồn `cic_profiles` thêm `profiles_hash` (mã băm của `api/data/cic_profiles.json` lúc tra, sửa file là mã đổi, hồ sơ cũ giữ mã cũ), `worst_group_12m`, `has_credit_history`, `recent_inquiries_90d`, `facilities` (mỗi khoản: `institution`, `product`, `limit`, `outstanding`, `group`, `opened_month`, `history_12m` 12 tháng cũ đến mới), `gate` (`gate`, `eligible`, `threshold`, `model`, `probability`, `error`). `null` khi Gap = 0 |
 | `policy` | `results[]` (`rule_id`, `hard`, `passed`, `reason`, `missing_data`, `evidence_id`), `hard_fail`, `summary` |
 | `policy_input` | Snapshot đưa vào Policy Engine |
 | `statement` | Kết quả đối chiếu sao kê, hoặc `null` |
@@ -433,14 +441,22 @@ Seller của hồ sơ hoặc người thẩm định nộp file. Hệ thống b�
 |---|---|---|
 | `expected_version` | int | ≥ 1 |
 | `period_start`, `period_end` | date | Như mục 4.8 |
-| `file` | file | CSV, PDF, PNG, JPEG. Tối đa 10 MB. Loại file xác định theo byte đầu, không tin `Content-Type` của client |
+| `file` | file | CSV, Excel `.xlsx` và `.xls`, PDF, PNG, JPEG, WEBP, HEIC. Tối đa 10 MB. Loại file xác định theo byte đầu, không tin `Content-Type` của client |
 
 **Cách đọc file** (lần lượt, dừng ở cách đầu tiên ra được dòng):
 
 1. CSV: parser Python, tự nhận dấu phân cách `,` `;` tab.
+1. Excel `.xlsx`: `openpyxl` đọc mọi sheet, ô ngày và ô số kiểu Excel đọc thẳng, header nằm ở dòng nào cũng được. Tối đa 50.000 dòng mỗi sheet. File zip không có `xl/workbook.xml` (ví dụ `.docx`) bị `415`.
+1. Excel `.xls` đời cũ: `xlrd` đọc, ô ngày đổi đúng theo cài đặt ngày của file. File hỏng thì ghi lý do vào `notes` rồi `422`.
 2. PDF có lớp chữ và kẻ bảng: `pdfplumber` đọc bảng, bảng tràn sang trang sau không lặp header vẫn đọc tiếp. Không gọi model, không tốn phí.
 3. PDF có lớp chữ nhưng không kẻ bảng: đọc theo vị trí chữ. Cột lấy từ vị trí header, ô chữ cách nhau xa mới tách cột, nên số nằm trong mô tả (ví dụ "tuần 40") không bị hiểu là số tiền. Dòng mô tả xuống hàng được ghép vào giao dịch gần nhất.
-4. PDF scan hoặc ảnh: prompt `statement-ocr` qua model đọc ảnh, mỗi trang một lượt, tối đa 10 trang. Chỉ chạy khi `RIVERBANK_STATEMENT_OCR=llm`. Model đặt ở `STATEMENT_OCR_PROVIDER`, `STATEMENT_OCR_MODEL`.
+4. PDF scan hoặc ảnh: prompt `statement-ocr` qua model đọc ảnh, mỗi trang một lượt, 4 trang chạy song song, tối đa `STATEMENT_OCR_MAX_PAGES` trang (mặc định 20). Ảnh được xoay theo EXIF, đổi HEIC và WEBP sang JPEG, thu cạnh dài về 2400 px trước khi gửi. Ảnh không mở được thì `422 STATEMENT_IMAGE_UNREADABLE`. Chỉ chạy khi `RIVERBANK_STATEMENT_OCR=llm`. Model đặt ở `STATEMENT_OCR_PROVIDER`, `STATEMENT_OCR_MODEL`. Prod dùng `openrouter` với `google/gemini-3.1-flash-lite`.
+
+**PDF lẫn trang chữ và trang ảnh** (khi OCR bật): trang không có lớp chữ, hoặc ảnh phủ từ 50% diện tích trang mà không có chữ nào đọc ra ngày, được bỏ khỏi bước 2 và 3 rồi gửi riêng cho model. Dòng ghép lại theo thứ tự trang, `extraction.parser` là ví dụ `pdf_text+vision`, `extraction.image_pages` liệt kê trang đã gửi model. OCR tắt thì đọc như cũ.
+
+**Tự kiểm bằng số dư:** có cột số dư thì code kiểm từng cặp dòng liền nhau: số dư trước + tiền vào - tiền ra = số dư sau, lệch tối đa 2 đ. Tự nhận sao kê xếp cũ đến mới hay mới đến cũ. Trang đọc bằng model mà lệch thì đọc lại ở độ nét cao hơn, chỉ lấy lần đọc lại khi ít dòng lệch hơn và không mất dòng, ghi `PAGE_n_RETRIED` vào `extraction.notes`. Kết quả ở `extraction.balance_check`: `checked_pairs`, `mismatched_lines` (chỉ số dòng trong `statement_lines`), `order`, `totals`.
+
+**Kiểm tổng khi không có số dư từng dòng:** sao kê có dòng số dư đầu kỳ và cuối kỳ (đọc từ dòng tổng của bảng, hoặc model đọc từ ảnh) thì code kiểm số dư cuối - số dư đầu = tổng ghi có - tổng ghi nợ, lệch tối đa 2 đ. Kết quả ở `balance_check.totals`: `opening`, `closing`, `expected_change`, `read_change`, `matched`. Trang ảnh lệch tổng cũng được đọc lại như trên. Dòng tổng cộng không bị tính là giao dịch. Dòng lệch chỉ được gắn cờ cho người thẩm định, không tự đổi R05.
 
 Cột được nhận theo từ khóa trong từng phần của header (header song ngữ như `Số tiền ghi có/Credit` tách theo `/`), tiếng Việt hoặc tiếng Anh, có dấu hoặc không: ngày hoặc thời gian, nội dung, diễn giải, mô tả, ghi có, phát sinh có, ghi nợ, phát sinh nợ, số dư (bỏ qua), hoặc một cột số tiền có dấu âm. Nhiều cột cùng vai trò thì chọn cột khớp cụm dài nhất, ví dụ `Debit` thắng `No.`. Không có header ngày thì lấy cột có từ 80% ô là ngày. Số tiền đọc được cả `70.000.000`, `70,000,000`, `70.000.000,00`.
 
@@ -450,7 +466,9 @@ Cột được nhận theo từ khóa trong từng phần của header (header s
 
 **Cộng tổng:** `marketplace_total` là tổng ghi có của dòng tiền sàn có ngày trong `[period_start, period_end)`. Dòng tiền sàn thiếu ngày hoặc thiếu số tiền thì `422 STATEMENT_LINES_UNREADABLE`, `details` là chỉ số dòng, không đoán.
 
-**Lưu:** không lưu file gốc. E8 giữ `document_ref = sha256:<băm file>`, `source = uploaded_file`, `submitted_by`, `file` (`media_type`, `pages`), `extraction` (`parser`, `model`, `prompt_version`, `notes`), `classifier`, `coverage` (ngày đầu, ngày cuối trên sao kê) và `statement_lines` (từng dòng, đã che SĐT, CCCD, số tài khoản, kèm `is_payout`, `probability`, `in_period`).
+**Lưu file gốc:** `RIVERBANK_DOCUMENT_STORE=none` (mặc định) không lưu. `s3` lưu vào `S3_BUCKET` ở khóa `statements/{case_id}/{sha256}.{đuôi}`, mã hóa AES256, E8 ghi `original` (`store`, `bucket`, `key`). S3 lỗi thì `503 DOCUMENT_STORE_UNAVAILABLE`, thiếu bucket thì `503 DOCUMENT_STORE_NOT_CONFIGURED`. Trước khi bật trên prod, IAM role của EC2 phải có `s3:PutObject` trên bucket.
+
+**Lưu:** E8 giữ `document_ref = sha256:<băm file>`, `source = uploaded_file`, `submitted_by`, `file` (`media_type`, `pages`), `extraction` (`parser`, `model`, `prompt_version`, `notes`), `classifier`, `coverage` (ngày đầu, ngày cuối trên sao kê) và `statement_lines` (từng dòng, đã che SĐT, CCCD, số tài khoản, kèm `is_payout`, `probability`, `in_period`).
 
 **Phản hồi `200`:** `CaseSummary`.
 
@@ -461,6 +479,35 @@ curl -X POST $API/v1/cases/$C/statements/upload -H "Authorization: Bearer $T" \
   -F expected_version=1 -F period_start=2026-09-28 -F period_end=2026-10-12 -F file=@saoke.pdf
 ```
 
+### 4.8c `POST /v1/cases/{case_id}/statements/upload-jobs`, Nộp sao kê chạy nền
+
+Giống 4.8a nhưng không bắt client chờ OCR. Dùng cho PDF scan hoặc ảnh nhiều trang, có thể mất vài chục giây.
+
+**Thân yêu cầu, quyền, điều kiện:** như 4.8a. Trước khi xếp hàng, API kiểm ngay quyền, `expected_version`, kỳ sao kê, kích thước và loại file, nên các lỗi `403`, `409`, `413`, `415` trả về luôn, không tạo job.
+
+**Phản hồi `202`:** header `Location: /v1/jobs/{job_id}`, thân là `JobView`:
+
+| Trường | Nghĩa |
+|---|---|
+| `job_id`, `kind`, `case_id`, `submitted_by`, `payload` | `kind` là `statement_upload`, `payload` là `expected_version`, `period_start`, `period_end` |
+| `status` | `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED` |
+| `attempts`, `max_attempts` | Số lần đã chạy, tối đa `RIVERBANK_JOB_MAX_ATTEMPTS` (mặc định 3) |
+| `result` | Khi `SUCCEEDED`: `case_id`, `status`, `version` mới của hồ sơ |
+| `error` | `code`, `status`, `details`, cùng mã lỗi như 4.8a |
+| `created_at`, `updated_at` | ISO 8601 |
+
+**Cách chạy:** job và file nằm trong bảng `jobs` của Postgres (memory khi chạy local). Worker là một thread trong tiến trình API, bật bằng `RIVERBANK_JOB_WORKER=on` (mặc định bật khi `RIVERBANK_ENV=prod`). Worker nhận job bằng `FOR UPDATE SKIP LOCKED`, nên chạy nhiều tiến trình không nhận trùng. Mỗi lần nhận có hạn `RIVERBANK_JOB_LEASE_SECONDS` (mặc định 600). Tiến trình chết giữa chừng thì hết hạn xong job được nhận lại. Lỗi `5xx` (model, Jev, S3 lỗi) được thử lại. Lỗi `4xx` (file không đọc được, hồ sơ đã đổi version) dừng luôn. Job xong thì xóa file khỏi bảng. Chạy lại một job đã ghi sao kê không ghi lần hai, E8 có `job_id` để đối chiếu.
+
+### 4.8d `GET /v1/jobs/{job_id}`, Xem trạng thái job
+
+Seller của hồ sơ hoặc người thẩm định. Phản hồi `200`: `JobView`. Không có thì `404 JOB_NOT_FOUND`. FE gọi lại mỗi 2 giây đến khi `SUCCEEDED` hoặc `FAILED`, rồi tải lại hồ sơ.
+
+```bash
+curl -X POST $API/v1/cases/$C/statements/upload-jobs -H "Authorization: Bearer $T" \
+  -F expected_version=1 -F period_start=2026-09-28 -F period_end=2026-10-12 -F file=@saoke.pdf
+curl $API/v1/jobs/$J -H "Authorization: Bearer $T"
+```
+
 ---
 
 ### 4.8b `POST /v1/cases/{case_id}/cic-inquiry`, Người duyệt tra CIC thủ công
@@ -469,7 +516,7 @@ Dùng khi Jev gate từ chối hoặc lỗi nên hệ thống chưa tra CIC (`ci
 
 **Header:** vai trò `underwriter`.
 
-**Điều kiện:** hồ sơ `ESCALATED`, chưa có quyết định, lần chạy cuối có `cic.source = not_queried`. Không thỏa thì `409 CIC_INQUIRY_NOT_ALLOWED`.
+**Điều kiện:** hồ sơ `ESCALATED`, chưa có quyết định, lần chạy cuối có `cic.source` là `not_queried` hoặc `deferred_until_statement`. Không thỏa thì `409 CIC_INQUIRY_NOT_ALLOWED`.
 
 **Thân yêu cầu** (`CicInquiry`):
 
@@ -556,12 +603,12 @@ Ghi quyết định thành công thì hệ thống tạo `handoff` ở trạng t
 
 1. Đặt `status = SENDING`, tăng `attempts`, giữ khóa 60 giây. Đang có khóa thì `409 HANDOFF_IN_PROGRESS`.
 2. Băm lại gói. Lệch thì `409 HANDOFF_HASH_MISMATCH`.
-3. Gửi LOS với `idempotency_key` cố định của gói. Bản demo dùng `MockLosAdapter`, trả `MOCK-<key>`.
+3. Gửi LOS với `idempotency_key` cố định của gói. `InternalLosAdapter` trả mã `LOS-<key>`.
 4. Ghi `SUCCEEDED` kèm `los_reference`, hoặc `FAILED` kèm `last_error` (`LOS_UNAVAILABLE`, `LOS_INVALID_RESPONSE`). Quyết định của người không bị đổi khi gửi lỗi (FR-36). Gọi lại đầu này để thử lại.
 
 Đã `SUCCEEDED` thì gọi lại trả kết quả cũ, không gửi lần hai.
 
-**Gói gửi LOS** (`handoff.payload`): `case_id`, `seller_id`, `shop_id`, `decision`, `risk`, `cic`, `policy`, `document` (tờ trình đã qua), `evidence_ids`, `demo`. Gói `REJECT` có `final_amount = null` (FR-35).
+**Gói gửi LOS** (`handoff.payload`): `case_id`, `seller_id`, `shop_id`, `decision`, `risk`, `cic`, `policy`, `document` (tờ trình đã qua), `evidence_ids`. Gói `REJECT` có `final_amount = null` (FR-35).
 
 **Phản hồi `200`** (`HandoffResponse`): `CaseSummary` thêm `handoff` không kèm `payload`:
 
@@ -572,7 +619,7 @@ Ghi quyết định thành công thì hệ thống tạo `handoff` ở trạng t
   "payload_hash": "...",
   "attempts": 1,
   "last_error": null,
-  "los_reference": "MOCK-...",
+  "los_reference": "LOS-...",
   "lease_until": null
 }
 ```
@@ -619,7 +666,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `INVALID_PAYOUT_HISTORY` | 422 | Tạo hồ sơ | Tuần không liên tục, chưa kết thúc, hoặc số âm |
 | `UNAPPROVED_FEATURE_FIELDS` | 422 | Tạo hồ sơ | Snapshot có trường ngoài danh sách cho phép |
 | `PAYOUT_PROVENANCE_REQUIRED` | 422 | Tạo hồ sơ | Thiếu nguồn gốc payout |
-| `SIMULATION_MUST_BE_LABELLED` | 422 | Tạo hồ sơ | Dữ liệu synthetic không gắn nhãn mô phỏng |
+| `ESTIMATE_MUST_BE_LABELLED` | 422 | Tạo hồ sơ | Nguồn `addlivetag` hoặc `seller_book` không gắn `payout_origin = estimated` |
 | `INVALID_FEATURE_SNAPSHOT` | 422 | Tạo hồ sơ | Thiếu mức dữ liệu sàn hỗ trợ hoặc lời công bố nguồn, hoặc hồ sơ shop sai kiểu, ngoài khoảng |
 | `UNSUPPORTED_SHOPEE_SOURCE` | 422 | Tạo hồ sơ | Nguồn Shopee chưa hỗ trợ |
 | `INVALID_RISK_RESULT` | 422 | Tạo hồ sơ | PD ngoài khoảng, thiếu yếu tố, hoặc báo thiếu dữ liệu mà vẫn có PD |
@@ -627,17 +674,22 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `STATEMENT_PERIOD_NOT_COVERED` | 422 | Sao kê | Kỳ không trùng trọn các tuần payout |
 | `STATEMENT_EMPTY`, `STATEMENT_UNREADABLE`, `STATEMENT_LINES_UNREADABLE`, `STATEMENT_TOO_MANY_PAGES` | 422 | Nộp sao kê | File rỗng, không đọc được bảng, dòng tiền sàn thiếu ngày hoặc số, quá 10 trang |
 | `STATEMENT_TOO_LARGE` | 413 | Nộp sao kê | File trên 10 MB |
-| `STATEMENT_FORMAT_UNSUPPORTED` | 415 | Nộp sao kê | Không phải CSV, PDF, PNG, JPEG |
+| `STATEMENT_FORMAT_UNSUPPORTED` | 415 | Nộp sao kê | Không phải CSV, XLSX, PDF, PNG, JPEG |
 | `STATEMENT_OCR_UNAVAILABLE`, `STATEMENT_CLASSIFIER_UNAVAILABLE` | 503 | Nộp sao kê | Model đọc ảnh hoặc Jev lỗi |
+| `STATEMENT_IMAGE_UNREADABLE` | 422 | Nộp sao kê | Ảnh hỏng hoặc không mở được |
+| `DOCUMENT_STORE_UNAVAILABLE`, `DOCUMENT_STORE_NOT_CONFIGURED` | 503 | Nộp sao kê | S3 lỗi hoặc thiếu `S3_BUCKET` khi bật lưu file gốc |
+| `JOB_NOT_FOUND` | 404 | `/v1/jobs/{job_id}` | Không có job |
+| `JOB_LEASE_EXPIRED`, `JOB_HANDLER_ERROR`, `JOB_KIND_UNKNOWN` | 500 | Trong `error` của job | Worker chết quá số lần, lỗi không lường trước, loại job lạ |
 | `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
 | `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
-| `WORKFLOW_DEMO_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
-| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE` | 503 | `/v1/*` | Cấu hình sai |
+| `WORKFLOW_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
+| `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE`, `INVALID_WORKFLOW_CIC_SOURCE`, `CIC_PROFILES_INVALID` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
 | `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |
 | `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
 | `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã demo |
 | `TOO_MANY_ATTEMPTS` | 429 | `/v1/auth/token` | Sai mã quá `RIVERBANK_AUTH_MAX_FAILURES` lần (mặc định 5) trong `RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS` giây (mặc định 300) từ một IP |
+| `RATE_LIMITED` | 429 | Tạo hồ sơ, nộp sao kê (cả 2 đầu), Copilot extract-plan và ask | Một người gọi vượt ngưỡng trong cửa sổ trượt. Header `Retry-After` và `details[0].retry_after_seconds` cho biết số giây phải chờ. Ngưỡng dạng `số lần/giây`: `RIVERBANK_RATE_LIMIT_CASE_CREATE` (mặc định `30/3600`), `RIVERBANK_RATE_LIMIT_STATEMENT_UPLOAD` (`20/3600`, hai đầu nộp sao kê dùng chung), `RIVERBANK_RATE_LIMIT_COPILOT` (`20/60`). `0/...` là tắt. Đếm theo từng tiến trình, server chạy 2 tiến trình nên ngưỡng thật tối đa gấp đôi |
 | `SELLER_REQUIRED` | 403 | `/v1/me/cases` | Không phải vai trò seller |
 | `EVAL_REPORT_MISSING` | 503 | `/v1/studio/eval-metrics` | Thiếu `api/studio/eval_report.json` |
 | `TOKEN_LOGIN_DISABLED` | 503 | `/v1/auth/token` | Không ở chế độ `token` |
@@ -647,9 +699,9 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 
 ---
 
-## 6. API trong kế hoạch
+## 6. Copilot và API trong kế hoạch
 
-Các đầu dưới đây là kế hoạch, chưa có code. Hợp đồng dưới đây theo quy ước mục 1. Đầu nào có gọi model phải đi đúng chỗ ở bảng "Chỗ nào được gọi model" trong `KNOWLEDGE_BASE.md`.
+Mục 6.1, 6.2, 6.3 đã có code. Từ 6.4 trở đi là kế hoạch, chưa có code. Hợp đồng dưới đây theo quy ước mục 1. Đầu nào có gọi model phải đi đúng chỗ ở bảng "Chỗ nào được gọi model" trong `KNOWLEDGE_BASE.md`.
 
 ### 6.1 `POST /v1/copilot/extract-plan`
 
@@ -657,6 +709,12 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
 
 ```json
 { "seller_id": "demo-b", "shop_id": "demo-b", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
+```
+
+Chat nhiều lượt: lượt sau gửi thêm `known` là `draft` của lượt trước. Câu mới chỉ cần nói phần còn thiếu hoặc phần muốn sửa.
+
+```json
+{ "seller_id": "demo-b", "shop_id": "demo-b", "message": "à xin 120tr thôi", "known": { "lot_value": 200000000, "cash_on_hand": 120000000, "supplier_schedule": [{ "week": 0, "amount": 200000000 }], "sell_weeks": 6, "requested_amount": 150000000 } }
 ```
 
 ```json
@@ -674,6 +732,7 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
   "missing_fields": [],
   "issues": [],
   "clarifying_question": null,
+  "reply": "Mình đã ghi giá trị lô hàng 200.000.000 đ, ... Đủ thông tin rồi, bạn bấm Gửi để hệ thống tính.",
   "sanitized_message": "...",
   "prompt_version": "copilot-extract@<sha8>",
   "model": "..."
@@ -683,27 +742,47 @@ Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1
 - Che SĐT, CCCD, số tài khoản trên `message` trước khi gọi Jev hoặc LLM (FR-03).
 - Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`. `details` có `reason` (`PROMPT_INJECTION` hoặc `PROHIBITED_ATTRIBUTE`), `field: "message"`, `message`, `flag`, `probability`, `threshold`. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
 - Prompt `copilot-extract` trả JSON theo schema cố định. Code kiểm lại: số tiền và số tuần phải có trong câu đã che, lịch xưởng phải cộng đúng `lot_value`. Sai thì trường đó về `null`, vào `missing_fields`, kèm `clarifying_question`.
+- Giá trị trong `known` chỉ được giữ khi câu mới không nói khác. Số mới mà không có trong câu thì bỏ, quay về số trong `known`. Lịch xưởng cũ chỉ giữ khi vẫn cộng đúng `lot_value` mới.
+- `reply` là câu trả lời để hiện trong khung chat, do code ghép từ `draft`, `clarifying_question`, `issues`. Không phải chữ LLM tự viết, nên số trong `reply` luôn khớp `draft`.
 - Đủ năm trường thì code chạy validator của `Plan`. Lỗi (ví dụ xin quá 300 triệu) nằm ở `issues` dạng `{field, code}`, số seller nói vẫn giữ nguyên.
 - `ready = true` thì client gửi nguyên `draft` vào `POST /v1/cases`. LLM lỗi hoặc trả sai dạng thì `503 EXTRACTION_UNAVAILABLE`.
 
 ### 6.2 `POST /v1/cases/{case_id}/copilot/ask`
 
-Seller hỏi lại trên số đã khóa của hồ sơ.
+Seller hỏi lại trên số đã khóa của hồ sơ. Chỉ seller chủ hồ sơ gọi được, seller khác `403`. Server tự lưu mọi lượt hỏi đáp theo hồ sơ, FE không gửi lịch sử. Body có trường lạ (ví dụ `history`) bị `422`.
 
 ```json
 { "question": "Sao chỉ được vay ít hơn số mình xin?" }
 ```
 
 ```json
-{ "answer": [ { "text": "...", "evidence_id": "..." } ] }
+{
+  "case_id": "...",
+  "turn_id": "...",
+  "question": "Sao chỉ được vay ít hơn số mình xin?",
+  "status": "PENDING_REVIEW",
+  "answer": "Hệ thống đề xuất 90.000.000 đ trong 8 tuần, mỗi tuần trừ 11.250.000 đ từ payout.",
+  "figures_used": ["amount_proposed", "tenor_weeks", "weekly_deduction"],
+  "source": "llm",
+  "guard_codes": [],
+  "prompt_version": "copilot-qa@<sha8>",
+  "model": "...",
+  "asked_at": "2026-10-25T14:30:00+00:00"
+}
 ```
 
-- Prompt `copilot-qa`. Đầu vào chỉ là payload bằng chứng của lần chạy cuối.
-- Câu trả lời đi qua cùng bộ kiểm tra số và từ cấm như tờ trình. Không nêu lãi và phí khi chưa có biểu phí ngân hàng (FR-27).
+- Che PII trên câu hỏi, rồi mới lưu và gửi đi. `question` trả về là bản đã che.
+- 6 lượt gần nhất của hồ sơ được gửi kèm cho LLM để hiểu câu hỏi nối tiếp. Lượt bị Jev chặn không được lưu.
+- Câu hỏi đã che qua Jev `jev-input-guard` như 6.1 (`422 BLOCKED_INPUT`, `503 GUARD_UNAVAILABLE`).
+- Prompt `copilot-qa` chỉ thấy bộ số an toàn cho seller của hồ sơ: trạng thái, mã lý do, các câu giải thích seller đã qua kiểm tra, khoảng tuần cần nộp sao kê (khi R05 fail), số trong kế hoạch, gap, số đề xuất, kỳ hạn, khoản trừ mỗi tuần, sao kê khớp hay không, số chốt, mã giải ngân. Không có PD, không có CIC, không có ghi chú của người thẩm định.
+- LLM phải kê `figures_used`. Code kiểm: tên số phải có giá trị, mọi con số trong câu phải nằm trong các số đã kê (viết đủ hoặc theo triệu), qua `OutputGuard` (từ cấm, câu nói ngược trạng thái). Không nêu lãi và phí khi chưa có biểu phí ngân hàng (FR-27).
+- LLM lỗi hoặc câu trả lời vi phạm thì không lỗi `503`: trả câu mẫu do code ghép, `source = "template"`, `guard_codes` ghi lý do, `model = null`. Câu mẫu cũng nói bước tiếp theo khi cần sao kê.
+
+`GET /v1/cases/{case_id}/copilot/history?limit=50` trả `{ "case_id", "turns": [...] }`, mỗi phần tử như phản hồi `ask` trừ `case_id`, cũ đến mới, `limit` từ 1 đến 100. Seller chỉ xem hồ sơ của mình, underwriter xem mọi hồ sơ. Lưu ở bảng `copilot_turns` (migration `002`), không sửa, không xóa được. Chạy `memory` thì mất khi API khởi động lại.
 
 ### 6.3 Nộp file sao kê
 
-Đã có ở mục 4.8a. Bản đầu nhận file thẳng qua API, không qua S3 presign, và không lưu file gốc. Khi cần lưu bản gốc theo yêu cầu ngân hàng thì thêm presign S3 và giữ nguyên phần đọc, phân loại, đối chiếu.
+Đã có ở mục 4.8a, bản chạy nền ở 4.8c. File vẫn đi thẳng qua API, giới hạn 10 MB. Lưu bản gốc lên S3 bật bằng `RIVERBANK_DOCUMENT_STORE=s3`. Chưa có S3 presign cho file lớn.
 
 ### 6.4 `POST /v1/webhooks/los-status`
 
@@ -792,4 +871,4 @@ Ngày 23/10/2026 team chốt: số và rule theo code đang chạy. `policy/poli
 | Cờ fast-track | `is_fast_track`, hàng đợi lọc được | Chưa có |
 | Sao kê | Seller upload file lên S3, mục 6.3 | Người thẩm định nhập tổng |
 | Tiền ngoài sàn | `R06_OFF_PLATFORM_NOT_EVIDENCE` | Chưa phân biệt |
-| Copilot, Monitor, Studio | Mục 6 | Chưa có |
+| Monitor | Mục 6 | Chưa có |
