@@ -1,4 +1,3 @@
-import re
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
@@ -8,6 +7,7 @@ from uuid import uuid4
 
 from policy import RISK_RULE_IDS, PolicyInput, default_engine
 from services.cashflow import CashFlowEngine, CashFlowInput
+from services.guardrail import note_block_details
 from services.statements.reader import StatementReader
 from services.statements.storage import DocumentStore, NoDocumentStore
 
@@ -32,16 +32,6 @@ POLICY_VERSION = "riverbank-r01-r10-v4"
 NOT_QUERIED = "not_queried"
 DEFERRED = "deferred_until_statement"
 CIC_RULE_IDS = frozenset({"R06", "R07"})
-
-_UNSAFE_NOTE = re.compile(
-    r"(?:ignore|bỏ\s+qua).*(?:policy|instruction|chính\s+sách|quy\s+tắc)|"
-    r"(?:force|ép|tự\s+động)\s*(?:approve|duyệt)|"
-    r"(?<!\d)(?:\+?84|0)[\d .-]{8,13}(?!\d)|\b\d{12}\b|"
-    r"(?:stk|tài\s*khoản|account)\D{0,12}\d{8,19}|"
-    r"gender|religion|ethnicity|health|giới\s*tính|tôn\s*giáo|dân\s*tộc|sức\s*khỏe",
-    re.IGNORECASE,
-)
-
 
 def _valid_risk(risk: dict) -> bool:
     if risk.get("missing_fields"):
@@ -131,8 +121,9 @@ class UnderwritingService:
         )
 
     def create(self, plan: Plan, key: str) -> Case:
-        if _UNSAFE_NOTE.search(plan.note):
-            raise WorkflowError("BLOCKED_INPUT", 422)
+        blocked = note_block_details(plan.note)
+        if blocked:
+            raise WorkflowError("BLOCKED_INPUT", 422, blocked)
         request_hash = digest(plan.model_dump())
         existing = self.repository.find_request(plan.seller_id, key, request_hash)
         if existing:

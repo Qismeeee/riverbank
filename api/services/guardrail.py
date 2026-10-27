@@ -62,6 +62,72 @@ INPUT_GUARD_QUESTIONS = {
 }
 
 
+BLOCK_MESSAGES = {
+    "PROMPT_INJECTION": (
+        "Câu này yêu cầu đổi quy tắc hoặc ép duyệt. Hãy chỉ mô tả kế hoạch lô hàng."
+    ),
+    "PROHIBITED_ATTRIBUTE": (
+        "Câu này có thuộc tính không được đưa vào thẩm định. "
+        "Hãy bỏ giới tính, tôn giáo, dân tộc hoặc tình trạng sức khỏe."
+    ),
+    "PHONE": "Ghi chú còn số điện thoại. Hãy xóa số đó rồi gửi lại.",
+    "NATIONAL_ID": "Ghi chú còn dãy 12 chữ số. Hãy xóa số căn cước rồi gửi lại.",
+    "ACCOUNT": "Ghi chú còn số tài khoản. Hãy xóa số đó rồi gửi lại.",
+}
+
+FLAG_REASONS = {
+    "prompt_injection_attempt": "PROMPT_INJECTION",
+    "contains_prohibited_demographic_attr": "PROHIBITED_ATTRIBUTE",
+}
+
+NOTE_RULES = (
+    ("PHONE", re.compile(r"(?<!\d)(?:\+?84|0)[\d .-]{8,13}(?!\d)")),
+    ("NATIONAL_ID", re.compile(r"\b\d{12}\b")),
+    ("ACCOUNT", re.compile(r"(?:stk|tài\s*khoản|account)\D{0,12}\d{8,19}", re.I)),
+    (
+        "PROMPT_INJECTION",
+        re.compile(
+            r"(?:ignore|bỏ\s+qua).*(?:policy|instruction|chính\s+sách|quy\s+tắc)|"
+            r"(?:force|ép|tự\s+động)\s*(?:approve|duyệt)",
+            re.I,
+        ),
+    ),
+    (
+        "PROHIBITED_ATTRIBUTE",
+        re.compile(
+            r"gender|religion|ethnicity|health|giới\s*tính|tôn\s*giáo|dân\s*tộc|sức\s*khỏe",
+            re.I,
+        ),
+    ),
+)
+
+
+def block_detail(reason: str, field: str, **extra) -> dict:
+    return {"reason": reason, "field": field, "message": BLOCK_MESSAGES[reason], **extra}
+
+
+def jev_block_details(flags: dict[str, float], threshold: float) -> list[dict]:
+    return [
+        block_detail(
+            FLAG_REASONS[flag],
+            "message",
+            flag=flag,
+            probability=probability,
+            threshold=threshold,
+        )
+        for flag, probability in flags.items()
+        if probability >= threshold and flag in FLAG_REASONS
+    ]
+
+
+def note_block_details(text: str) -> list[dict]:
+    return [
+        block_detail(reason, "note")
+        for reason, pattern in NOTE_RULES
+        if pattern.search(text)
+    ]
+
+
 class GuardUnavailable(Exception):
     pass
 
