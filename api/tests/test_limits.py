@@ -39,7 +39,9 @@ def test_create_case_returns_429_with_retry_after(client, monkeypatch):  # noqa:
     assert second.status_code == 429
     assert second.json()["detail"]["code"] == "RATE_LIMITED"
     assert 1 <= int(second.headers["Retry-After"]) <= 60
-    other = client.post("/v1/cases", json=plan("demo-a"), headers=seller_headers("demo-a", key="c"))
+    other = client.post(
+        "/v1/cases", json=plan("thuha.closet"), headers=seller_headers("thuha.closet", key="c")
+    )
     assert other.status_code == 201, other.text
 
 

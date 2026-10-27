@@ -132,7 +132,9 @@ def test_missing_profile_file_is_a_config_error(tmp_path):
 )
 def test_debt_group_drives_r06(tmp_path, group, status, r06):
     book = CicProfileBook.load(
-        book_file(tmp_path, {"demo-b": {"facilities": [facility(group=group, history=None)]}})
+        book_file(
+            tmp_path, {"minhchau.shop": {"facilities": [facility(group=group, history=None)]}}
+        )
     )
     service = service_with(book)
     case = service.create(Plan(**plan()), f"cic-{group}")
@@ -144,7 +146,7 @@ def test_debt_group_drives_r06(tmp_path, group, status, r06):
 
 
 def test_unknown_cic_source_is_rejected(monkeypatch):
-    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "enabled")
     monkeypatch.setattr(routes.config, "WORKFLOW_CIC_SOURCE", "bureau")
     routes.get_service.cache_clear()
     try:

@@ -1339,7 +1339,7 @@ class Readme:
             "",
             s["story"],
             "",
-            "## Đăng nhập demo",
+            "## Đăng nhập",
             "",
             f"Seller: `{self.d.seller.seller_id}`. Ngày hồ sơ: {dmy(w.now.date())}. "
             "Ngày khác thì chạy lại `make dossiers DATE=yyyy-mm-dd` "
@@ -1375,9 +1375,9 @@ class Readme:
                 ]
         lines += [
             "",
-            "## Kịch bản demo",
+            "## Kịch bản trình bày",
             "",
-            *[f"{n}. {x}" for n, x in enumerate(s["demo_steps"], 1)],
+            *[f"{n}. {x}" for n, x in enumerate(s["steps"], 1)],
             "",
             "## Tài liệu",
             "",

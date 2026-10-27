@@ -54,6 +54,6 @@ def test_seller_lists_only_own_cases(client):  # noqa: F811
     assert {c["case_id"] for c in items} == {first, second}
     keys = [(c["created_at"], c["case_id"]) for c in items]
     assert keys == sorted(keys, reverse=True)
-    assert client.get("/v1/me/cases", headers=seller_headers("demo-a")).json()["items"] == []
+    assert client.get("/v1/me/cases", headers=seller_headers("thuha.closet")).json()["items"] == []
     response = client.get("/v1/me/cases", headers=BANK)
     assert response.json()["detail"]["code"] == "SELLER_REQUIRED"

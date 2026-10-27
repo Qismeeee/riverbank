@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from main import app
 from routers import auth
 from routers import underwriting as routes
+from services.directory import UserDirectory
 from services.underwriting.models import WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import BaselineRiskModel
@@ -14,13 +15,14 @@ from services.underwriting.sources import FixedCicSource, InternalLosAdapter, se
 from tests.test_underwriting import NOW, plan
 
 KEY = "k" * 32
-PASSCODE = "demo-pass"
+PASSCODE = "access-pass"
+REVIEWER = "tran.ngoclan"
 
 
 @pytest.fixture
 def token_mode(monkeypatch, service):
     monkeypatch.setattr(auth.config, "ENV", "prod")
-    monkeypatch.setattr(auth.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(auth.config, "WORKFLOW_MODE", "enabled")
     monkeypatch.setattr(auth.config, "WORKFLOW_IDENTITY", "token")
     monkeypatch.setattr(auth.config, "AUTH_SIGNING_KEY", KEY)
     monkeypatch.setattr(auth.config, "ACCESS_PASSCODE", PASSCODE)
@@ -59,43 +61,61 @@ def code(response):
 
 
 def test_token_login_drives_seller_and_underwriter_flow(token_mode):
-    response = login(token_mode, "demo-b", "seller")
+    response = login(token_mode, "minhchau.shop", "seller")
     assert response.status_code == 200
     body = response.json()
-    assert body["token_type"] == "bearer" and body["subject"] == "demo-b"
-    seller = bearer(token_mode, "demo-b", "seller", **{"Idempotency-Key": "k1"})
+    assert body["token_type"] == "bearer" and body["subject"] == "minhchau.shop"
+    seller = bearer(token_mode, "minhchau.shop", "seller", **{"Idempotency-Key": "k1"})
     assert token_mode.get("/v1/auth/me", headers=seller).json() == {
-        "subject": "demo-b",
+        "subject": "minhchau.shop",
         "role": "seller",
+        "full_name": "Lê Minh Châu",
+        "display_name": "Hộ kinh doanh Minh Châu Shop",
     }
     created = token_mode.post("/v1/cases", json=plan(), headers=seller)
     assert created.status_code == 201, created.text
-    bank = bearer(token_mode, "uw-1", "underwriter")
+    bank = bearer(token_mode, REVIEWER, "underwriter")
     queue = token_mode.get("/v1/queue", headers=bank).json()["items"]
     assert [c["case_id"] for c in queue] == [created.json()["case_id"]]
     assert code(token_mode.get("/v1/queue", headers=seller)) == (403, "UNDERWRITER_REQUIRED")
 
 
 def test_seller_token_cannot_act_for_another_seller(token_mode):
-    headers = bearer(token_mode, "demo-a", "seller", **{"Idempotency-Key": "k1"})
-    response = token_mode.post("/v1/cases", json=plan("demo-b"), headers=headers)
+    headers = bearer(token_mode, "thuha.closet", "seller", **{"Idempotency-Key": "k1"})
+    response = token_mode.post("/v1/cases", json=plan("minhchau.shop"), headers=headers)
     assert code(response) == (403, "SELLER_SCOPE_MISMATCH")
 
 
 def test_wrong_passcode_and_spoofed_headers_are_rejected(token_mode):
-    assert code(login(token_mode, "uw-1", "underwriter", "nope")) == (401, "INVALID_CREDENTIALS")
-    spoof = {"X-Actor-ID": "uw-1", "X-Actor-Role": "underwriter"}
+    assert code(login(token_mode, REVIEWER, "underwriter", "nope")) == (401, "INVALID_CREDENTIALS")
+    spoof = {"X-Actor-ID": REVIEWER, "X-Actor-Role": "underwriter"}
     assert code(token_mode.get("/v1/queue", headers=spoof)) == (401, "AUTHENTICATION_REQUIRED")
 
 
+@pytest.mark.parametrize(
+    "subject, role",
+    [("stranger", "seller"), ("minhchau.shop", "underwriter"), (REVIEWER, "seller")],
+)
+def test_login_requires_user_in_directory_with_matching_role(token_mode, subject, role):
+    assert code(login(token_mode, subject, role)) == (401, "INVALID_CREDENTIALS")
+
+
+def test_token_of_user_removed_from_directory_is_rejected(token_mode, monkeypatch):
+    headers = bearer(token_mode, "minhchau.shop", "seller")
+    monkeypatch.setattr(auth, "user_directory", lambda: UserDirectory([]))
+    assert code(token_mode.get("/v1/auth/me", headers=headers)) == (401, "INVALID_TOKEN")
+
+
 def test_tampered_and_expired_tokens_are_rejected(token_mode):
-    token = login(token_mode, "demo-b", "seller").json()["access_token"]
+    token = login(token_mode, "minhchau.shop", "seller").json()["access_token"]
     header, payload, signature = token.split(".")
     forged = auth._b64(auth._unb64(payload).replace(b"seller", b"underwriter"))
     for bad in (f"{header}.{forged}.{signature}", "abc", f"{token}x"):
         response = token_mode.get("/v1/auth/me", headers={"Authorization": f"Bearer {bad}"})
         assert code(response) == (401, "INVALID_TOKEN")
-    old, _ = auth.signer().issue(auth.Actor("demo-b", "seller"), utc_now() - timedelta(days=1))
+    old, _ = auth.signer().issue(
+        auth.Actor("minhchau.shop", "seller"), utc_now() - timedelta(days=1)
+    )
     response = token_mode.get("/v1/auth/me", headers={"Authorization": f"Bearer {old}"})
     assert code(response) == (401, "TOKEN_EXPIRED")
 
@@ -111,26 +131,26 @@ def test_tampered_and_expired_tokens_are_rejected(token_mode):
 def test_token_login_requires_configuration(token_mode, monkeypatch, changes, expected):
     for name, value in changes.items():
         monkeypatch.setattr(auth.config, name, value)
-    assert code(login(token_mode, "demo-b", "seller")) == expected
+    assert code(login(token_mode, "minhchau.shop", "seller")) == expected
 
 
 def test_header_identity_is_local_only(monkeypatch):
-    monkeypatch.setattr(auth.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(auth.config, "WORKFLOW_MODE", "enabled")
     monkeypatch.setattr(auth.config, "WORKFLOW_IDENTITY", "header")
     monkeypatch.setattr(auth.config, "ENV", "prod")
     with pytest.raises(WorkflowError) as error:
-        auth.get_actor(None, "uw-1", "underwriter")
+        auth.get_actor(None, REVIEWER, "underwriter")
     assert error.value.code == "VERIFIED_IDENTITY_ADAPTER_REQUIRED"
     monkeypatch.setattr(auth.config, "WORKFLOW_IDENTITY", "unknown")
     with pytest.raises(WorkflowError) as error:
-        auth.get_actor(None, "uw-1", "underwriter")
+        auth.get_actor(None, REVIEWER, "underwriter")
     assert error.value.code == "INVALID_WORKFLOW_IDENTITY"
 
 
 def test_repeated_wrong_passcodes_are_throttled(token_mode):
     for _ in range(3):
-        assert code(login(token_mode, "uw-1", "underwriter", "nope"))[0] == 401
-    assert code(login(token_mode, "uw-1", "underwriter")) == (429, "TOO_MANY_ATTEMPTS")
+        assert code(login(token_mode, REVIEWER, "underwriter", "nope"))[0] == 401
+    assert code(login(token_mode, REVIEWER, "underwriter")) == (429, "TOO_MANY_ATTEMPTS")
 
 
 def test_throttle_window_and_reset():
@@ -154,6 +174,6 @@ def test_openapi_exposes_bearer_scheme_for_authorize_button(token_mode):
 
 
 def test_lowercase_bearer_scheme_is_accepted(token_mode):
-    token = login(token_mode, "uw-1", "underwriter").json()["access_token"]
+    token = login(token_mode, REVIEWER, "underwriter").json()["access_token"]
     response = token_mode.get("/v1/auth/me", headers={"Authorization": f"bearer {token}"})
     assert response.status_code == 200

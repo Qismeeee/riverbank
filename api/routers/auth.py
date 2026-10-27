@@ -12,11 +12,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
+from services.directory import ROLES, UserRecord, user_directory
 from services.ratelimit import SlidingWindow
 from services.underwriting.models import WorkflowError
 from services.underwriting.service import utc_now
 
-ROLES = ("seller", "underwriter")
 MIN_SIGNING_KEY_BYTES = 32
 
 
@@ -84,7 +84,10 @@ class TokenSigner:
             raise WorkflowError("INVALID_TOKEN", 401) from None
         if expires <= now.timestamp():
             raise WorkflowError("TOKEN_EXPIRED", 401)
-        return _actor(claims.get("sub"), claims.get("role"))
+        actor = _actor(claims.get("sub"), claims.get("role"))
+        if user_directory().find(actor.subject, actor.role) is None:
+            raise WorkflowError("INVALID_TOKEN", 401)
+        return actor
 
 
 def signer() -> TokenSigner:
@@ -124,7 +127,7 @@ def get_actor(
     actor_id: Annotated[str | None, Header(alias="X-Actor-ID")] = None,
     actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
 ) -> Actor:
-    if config.WORKFLOW_MODE != "demo":
+    if config.WORKFLOW_MODE != "enabled":
         raise WorkflowError("WORKFLOW_DISABLED", 503)
     provider = IDENTITY_PROVIDERS.get(config.WORKFLOW_IDENTITY)
     if provider is None:
@@ -165,6 +168,17 @@ class TokenRequest(BaseModel):
 class ActorResponse(BaseModel):
     subject: str
     role: str
+    full_name: str | None
+    display_name: str | None
+
+
+def actor_body(actor: Actor, user: UserRecord | None) -> dict:
+    return {
+        "subject": actor.subject,
+        "role": actor.role,
+        "full_name": user.full_name if user else None,
+        "display_name": user.display_name if user else None,
+    }
 
 
 class TokenResponse(ActorResponse):
@@ -197,21 +211,22 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 @router.post("/token", response_model=TokenResponse)
 def issue_token(request: TokenRequest, http: Request) -> dict:
-    if config.WORKFLOW_MODE != "demo" or config.WORKFLOW_IDENTITY != "token":
+    if config.WORKFLOW_MODE != "enabled" or config.WORKFLOW_IDENTITY != "token":
         raise WorkflowError("TOKEN_LOGIN_DISABLED", 503)
     if not config.ACCESS_PASSCODE:
         raise WorkflowError("AUTH_NOT_CONFIGURED", 503)
     key, now = client_key(http), utc_now()
     throttle.check(key, now)
-    if not hmac.compare_digest(request.passcode.encode(), config.ACCESS_PASSCODE.encode()):
+    user = user_directory().find(request.subject, request.role)
+    valid = hmac.compare_digest(request.passcode.encode(), config.ACCESS_PASSCODE.encode())
+    if not valid or user is None:
         throttle.fail(key, now)
         raise WorkflowError("INVALID_CREDENTIALS", 401)
     throttle.reset(key)
-    actor = Actor(request.subject, request.role)
+    actor = Actor(user.subject, user.role)
     token, expires = signer().issue(actor, utc_now())
     return {
-        "subject": actor.subject,
-        "role": actor.role,
+        **actor_body(actor, user),
         "access_token": token,
         "expires_at": expires,
     }
@@ -219,4 +234,4 @@ def issue_token(request: TokenRequest, http: Request) -> dict:
 
 @router.get("/me", response_model=ActorResponse)
 def me(actor: Principal) -> dict:
-    return {"subject": actor.subject, "role": actor.role}
+    return actor_body(actor, user_directory().find(actor.subject, actor.role))

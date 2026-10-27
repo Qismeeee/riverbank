@@ -1,4 +1,4 @@
-# Tham số bản demo của Riverbank.
+# Tham số chính sách của Riverbank.
 # File này là bản chép của giá trị mặc định trong code đang chạy trên prod:
 #   CashFlowConfig  api/services/cashflow.py
 #   PolicyConfig    api/policy/engine.py
@@ -34,7 +34,7 @@ cashflow:
   weekly_deduction_rounding: ceil_vnd
 
 policy:
-  # R01. Hạn mức tuyệt đối của bộ demo, so với số đề xuất.
+  # R01. Hạn mức tuyệt đối, so với số đề xuất.
   max_amount_vnd: 300000000
   # R02. Fail khi shop_age_months < min.
   min_shop_age_months: 6

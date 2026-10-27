@@ -1,4 +1,4 @@
-# Chính sách tín dụng Riverbank (bản demo)
+# Chính sách tín dụng Riverbank
 
 Bản này mô tả đúng bộ rule đang chạy trên prod: `api/policy/rules.py` (`policy_version = riverbank-r01-r10-v4`). Ngưỡng ở `parameters.yaml`, ví dụ tính tay ở `worked-examples.md`. Bảng tóm tắt cho dev nằm ở `api/policy/policy.md`.
 
@@ -104,7 +104,7 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 
 ### R09 Trần cho vay điện tử
 
-- Cứng. Áp cho người vay cá nhân (`borrower_is_individual`, bản demo luôn là cá nhân).
+- Cứng. Áp cho người vay cá nhân (`borrower_is_individual`, hiện chỉ nhận người vay cá nhân).
 - Đạt khi `amount <= e_lending_cap_vnd` (100.000.000), theo Thông tư 06/2023/TT-NHNN.
 - Pháp chế còn phải xác nhận cách áp khi đứng tên hộ kinh doanh.
 - Bằng chứng E5.

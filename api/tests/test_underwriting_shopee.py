@@ -33,10 +33,10 @@ class FakeShopeeSource(ShopeeSource):
 
 def test_shopee_adapter_uses_release_time_and_completed_weeks():
     source = FakeShopeeSource()
-    consent = seller_book_source(NOW).records[("demo-b", "demo-b")][0]
+    consent = seller_book_source(NOW).records[("minhchau.shop", "minhchau.shop")][0]
     adapter = ShopeeFeatureSource(
         {
-            ("demo-b", "shop"): ShopeeRegistration(
+            ("minhchau.shop", "shop"): ShopeeRegistration(
                 source,
                 "seller_export",
                 consent,
@@ -45,8 +45,8 @@ def test_shopee_adapter_uses_release_time_and_completed_weeks():
             )
         }
     )
-    _, features = adapter.fetch("demo-b", "shop", NOW)
-    validate_features(features, "demo-b", "shop", NOW)
+    _, features = adapter.fetch("minhchau.shop", "shop", NOW)
+    validate_features(features, "minhchau.shop", "shop", NOW)
     assert features["payout_origin"] == "observed"
     assert features["weekly_payouts"][-1] == {"week_start": "2026-10-12", "amount": 70_000_000}
     assert sum(w["amount"] for w in features["weekly_payouts"]) == 70_000_000
@@ -56,11 +56,11 @@ def test_shopee_adapter_uses_release_time_and_completed_weeks():
 
 def test_shopee_adapter_checks_consent_before_fetch():
     source = FakeShopeeSource()
-    consent = seller_book_source(NOW).records[("demo-b", "demo-b")][0]
+    consent = seller_book_source(NOW).records[("minhchau.shop", "minhchau.shop")][0]
     consent["revoked_at"] = NOW.isoformat()
     adapter = ShopeeFeatureSource(
         {
-            ("demo-b", "shop"): ShopeeRegistration(
+            ("minhchau.shop", "shop"): ShopeeRegistration(
                 source,
                 "seller_export",
                 consent,
@@ -70,5 +70,5 @@ def test_shopee_adapter_checks_consent_before_fetch():
         }
     )
     with pytest.raises(WorkflowError, match="CONSENT_REQUIRED"):
-        adapter.fetch("demo-b", "shop", NOW)
+        adapter.fetch("minhchau.shop", "shop", NOW)
     assert not source.calls

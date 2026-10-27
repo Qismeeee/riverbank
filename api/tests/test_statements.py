@@ -520,7 +520,7 @@ def test_uploaded_statement_drives_r05_through_existing_threshold(
     second,
     status,
 ):
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     _, _, (first_day, second_day) = period_rows(case)
     content = csv_bytes(
         [
@@ -529,12 +529,12 @@ def test_uploaded_statement_drives_r05_through_existing_threshold(
             [second_day, "Ban be chuyen khoan", "", "40.000.000"],
         ]
     )
-    response = upload(client, case, content, seller_headers("demo-c"))
+    response = upload(client, case, content, seller_headers("ducthinh.tech"))
     assert response.status_code == 200, response.text
     updated = upload_service.repository.get(case.case_id)
     assert updated.status == status and len(updated.runs) == 2
     statement = updated.runs[-1]["statement"]
-    assert statement["source"] == "uploaded_file" and statement["submitted_by"] == "demo-c"
+    assert statement["source"] == "uploaded_file" and statement["submitted_by"] == "ducthinh.tech"
     assert statement["platform_total"] == 140_000_000
     assert statement["marketplace_total"] == 70_000_000 + parse_vnd(second)
     assert statement["extraction"]["parser"] == "csv"
@@ -544,7 +544,7 @@ def test_uploaded_statement_drives_r05_through_existing_threshold(
 
 def test_uploaded_workbook_reconciles_like_csv(client, upload_service):  # noqa: F811
     upload_service.statements = reader(CsvStatementParser(), ExcelStatementParser())
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     _, _, (first_day, second_day) = period_rows(case)
     content = xlsx_bytes(
         [
@@ -561,19 +561,19 @@ def test_uploaded_workbook_reconciles_like_csv(client, upload_service):  # noqa:
 
 
 def test_upload_scope_version_and_state_checks(client, upload_service):  # noqa: F811
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     content = csv_bytes([["05/10/2026", "SHOPEE VN", "", "1.000"]])
-    assert upload(client, case, content, seller_headers("demo-b")).status_code == 403
+    assert upload(client, case, content, seller_headers("minhchau.shop")).status_code == 403
     assert upload(client, case, content, version=case.version + 1).status_code == 409
     assert upload(client, case, b"\x00\x81\xff").status_code == 415
-    ready = upload_service.repository.get(create(client, "demo-b")["case_id"])
+    ready = upload_service.repository.get(create(client, "minhchau.shop")["case_id"])
     response = upload(client, ready, content)
     assert response.json()["detail"]["code"] == "STATEMENT_NOT_REQUESTED"
     assert upload_service.repository.get(case.case_id).version == case.version
 
 
 def test_upload_without_reader_is_unavailable(client, service):  # noqa: F811
-    case = service.repository.get(create(client, "demo-c")["case_id"])
+    case = service.repository.get(create(client, "ducthinh.tech")["case_id"])
     response = upload(client, case, csv_bytes([]))
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "STATEMENT_READER_UNAVAILABLE"
@@ -680,7 +680,7 @@ def test_layout_parser_reads_grid_pdf_across_pages_too():
 
 def test_statement_threshold_comes_from_policy_config(client, upload_service):  # noqa: F811
     upload_service.policy.cfg = replace(upload_service.policy.cfg, statement_mismatch_bps=0)
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     _, _, (first_day, second_day) = period_rows(case)
     content = csv_bytes(
         [
@@ -983,7 +983,7 @@ def test_s3_store_fails_closed_and_needs_a_bucket():
 def test_uploaded_original_is_recorded_on_the_statement(client, upload_service):  # noqa: F811
     s3 = FakeS3()
     upload_service.documents = S3DocumentStore("bucket-x", "r", client=s3)
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     _, _, (first_day, _) = period_rows(case)
     content = csv_bytes([[first_day, "SHOPEE VN THANH TOAN", "", "70.000.000"]])
     assert upload(client, case, content).status_code == 200

@@ -68,7 +68,7 @@ class FakeGuard(InputGuard):
         return GuardVerdict(any(p >= 0.5 for p in self.flags.values()), 0.5, self.flags)
 
 
-def request(message=CASE_B, seller="demo-b", known=None):
+def request(message=CASE_B, seller="minhchau.shop", known=None):
     return ExtractPlanInput(seller_id=seller, shop_id=seller, message=message, known=known)
 
 
@@ -85,8 +85,8 @@ def test_case_b_message_becomes_ready_plan_draft():
     assert result.ready and result.missing_fields == [] and result.issues == []
     assert result.clarifying_question is None
     assert result.draft.model_dump() == {
-        "seller_id": "demo-b",
-        "shop_id": "demo-b",
+        "seller_id": "minhchau.shop",
+        "shop_id": "minhchau.shop",
         "lot_value": 200_000_000,
         "cash_on_hand": 120_000_000,
         "supplier_schedule": [{"week": 0, "amount": 200_000_000}],
@@ -313,19 +313,19 @@ def test_jev_guard_fails_closed(answers):
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(routes.config, "ENV", "local")
-    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "enabled")
     app.dependency_overrides[copilot_routes.get_extractor] = lambda: extractor()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 
 
-def seller(seller_id="demo-b"):
+def seller(seller_id="minhchau.shop"):
     return {"X-Actor-ID": seller_id, "X-Actor-Role": "seller"}
 
 
 def test_endpoint_returns_draft_for_own_seller(client):
-    body = {"seller_id": "demo-b", "shop_id": "demo-b", "message": CASE_B}
+    body = {"seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": CASE_B}
     response = client.post("/v1/copilot/extract-plan", json=body, headers=seller())
     assert response.status_code == 200
     assert response.json()["ready"] is True
@@ -333,8 +333,8 @@ def test_endpoint_returns_draft_for_own_seller(client):
 
 
 def test_endpoint_rejects_other_seller(client):
-    body = {"seller_id": "demo-b", "shop_id": "demo-b", "message": CASE_B}
-    response = client.post("/v1/copilot/extract-plan", json=body, headers=seller("demo-a"))
+    body = {"seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": CASE_B}
+    response = client.post("/v1/copilot/extract-plan", json=body, headers=seller("thuha.closet"))
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "SELLER_SCOPE_MISMATCH"
 
@@ -350,7 +350,7 @@ def test_ready_draft_is_a_valid_create_case_body(client):
         clock=lambda: now,
     )
     app.dependency_overrides[routes.get_service] = lambda: service
-    body = {"seller_id": "demo-b", "shop_id": "demo-b", "message": CASE_B}
+    body = {"seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": CASE_B}
     draft = client.post("/v1/copilot/extract-plan", json=body, headers=seller()).json()["draft"]
     created = client.post(
         "/v1/cases", json=draft, headers={**seller(), "Idempotency-Key": "copilot-1"}
@@ -440,7 +440,7 @@ def test_blocked_question_never_reaches_llm(case_b):
 def test_ask_endpoint_is_scoped_to_case_owner(case_b, monkeypatch):
     service, case = case_b
     monkeypatch.setattr(routes.config, "ENV", "local")
-    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "enabled")
     content = answer("Hồ sơ đang chờ ngân hàng xem.", "status")
     app.dependency_overrides[routes.get_service] = lambda: service
     app.dependency_overrides[copilot_routes.get_advisor] = lambda: advisor(content)
@@ -449,7 +449,7 @@ def test_ask_endpoint_is_scoped_to_case_owner(case_b, monkeypatch):
             url = f"/v1/cases/{case.case_id}/copilot/ask"
             body = {"question": "Hồ sơ sao rồi?"}
             own = api.post(url, json=body, headers=seller())
-            other = api.post(url, json=body, headers=seller("demo-a"))
+            other = api.post(url, json=body, headers=seller("thuha.closet"))
     finally:
         app.dependency_overrides.clear()
     assert own.status_code == 200 and own.json()["source"] == "llm"
@@ -466,7 +466,7 @@ def test_case_facts_carry_reason_and_checked_explanation(case_b):
 
 def test_statement_case_tells_seller_the_next_step(case_b):
     service, _ = case_b
-    case = service.create(Plan(**plan("demo-c")), "qa-c")
+    case = service.create(Plan(**plan("ducthinh.tech")), "qa-c")
     assert case.status == "AWAITING_STATEMENT"
     window = case_facts(case)["statement_window"]
     weeks = case.runs[-1]["input_snapshot"]["features"]["weekly_payouts"]
@@ -507,7 +507,7 @@ def test_history_sent_to_llm_is_capped(case_b):
 def test_history_endpoint_scope(case_b, monkeypatch):
     service, case = case_b
     monkeypatch.setattr(routes.config, "ENV", "local")
-    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "enabled")
     qa = advisor(answer("Hồ sơ đang chờ ngân hàng xem.", "status"))
     app.dependency_overrides[routes.get_service] = lambda: service
     app.dependency_overrides[copilot_routes.get_advisor] = lambda: qa
@@ -519,7 +519,7 @@ def test_history_endpoint_scope(case_b, monkeypatch):
             bank = api.get(
                 f"{base}/history", headers={"X-Actor-ID": "uw-1", "X-Actor-Role": "underwriter"}
             )
-            other = api.get(f"{base}/history", headers=seller("demo-a"))
+            other = api.get(f"{base}/history", headers=seller("thuha.closet"))
             old_body = api.post(
                 f"{base}/ask", json={"question": "x", "history": []}, headers=seller()
             )
