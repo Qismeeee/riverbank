@@ -2,6 +2,7 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -99,14 +100,17 @@ ADDLIVETAG_API_KEY = _from_env_or_secret(
 )
 
 
-def database_url() -> str:
+def database_url(refresh: bool = False) -> str:
     url = os.getenv("DATABASE_URL")
     if url or ENV == "local":
         return url or ""
+    if refresh:
+        _secret.cache_clear()
     creds = _secret(os.environ["DB_SECRET_ID"])
+    user, password = (quote(creds[k], safe="") for k in ("username", "password"))
     host = os.environ["DB_HOST"]
     db = os.getenv("DB_NAME", "riverbank")
-    return f"postgresql://{creds['username']}:{creds['password']}@{host}:5432/{db}"
+    return f"postgresql://{user}:{password}@{host}:5432/{db}"
 
 
 def llm_limits(purpose: str) -> tuple[float, int]:
