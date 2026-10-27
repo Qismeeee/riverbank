@@ -48,7 +48,13 @@ STATEMENT_OCR = os.getenv("RIVERBANK_STATEMENT_OCR", "off")
 STATEMENT_OCR_PROVIDER = os.getenv("STATEMENT_OCR_PROVIDER", LLM_PROVIDER)
 STATEMENT_OCR_MODEL = os.getenv("STATEMENT_OCR_MODEL", LLM_MODEL)
 STATEMENT_OCR_MAX_PAGES = int(os.getenv("STATEMENT_OCR_MAX_PAGES", "20"))
-DOCUMENT_STORE = os.getenv("RIVERBANK_DOCUMENT_STORE", "none")
+DOCUMENT_STORE = os.getenv("RIVERBANK_DOCUMENT_STORE", "local")
+DOCUMENT_DIR = Path(
+    os.getenv(
+        "RIVERBANK_DOCUMENT_DIR",
+        Path(__file__).resolve().parent.parent / "data" / "statements",
+    )
+)
 JOB_WORKER = os.getenv("RIVERBANK_JOB_WORKER", "on" if ENV == "prod" else "off")
 JOB_MAX_ATTEMPTS = int(os.getenv("RIVERBANK_JOB_MAX_ATTEMPTS", "3"))
 DB_POOL_MAX_SIZE = int(os.getenv("RIVERBANK_DB_POOL_MAX_SIZE", "5"))

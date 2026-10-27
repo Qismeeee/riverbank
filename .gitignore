@@ -31,6 +31,7 @@ data/synth/out/
 data/synth/train/
 data/synth/test/
 data/exports/
+data/statements/
 
 # llm eval cache and reports
 eval/.cache/

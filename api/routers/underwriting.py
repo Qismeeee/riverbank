@@ -1,15 +1,18 @@
+import json
 from dataclasses import asdict
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Header, Path, Query, UploadFile
+from fastapi import APIRouter, Depends, Form, Header, Path, Query, Response, UploadFile
 
 import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, SellerUser, seller_of
 from routers.limits import rate_limited
+from services.statements.archive import file_summary, latest_uploaded_statement, reading_payload
 from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
+from services.statements.storage import EXTENSIONS
 from services.underwriting.cic import ProfileCicSource
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
@@ -127,6 +130,7 @@ def create_case(plan: Plan, key: IdempotencyKey, actor: Principal, service: Serv
 def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict:
     case = service.repository.get(case_id)
     seller_of(actor, case.seller_id)
+    uploaded = latest_uploaded_statement(case)
     return {
         **summary(case),
         "explanation": (
@@ -141,6 +145,7 @@ def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict
             if case.decision
             else None
         ),
+        "statement_file": file_summary(uploaded) if uploaded else None,
     }
 
 
@@ -207,6 +212,54 @@ def upload_statement(
     content = form.file.file.read(StatementConfig().max_bytes + 1)
     request = StatementUpload(**form.model_dump(exclude={"file"}))
     return summary(service.upload_statement(case_id, request, content, actor.subject))
+
+
+def _readable_case(case_id: str, actor, service: UnderwritingService):
+    case = service.repository.get(case_id)
+    if actor.role == "underwriter":
+        return case
+    if actor.role == "seller":
+        seller_of(actor, case.seller_id)
+        return case
+    raise WorkflowError("UNDERWRITER_REQUIRED", 403)
+
+
+def _uploaded_statement(case) -> dict:
+    statement = latest_uploaded_statement(case)
+    if statement is None:
+        raise WorkflowError("STATEMENT_NOT_FOUND", 404)
+    return statement
+
+
+def _download_name(case_id: str, suffix: str) -> dict[str, str]:
+    name = f"HS-{case_id[:8].upper()}-{suffix}"
+    return {"Content-Disposition": f'attachment; filename="{name}"'}
+
+
+@router.get("/cases/{case_id}/statements/reading")
+def statement_reading(case_id: Identifier, actor: Principal, service: Service) -> Response:
+    statement = _uploaded_statement(_readable_case(case_id, actor, service))
+    body = json.dumps(reading_payload(statement), ensure_ascii=False, indent=2).encode()
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers=_download_name(case_id, "ket-qua-doc.json"),
+    )
+
+
+@router.get("/cases/{case_id}/statements/original")
+def statement_original(case_id: Identifier, actor: Principal, service: Service) -> Response:
+    statement = _uploaded_statement(_readable_case(case_id, actor, service))
+    original = statement.get("original") or {}
+    if original.get("store") != service.documents.name:
+        raise WorkflowError("STATEMENT_FILE_NOT_STORED", 404)
+    content, media = service.documents.get(original)
+    extension = EXTENSIONS.get(media, "bin")
+    return Response(
+        content=content,
+        media_type=media,
+        headers=_download_name(case_id, f"sao-ke.{extension}"),
+    )
 
 
 @router.post("/cases/{case_id}/cic-inquiry", response_model=CaseSummary)

@@ -150,6 +150,8 @@ POST /cases ──> NO_LOAN_NEEDED
 | `GET` | `/v1/cases/{case_id}/evidence/{evidence_id}` | underwriter | Có | FR-07, FR-30 |
 | `POST` | `/v1/cases/{case_id}/statements` | underwriter | Có | FR-21..FR-23 |
 | `POST` | `/v1/cases/{case_id}/statements/upload` | seller của hồ sơ, underwriter | Có | FR-22, FR-23 |
+| `GET` | `/v1/cases/{case_id}/statements/original` | seller của hồ sơ, underwriter | Có | FR-22 |
+| `GET` | `/v1/cases/{case_id}/statements/reading` | seller của hồ sơ, underwriter | Có | FR-22 |
 | `POST` | `/v1/cases/{case_id}/statements/upload-jobs` | seller của hồ sơ, underwriter | Có | FR-22, FR-23 |
 | `GET` | `/v1/jobs/{job_id}` | seller của hồ sơ, underwriter | Có | FR-22 |
 | `POST` | `/v1/cases/{case_id}/cic-inquiry` | underwriter | Có | FR-16b |
@@ -273,6 +275,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 |---|---|
 | `explanation` | Danh sách câu của bản seller (D10). Rỗng khi bản mới nhất chưa qua kiểm tra |
 | `decision` | `null` khi chưa có quyết định. Có thì gồm `decision_type`, `final_amount`, `final_tenor_weeks` |
+| `statement_file` | `null` khi chưa nộp file. Có thì gồm `media_type`, `pages`, `parser`, `lines`, `stored`. `stored` là file gốc còn tải được |
 
 Mỗi câu (`MemoSentence`):
 
@@ -469,7 +472,7 @@ Cột được nhận theo từ khóa trong từng phần của header (header s
 
 **Cộng tổng:** `marketplace_total` là tổng ghi có của dòng tiền sàn có ngày trong `[period_start, period_end)`. Dòng tiền sàn thiếu ngày hoặc thiếu số tiền thì `422 STATEMENT_LINES_UNREADABLE`, `details` là chỉ số dòng, không đoán.
 
-**Lưu file gốc:** `RIVERBANK_DOCUMENT_STORE=none` (mặc định) không lưu. `s3` lưu vào `S3_BUCKET` ở khóa `statements/{case_id}/{sha256}.{đuôi}`, mã hóa AES256, E8 ghi `original` (`store`, `bucket`, `key`). S3 lỗi thì `503 DOCUMENT_STORE_UNAVAILABLE`, thiếu bucket thì `503 DOCUMENT_STORE_NOT_CONFIGURED`. Trước khi bật trên prod, IAM role của EC2 phải có `s3:PutObject` trên bucket.
+**Lưu file gốc:** `RIVERBANK_DOCUMENT_STORE=local` (mặc định) ghi file dưới `RIVERBANK_DOCUMENT_DIR` (mặc định `data/statements`), đường tương đối `{case_id}/{sha256}.{đuôi}`. `none` không lưu. `s3` lưu vào `S3_BUCKET` ở khóa `statements/{case_id}/{sha256}.{đuôi}`, mã hóa AES256. E8 ghi `original`. S3 lỗi thì `503 DOCUMENT_STORE_UNAVAILABLE`, thiếu bucket thì `503 DOCUMENT_STORE_NOT_CONFIGURED`. Trước khi bật `s3` trên prod, IAM role của EC2 phải có `s3:PutObject` và `s3:GetObject` trên bucket. Hồ sơ nộp lúc store là `none` không lấy lại được file gốc.
 
 **Lưu:** E8 giữ `document_ref = sha256:<băm file>`, `source = uploaded_file`, `submitted_by`, `file` (`media_type`, `pages`), `extraction` (`parser`, `model`, `prompt_version`, `notes`), `classifier`, `coverage` (ngày đầu, ngày cuối trên sao kê) và `statement_lines` (từng dòng, đã che SĐT, CCCD, số tài khoản, kèm `is_payout`, `probability`, `in_period`).
 
@@ -509,6 +512,19 @@ Seller của hồ sơ hoặc người thẩm định. Phản hồi `200`: `JobVi
 curl -X POST $API/v1/cases/$C/statements/upload-jobs -H "Authorization: Bearer $T" \
   -F expected_version=1 -F period_start=2026-09-28 -F period_end=2026-10-12 -F file=@saoke.pdf
 curl $API/v1/jobs/$J -H "Authorization: Bearer $T"
+```
+
+### 4.8e Tải file gốc và kết quả đọc
+
+Seller của hồ sơ hoặc người thẩm định. Lấy bản sao kê nộp file mới nhất (`source = uploaded_file`). Nhập tổng tay không có file thì `404 STATEMENT_NOT_FOUND`.
+
+`GET /v1/cases/{case_id}/statements/original` trả đúng byte đã nộp, `Content-Type` theo loại file, `Content-Disposition: attachment`. Store lúc nộp khác store đang chạy, hoặc store là `none`, thì `404 STATEMENT_FILE_NOT_STORED`.
+
+`GET /v1/cases/{case_id}/statements/reading` trả JSON đính kèm: `file`, `extraction`, `statement_lines` (đã che), `coverage`, `classifier`, và các số đối chiếu code đã ghi (`marketplace_total`, `platform_total`, `difference`, `matched`). Không kèm vị trí lưu file.
+
+```bash
+curl -OJ $API/v1/cases/$C/statements/original -H "Authorization: Bearer $T"
+curl -OJ $API/v1/cases/$C/statements/reading -H "Authorization: Bearer $T"
 ```
 
 ---
@@ -680,7 +696,9 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `STATEMENT_FORMAT_UNSUPPORTED` | 415 | Nộp sao kê | Không phải CSV, XLSX, PDF, PNG, JPEG |
 | `STATEMENT_OCR_UNAVAILABLE`, `STATEMENT_CLASSIFIER_UNAVAILABLE` | 503 | Nộp sao kê | Model đọc ảnh hoặc Jev lỗi |
 | `STATEMENT_IMAGE_UNREADABLE` | 422 | Nộp sao kê | Ảnh hỏng hoặc không mở được |
-| `DOCUMENT_STORE_UNAVAILABLE`, `DOCUMENT_STORE_NOT_CONFIGURED` | 503 | Nộp sao kê | S3 lỗi hoặc thiếu `S3_BUCKET` khi bật lưu file gốc |
+| `DOCUMENT_STORE_UNAVAILABLE`, `DOCUMENT_STORE_NOT_CONFIGURED` | 503 | Nộp sao kê, tải file gốc | S3 lỗi hoặc thiếu `S3_BUCKET` khi bật lưu file gốc |
+| `STATEMENT_NOT_FOUND` | 404 | Tải sao kê | Hồ sơ chưa có file sao kê đã nộp |
+| `STATEMENT_FILE_NOT_STORED` | 404 | Tải file gốc | Lần nộp đó không giữ file, hoặc store hiện tại không đọc được bản ghi |
 | `JOB_NOT_FOUND` | 404 | `/v1/jobs/{job_id}` | Không có job |
 | `JOB_LEASE_EXPIRED`, `JOB_HANDLER_ERROR`, `JOB_KIND_UNKNOWN` | 500 | Trong `error` của job | Worker chết quá số lần, lỗi không lường trước, loại job lạ |
 | `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
