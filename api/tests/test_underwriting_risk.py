@@ -51,7 +51,7 @@ def build(risk, mutate=None):
     )
 
 
-def create(service, seller="demo-b", **changes):
+def create(service, seller="minhchau.shop", **changes):
     app.dependency_overrides[routes.get_service] = lambda: service
     try:
         with TestClient(app) as client:
@@ -67,7 +67,7 @@ def create(service, seller="demo-b", **changes):
 @pytest.fixture(autouse=True)
 def demo_mode(monkeypatch):
     monkeypatch.setattr(routes.config, "ENV", "local")
-    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "enabled")
 
 
 def test_raw_features_follow_case_inputs():
@@ -172,7 +172,9 @@ def test_pd_over_cap_escalates_and_counter_rescores_pd():
 
 
 def test_missing_risk_outranks_statement_request():
-    case = create(build(LightGbmRiskModel(FakeScorer()), lambda f: f.pop("top3_share")), "demo-c")
+    case = create(
+        build(LightGbmRiskModel(FakeScorer()), lambda f: f.pop("top3_share")), "ducthinh.tech"
+    )
     assert (case.status, case.reason) == ("ESCALATED", "RISK_DATA_MISSING")
 
 
@@ -188,10 +190,10 @@ def test_missing_risk_outranks_statement_request():
     ],
 )
 def test_invalid_profile_rejected(changes):
-    _, features = seller_book_source(NOW).records[("demo-b", "demo-b")]
+    _, features = seller_book_source(NOW).records[("minhchau.shop", "minhchau.shop")]
     features.update(changes)
     with pytest.raises(WorkflowError) as error:
-        validate_features(features, "demo-b", "demo-b", NOW)
+        validate_features(features, "minhchau.shop", "minhchau.shop", NOW)
     assert (error.value.code, error.value.status) == ("INVALID_FEATURE_SNAPSHOT", 422)
 
 
@@ -217,7 +219,10 @@ def test_trained_model_scores_demo_case():
 
 def test_demo_d_shows_r10_against_demo_b_on_the_same_numbers():
     cap = PolicyConfig().max_pd_bps
-    b, d = (create(build(LightGbmRiskModel()), seller) for seller in ("demo-b", "demo-d"))
+    b, d = (
+        create(build(LightGbmRiskModel()), seller)
+        for seller in ("minhchau.shop", "ngocvy.boutique")
+    )
     assert b.runs[-1]["cashflow"]["amount_proposed"] == d.runs[-1]["cashflow"]["amount_proposed"]
     assert b.runs[-1]["risk"]["pd_bps"] <= cap < d.runs[-1]["risk"]["pd_bps"]
     assert (b.status, d.status, d.reason) == ("PENDING_REVIEW", "ESCALATED", "HARD_POLICY_FAILURE")

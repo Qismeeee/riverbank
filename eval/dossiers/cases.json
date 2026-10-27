@@ -4,7 +4,7 @@
  "account_bank": "Ngân hàng TMCP Mẫu",
  "cases": [
   {
-   "seller_id": "demo-e",
+   "seller_id": "maianh.fashion",
    "code": "HS01",
    "title": "Duyệt bình thường",
    "story": "Shop thời trang 34 tháng tuổi, payout ổn định quanh 75 triệu một tuần. Nhập lô hàng đông 220 triệu, xưởng đòi trả 2 đợt trong 2 tuần đầu. Tự có 80 triệu.",
@@ -49,7 +49,7 @@
    "statement": {
     "mode": "match"
    },
-   "demo_steps": [
+   "steps": [
     "Seller tạo hồ sơ bằng chat hoặc form",
     "Người duyệt mở hồ sơ, xem tờ trình và PD",
     "Duyệt theo đề xuất",
@@ -60,7 +60,7 @@
    }
   },
   {
-   "seller_id": "demo-f",
+   "seller_id": "phucan.beauty",
    "code": "HS02",
    "title": "Mùa sale, đề xuất thấp hơn số xin",
    "story": "Shop mỹ phẩm chuẩn bị 11.11, payout đang tăng. Xin 150 triệu cho chắc nhưng thiếu hụt thật chỉ 80 triệu, hệ thống đề xuất theo thiếu hụt thật.",
@@ -101,7 +101,7 @@
    "statement": {
     "mode": "match"
    },
-   "demo_steps": [
+   "steps": [
     "Seller tạo hồ sơ",
     "Chỉ ra số đề xuất khác số xin và câu giải thích cho seller",
     "Seller hỏi Copilot vì sao đề xuất thấp hơn",
@@ -112,7 +112,7 @@
    }
   },
   {
-   "seller_id": "demo-g",
+   "seller_id": "khang.phukien",
    "code": "HS03",
    "title": "Shop mới phải nộp sao kê",
    "story": "Shop phụ kiện điện thoại 8 tháng tuổi. Sàn chỉ xác nhận 30 triệu nên xin trên 75 triệu phải nộp sao kê. Sao kê khớp với payout sàn.",
@@ -153,7 +153,7 @@
    "statement": {
     "mode": "match"
    },
-   "demo_steps": [
+   "steps": [
     "Seller tạo hồ sơ, ra AWAITING_STATEMENT",
     "Seller hỏi Copilot cần làm gì tiếp",
     "Nộp file sao kê PDF hoặc ảnh chụp",
@@ -166,7 +166,7 @@
    }
   },
   {
-   "seller_id": "demo-h",
+   "seller_id": "tung.giadung",
    "code": "HS04",
    "title": "Đang có nợ nhóm 2",
    "story": "Shop đồ gia dụng 20 tháng tuổi. Một khoản vay tiêu dùng đang quá hạn nhóm 2, từng xuống nhóm 3 khoảng 10 tháng trước. Rule vẫn cho qua vì chính sách nhận đến nhóm 2, người duyệt phải cân nhắc.",
@@ -207,7 +207,7 @@
    "statement": {
     "mode": "match"
    },
-   "demo_steps": [
+   "steps": [
     "Seller tạo hồ sơ, ra PENDING_REVIEW",
     "Người duyệt mở báo cáo tín dụng: nhóm 2 hiện tại, nhóm 3 trong 12 tháng",
     "Người duyệt từ chối hoặc duyệt kèm ghi chú"
@@ -218,7 +218,7 @@
    }
   },
   {
-   "seller_id": "demo-i",
+   "seller_id": "han.store",
    "code": "HS05",
    "title": "Sao kê không khớp, nghi khai khống",
    "story": "Shop thời trang 15 tháng tuổi. Phải nộp sao kê. Sao kê chỉ có khoảng 60% tiền sàn so với số liệu sàn, phần còn lại là các khoản chuyển khoản cá nhân ghi chữ shopee để làm đẹp dòng tiền.",
@@ -261,7 +261,7 @@
     "payout_share": 0.6,
     "fake_note": "chuyen tien hang shopee"
    },
-   "demo_steps": [
+   "steps": [
     "Seller tạo hồ sơ, ra AWAITING_STATEMENT",
     "Nộp sao kê",
     "Jev loại các khoản chuyển khoản cá nhân, tổng tiền sàn lệch quá 15%",
@@ -275,7 +275,7 @@
    "scan_quality": "poor"
   },
   {
-   "seller_id": "demo-j",
+   "seller_id": "hau.mart",
    "code": "HS06",
    "title": "Không cần vay",
    "story": "Shop tạp hóa online 40 tháng tuổi, tiền mặt 260 triệu đủ trả lô hàng 180 triệu. Hệ thống báo không cần vay và cho mức payout tối thiểu để vẫn đủ tiền.",
@@ -316,7 +316,7 @@
    "statement": {
     "mode": "match"
    },
-   "demo_steps": [
+   "steps": [
     "Seller tạo hồ sơ",
     "Hệ thống trả NO_LOAN_NEEDED kèm ngưỡng payout cảnh báo"
    ]

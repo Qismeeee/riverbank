@@ -2,8 +2,8 @@
   "disclosure": "Hồ sơ tín dụng CIC theo seller. Tên tổ chức tín dụng là tên chung.",
   "default": {"facilities": [], "recent_inquiries_90d": 0},
   "sellers": {
-    "demo-a": {"facilities": [], "recent_inquiries_90d": 0},
-    "demo-b": {
+    "thuha.closet": {"facilities": [], "recent_inquiries_90d": 0},
+    "minhchau.shop": {
       "recent_inquiries_90d": 1,
       "facilities": [
         {
@@ -16,7 +16,7 @@
         }
       ]
     },
-    "demo-c": {
+    "ducthinh.tech": {
       "recent_inquiries_90d": 2,
       "facilities": [
         {
@@ -38,7 +38,7 @@
         }
       ]
     },
-    "demo-d": {
+    "ngocvy.boutique": {
       "recent_inquiries_90d": 5,
       "facilities": [
         {
@@ -61,7 +61,7 @@
         }
       ]
     },
-    "demo-e": {
+    "maianh.fashion": {
       "recent_inquiries_90d": 1,
       "facilities": [
         {
@@ -83,7 +83,7 @@
         }
       ]
     },
-    "demo-f": {
+    "phucan.beauty": {
       "recent_inquiries_90d": 3,
       "facilities": [
         {
@@ -105,11 +105,11 @@
         }
       ]
     },
-    "demo-g": {
+    "khang.phukien": {
       "recent_inquiries_90d": 0,
       "facilities": []
     },
-    "demo-h": {
+    "tung.giadung": {
       "recent_inquiries_90d": 4,
       "facilities": [
         {
@@ -131,7 +131,7 @@
         }
       ]
     },
-    "demo-i": {
+    "han.store": {
       "recent_inquiries_90d": 1,
       "facilities": [
         {
@@ -144,7 +144,7 @@
         }
       ]
     },
-    "demo-j": {
+    "hau.mart": {
       "recent_inquiries_90d": 0,
       "facilities": [
         {

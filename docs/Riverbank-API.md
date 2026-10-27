@@ -28,41 +28,43 @@ Mục 4 là API đang chạy trong `api/`, viết theo code `main` commit `68588
 
 ### 1.2 Danh tính và vai trò
 
-Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
+Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=enabled`, nếu không thì trả `503 WORKFLOW_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
 
 | Chế độ | Dùng ở | Cách gửi |
 |---|---|---|
 | `token` | Prod, FE Vercel | `Authorization: Bearer <access_token>` lấy từ `POST /v1/auth/token`. Header `X-Actor-*` bị bỏ qua |
 | `header` (mặc định) | Chỉ local (`RIVERBANK_ENV=local`) | `X-Actor-ID`, `X-Actor-Role`. Ngoài local trả `503 VERIFIED_IDENTITY_ADAPTER_REQUIRED` |
 
-**`POST /v1/auth/token`**, đăng nhập demo bằng mã chung:
+**`POST /v1/auth/token`**, đăng nhập bằng tài khoản trong danh bạ và mã truy cập:
 
 ```json
-{ "subject": "demo-b", "role": "seller", "passcode": "<DEMO_PASSCODE>" }
+{ "subject": "minhchau.shop", "role": "seller", "passcode": "<ACCESS_PASSCODE>" }
 ```
 
-`subject` gồm chữ, số, `.`, `_`, `-`, tối đa 64 ký tự. Với seller, `subject` là `seller_id`. Phản hồi `200`:
+`subject` gồm chữ, số, `.`, `_`, `-`, tối đa 64 ký tự. Với seller, `subject` là `seller_id`. `subject` phải có trong danh bạ `api/data/users.json` (đổi bằng `RIVERBANK_USER_DIRECTORY`) với đúng `role`, sai thì `401 INVALID_CREDENTIALS` như sai mã. Phản hồi `200`:
 
 ```json
 {
-  "subject": "demo-b",
+  "subject": "minhchau.shop",
   "role": "seller",
+  "full_name": "Lê Minh Châu",
+  "display_name": "Hộ kinh doanh Minh Châu Shop",
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "bearer",
   "expires_at": "2026-10-24T00:00:00+00:00"
 }
 ```
 
-Token là JWT HS256, ký bằng `AUTH_SIGNING_KEY` (tối thiểu 32 byte), sống `RIVERBANK_AUTH_TOKEN_TTL_SECONDS` giây (mặc định 8 giờ). Prod đọc `AUTH_SIGNING_KEY` và `DEMO_PASSCODE` từ secret `riverbank/auth`.
+Token là JWT HS256, ký bằng `AUTH_SIGNING_KEY` (tối thiểu 32 byte), sống `RIVERBANK_AUTH_TOKEN_TTL_SECONDS` giây (mặc định 8 giờ). Prod đọc `AUTH_SIGNING_KEY` và `ACCESS_PASSCODE` từ secret `riverbank/auth`. Token của người đã bị xoá khỏi danh bạ trả `401 INVALID_TOKEN`.
 
-**`GET /v1/auth/me`** trả `{ "subject": "...", "role": "..." }` của token đang dùng.
+**`GET /v1/auth/me`** trả `subject`, `role`, `full_name`, `display_name` của token đang dùng. Seller có `display_name` là tên hộ kinh doanh, người thẩm định có `display_name` là chức danh.
 
 | Vai trò | Được gọi |
 |---|---|
 | `seller` | Tạo hồ sơ của chính mình, đọc `seller-view` của chính mình |
 | `underwriter` | Hàng đợi, chi tiết hồ sơ, bằng chứng, nhập sao kê, quyết định, bàn giao |
 
-Mã chung chỉ hợp với demo. Bản thật thay `TokenIdentity` bằng adapter danh tính của ngân hàng, kế thừa `IdentityProvider` trong `api/routers/auth.py`. Không có vai trò hệ thống nào được gọi đầu quyết định (SRS FR-31).
+Mã truy cập dùng chung cho mọi tài khoản trong danh bạ. Khi nối với ngân hàng thì thay `TokenIdentity` bằng adapter danh tính của ngân hàng, kế thừa `IdentityProvider` trong `api/routers/auth.py`. Không có vai trò hệ thống nào được gọi đầu quyết định (SRS FR-31).
 
 ### 1.3 Chống ghi trùng và ghi đè
 
@@ -93,7 +95,7 @@ Lỗi sai kiểu dữ liệu do FastAPI trả, mã `422`:
 | `409` | Trạng thái hồ sơ không cho phép thao tác, xung đột `version`, khóa idempotency bị dùng lại, rule cứng fail |
 | `422` | Đầu vào sai, bị chặn ở cổng nhập, thiếu consent, thiếu dữ liệu payout |
 | `429` | Sai mã đăng nhập nhiều lần, hoặc gọi quá ngưỡng tần suất. Có header `Retry-After` (giây) |
-| `503` | Chế độ demo chưa bật, thiếu database |
+| `503` | Luồng `/v1` chưa bật, thiếu database |
 
 Bảng mã lỗi đầy đủ ở mục 5.
 
@@ -138,7 +140,7 @@ POST /cases ──> NO_LOAN_NEEDED
 |---|---|---|---|---|
 | `GET` | `/health` | Không cần | Có | Vận hành |
 | `GET` | `/` | Không cần | Có | Vận hành |
-| `POST` | `/v1/auth/token` | Không cần | Có | Đăng nhập demo, mục 1.2 |
+| `POST` | `/v1/auth/token` | Không cần | Có | Đăng nhập, mục 1.2 |
 | `GET` | `/v1/auth/me` | seller, underwriter | Có | Mục 1.2 |
 | `GET` | `/v1/me/cases` | seller | Có | FR-27 |
 | `POST` | `/v1/cases` | seller | Có | FR-01..FR-28 |
@@ -157,7 +159,7 @@ POST /cases ──> NO_LOAN_NEEDED
 | `POST` | `/v1/cases/{case_id}/copilot/ask` | seller của hồ sơ | Có | FR-27 |
 | `GET` | `/v1/cases/{case_id}/copilot/history` | seller của hồ sơ, underwriter | Có | FR-27 |
 | `POST` | `/v1/webhooks/los-status` | LOS ngân hàng | Chưa có | FR-36 |
-| `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter (demo) | Chưa có | FR-37 |
+| `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter | Chưa có | FR-37 |
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
 | `GET` | `/v1/studio/policy` | underwriter | Có | FR-18 |
 | `GET` | `/v1/studio/eval-metrics` | underwriter | Có | NFR-01..NFR-06 |
@@ -214,8 +216,8 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 
 ```json
 {
-  "seller_id": "demo-b",
-  "shop_id": "demo-b",
+  "seller_id": "minhchau.shop",
+  "shop_id": "minhchau.shop",
   "lot_value": 200000000,
   "cash_on_hand": 120000000,
   "supplier_schedule": [{ "week": 0, "amount": 200000000 }],
@@ -245,8 +247,8 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 ```json
 {
   "case_id": "6f1d2c1e-6a3b-4a51-9d2a-1b7c2f0e9a11",
-  "seller_id": "demo-b",
-  "shop_id": "demo-b",
+  "seller_id": "minhchau.shop",
+  "shop_id": "minhchau.shop",
   "status": "PENDING_REVIEW",
   "version": 1,
   "reason": null,
@@ -681,19 +683,20 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `JOB_NOT_FOUND` | 404 | `/v1/jobs/{job_id}` | Không có job |
 | `JOB_LEASE_EXPIRED`, `JOB_HANDLER_ERROR`, `JOB_KIND_UNKNOWN` | 500 | Trong `error` của job | Worker chết quá số lần, lỗi không lường trước, loại job lạ |
 | `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
-| `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
-| `WORKFLOW_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
+| `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chế độ `header` chỉ chạy local |
+| `WORKFLOW_DISABLED` | 503 | `/v1/*` | `RIVERBANK_WORKFLOW_MODE` khác `enabled` |
 | `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE`, `INVALID_WORKFLOW_CIC_SOURCE`, `CIC_PROFILES_INVALID` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
 | `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |
 | `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
-| `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã demo |
+| `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã truy cập, hoặc `subject` và `role` không có trong danh bạ |
+| `USER_DIRECTORY_INVALID` | 503 | `/v1/auth/*`, `/v1/*` | File danh bạ thiếu, sai định dạng, trùng `subject` hoặc thiếu họ tên |
 | `TOO_MANY_ATTEMPTS` | 429 | `/v1/auth/token` | Sai mã quá `RIVERBANK_AUTH_MAX_FAILURES` lần (mặc định 5) trong `RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS` giây (mặc định 300) từ một IP |
 | `RATE_LIMITED` | 429 | Tạo hồ sơ, nộp sao kê (cả 2 đầu), Copilot extract-plan và ask | Một người gọi vượt ngưỡng trong cửa sổ trượt. Header `Retry-After` và `details[0].retry_after_seconds` cho biết số giây phải chờ. Ngưỡng dạng `số lần/giây`: `RIVERBANK_RATE_LIMIT_CASE_CREATE` (mặc định `30/3600`), `RIVERBANK_RATE_LIMIT_STATEMENT_UPLOAD` (`20/3600`, hai đầu nộp sao kê dùng chung), `RIVERBANK_RATE_LIMIT_COPILOT` (`20/60`). `0/...` là tắt. Đếm theo từng tiến trình, server chạy 2 tiến trình nên ngưỡng thật tối đa gấp đôi |
 | `SELLER_REQUIRED` | 403 | `/v1/me/cases` | Không phải vai trò seller |
 | `EVAL_REPORT_MISSING` | 503 | `/v1/studio/eval-metrics` | Thiếu `api/studio/eval_report.json` |
 | `TOKEN_LOGIN_DISABLED` | 503 | `/v1/auth/token` | Không ở chế độ `token` |
-| `AUTH_NOT_CONFIGURED` | 503 | `/v1/auth/*`, `/v1/*` | Thiếu `DEMO_PASSCODE` hoặc `AUTH_SIGNING_KEY` ngắn hơn 32 byte |
+| `AUTH_NOT_CONFIGURED` | 503 | `/v1/auth/*`, `/v1/*` | Thiếu `ACCESS_PASSCODE` hoặc `AUTH_SIGNING_KEY` ngắn hơn 32 byte |
 | `INVALID_WORKFLOW_IDENTITY` | 503 | `/v1/*` | `RIVERBANK_WORKFLOW_IDENTITY` sai |
 | `OPENROUTER_KEY_REQUIRED` | 503 | `/v1/*` | Bật Jev gate CIC nhưng thiếu `OPENROUTER_API_KEY` |
 
@@ -708,20 +711,20 @@ Mục 6.1, 6.2, 6.3 đã có code. Từ 6.4 trở đi là kế hoạch, chưa c�
 Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1/cases`. Không tạo hồ sơ (FR-02). Header như `POST /v1/cases`, `X-Actor-ID` phải bằng `seller_id`.
 
 ```json
-{ "seller_id": "demo-b", "shop_id": "demo-b", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
+{ "seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
 ```
 
 Chat nhiều lượt: lượt sau gửi thêm `known` là `draft` của lượt trước. Câu mới chỉ cần nói phần còn thiếu hoặc phần muốn sửa.
 
 ```json
-{ "seller_id": "demo-b", "shop_id": "demo-b", "message": "à xin 120tr thôi", "known": { "lot_value": 200000000, "cash_on_hand": 120000000, "supplier_schedule": [{ "week": 0, "amount": 200000000 }], "sell_weeks": 6, "requested_amount": 150000000 } }
+{ "seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": "à xin 120tr thôi", "known": { "lot_value": 200000000, "cash_on_hand": 120000000, "supplier_schedule": [{ "week": 0, "amount": 200000000 }], "sell_weeks": 6, "requested_amount": 150000000 } }
 ```
 
 ```json
 {
   "draft": {
-    "seller_id": "demo-b",
-    "shop_id": "demo-b",
+    "seller_id": "minhchau.shop",
+    "shop_id": "minhchau.shop",
     "lot_value": 200000000,
     "cash_on_hand": 120000000,
     "supplier_schedule": [{ "week": 0, "amount": 200000000 }],
@@ -805,7 +808,7 @@ LOS ngân hàng báo trạng thái sau bàn giao.
 
 ### 6.5 `POST /v1/cases/{case_id}/simulate-p7-event`
 
-Chỉ bật ở demo. Giả lập payout tuần tụt để chạy Monitor.
+Chưa có. Dùng cho người thẩm định nhập sự kiện payout tuần tụt để chạy Monitor.
 
 ```json
 { "expected_version": 4, "current_week_payout": 42000000, "return_rate_90d": 0.14 }

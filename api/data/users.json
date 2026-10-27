@@ -1,0 +1,82 @@
+{
+ "users": [
+  {
+   "subject": "thuha.closet",
+   "role": "seller",
+   "full_name": "Nguyễn Thu Hà",
+   "display_name": "Hộ kinh doanh Thu Hà Closet"
+  },
+  {
+   "subject": "minhchau.shop",
+   "role": "seller",
+   "full_name": "Lê Minh Châu",
+   "display_name": "Hộ kinh doanh Minh Châu Shop"
+  },
+  {
+   "subject": "ducthinh.tech",
+   "role": "seller",
+   "full_name": "Phan Đức Thịnh",
+   "display_name": "Hộ kinh doanh Đức Thịnh Tech"
+  },
+  {
+   "subject": "ngocvy.boutique",
+   "role": "seller",
+   "full_name": "Hồ Ngọc Vy",
+   "display_name": "Hộ kinh doanh Ngọc Vy Boutique"
+  },
+  {
+   "subject": "maianh.fashion",
+   "role": "seller",
+   "full_name": "Trần Thị Mai Anh",
+   "display_name": "Hộ kinh doanh Mai Anh Fashion"
+  },
+  {
+   "subject": "phucan.beauty",
+   "role": "seller",
+   "full_name": "Lê Hoàng Phúc",
+   "display_name": "Hộ kinh doanh Phúc An Beauty"
+  },
+  {
+   "subject": "khang.phukien",
+   "role": "seller",
+   "full_name": "Phạm Minh Khang",
+   "display_name": "Hộ kinh doanh Khang Phụ Kiện"
+  },
+  {
+   "subject": "tung.giadung",
+   "role": "seller",
+   "full_name": "Võ Thanh Tùng",
+   "display_name": "Hộ kinh doanh Tùng Gia Dụng"
+  },
+  {
+   "subject": "han.store",
+   "role": "seller",
+   "full_name": "Đỗ Ngọc Hân",
+   "display_name": "Hộ kinh doanh Hân Store"
+  },
+  {
+   "subject": "hau.mart",
+   "role": "seller",
+   "full_name": "Nguyễn Văn Hậu",
+   "display_name": "Hộ kinh doanh Hậu Mart"
+  },
+  {
+   "subject": "tran.ngoclan",
+   "role": "underwriter",
+   "full_name": "Trần Ngọc Lan",
+   "display_name": "Chuyên viên thẩm định"
+  },
+  {
+   "subject": "nguyen.ducminh",
+   "role": "underwriter",
+   "full_name": "Nguyễn Đức Minh",
+   "display_name": "Chuyên viên thẩm định"
+  },
+  {
+   "subject": "le.thuthao",
+   "role": "underwriter",
+   "full_name": "Lê Thu Thảo",
+   "display_name": "Trưởng phòng thẩm định"
+  }
+ ]
+}

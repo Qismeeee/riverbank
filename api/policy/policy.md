@@ -1,4 +1,4 @@
-# Chính sách tín dụng Riverbank (bản demo)
+# Chính sách tín dụng Riverbank
 
 Nguồn: docs/Riverbank-BRD.md mục BL, docs/Riverbank-SRS.md FR-17 đến FR-20.
 Mỗi rule dưới đây có một hàm cùng mã trong `rules.py` và một test trong `test_rules.py`.

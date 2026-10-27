@@ -324,7 +324,7 @@ def main() -> int:
     ap.add_argument("--dossiers", required=True)
     ap.add_argument("--only", default="")
     ap.add_argument("--upload", choices=("job", "sync"), default="job")
-    ap.add_argument("--reviewer", default="uw-flow")
+    ap.add_argument("--reviewer", default="tran.ngoclan")
     ap.add_argument("--ocr", action="store_true")
     ap.add_argument("--timeout", type=float, default=120)
     ap.add_argument("--out", default="flow-report.json")

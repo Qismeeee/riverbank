@@ -12,7 +12,7 @@ AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-1")
 S3_BUCKET = os.getenv("S3_BUCKET", "")
 WORKFLOW_MODE = os.getenv("RIVERBANK_WORKFLOW_MODE", "disabled")
 WORKFLOW_STORAGE = os.getenv("RIVERBANK_WORKFLOW_STORAGE", "memory")
-WORKFLOW_FEATURES = os.getenv("RIVERBANK_WORKFLOW_FEATURES", "demo")
+WORKFLOW_FEATURES = os.getenv("RIVERBANK_WORKFLOW_FEATURES", "seller_book")
 WORKFLOW_RISK = os.getenv("RIVERBANK_WORKFLOW_RISK", "lightgbm")
 WORKFLOW_CIC_GATE = os.getenv("RIVERBANK_WORKFLOW_CIC_GATE", "jev")
 WORKFLOW_CIC_SOURCE = os.getenv("RIVERBANK_WORKFLOW_CIC_SOURCE", "profiles")
@@ -20,6 +20,9 @@ WORKFLOW_IDENTITY = os.getenv("RIVERBANK_WORKFLOW_IDENTITY", "header")
 AUTH_TOKEN_TTL_SECONDS = int(os.getenv("RIVERBANK_AUTH_TOKEN_TTL_SECONDS", "28800"))
 AUTH_MAX_FAILURES = int(os.getenv("RIVERBANK_AUTH_MAX_FAILURES", "5"))
 AUTH_FAILURE_WINDOW_SECONDS = int(os.getenv("RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS", "300"))
+USER_DIRECTORY_PATH = Path(
+    os.getenv("RIVERBANK_USER_DIRECTORY") or Path(__file__).resolve().parent / "data" / "users.json"
+)
 SLOW_REQUEST_MS = int(os.getenv("RIVERBANK_SLOW_REQUEST_MS", "5000"))
 WORKFLOW_TEST_DATABASE_URL = os.getenv("WORKFLOW_TEST_DATABASE_URL", "")
 GUARD_BLOCK_PROBABILITY = float(os.getenv("RIVERBANK_GUARD_BLOCK_PROBABILITY", "0.5"))
@@ -89,8 +92,8 @@ AUTH_SIGNING_KEY = _from_env_or_secret(
     "AUTH_SIGNING_KEY", "riverbank/auth", "AUTH_SIGNING_KEY", required=False
 )
 ACCESS_PASSCODE = _from_env_or_secret(
-    "DEMO_PASSCODE", "riverbank/auth", "DEMO_PASSCODE", required=False
-)
+    "ACCESS_PASSCODE", "riverbank/auth", "ACCESS_PASSCODE", required=False
+) or _from_env_or_secret("DEMO_PASSCODE", "riverbank/auth", "DEMO_PASSCODE", required=False)
 ADDLIVETAG_API_KEY = _from_env_or_secret(
     "ADDLIVETAG_API_KEY", "riverbank/addlivetag", "ADDLIVETAG_API_KEY", required=False
 )

@@ -76,7 +76,7 @@
  },
  "sellers": [
   {
-   "seller_id": "demo-a",
+   "seller_id": "thuha.closet",
    "profile": "fashion",
    "platform_supported_amount": 90000000,
    "weekly_payouts": [
@@ -95,7 +95,7 @@
    ]
   },
   {
-   "seller_id": "demo-b",
+   "seller_id": "minhchau.shop",
    "profile": "fashion",
    "platform_supported_amount": 90000000,
    "weekly_payouts": [
@@ -114,7 +114,7 @@
    ]
   },
   {
-   "seller_id": "demo-c",
+   "seller_id": "ducthinh.tech",
    "profile": "electronics",
    "platform_supported_amount": 30000000,
    "weekly_payouts": [
@@ -133,7 +133,7 @@
    ]
   },
   {
-   "seller_id": "demo-d",
+   "seller_id": "ngocvy.boutique",
    "profile": "fashion_young",
    "platform_supported_amount": 90000000,
    "weekly_payouts": [
@@ -152,7 +152,7 @@
    ]
   },
   {
-   "seller_id": "demo-e",
+   "seller_id": "maianh.fashion",
    "profile": "fashion_established",
    "platform_supported_amount": 120000000,
    "weekly_payouts": [
@@ -171,7 +171,7 @@
    ]
   },
   {
-   "seller_id": "demo-f",
+   "seller_id": "phucan.beauty",
    "profile": "cosmetics",
    "platform_supported_amount": 150000000,
    "weekly_payouts": [
@@ -190,7 +190,7 @@
    ]
   },
   {
-   "seller_id": "demo-g",
+   "seller_id": "khang.phukien",
    "profile": "accessories_new",
    "platform_supported_amount": 30000000,
    "weekly_payouts": [
@@ -209,7 +209,7 @@
    ]
   },
   {
-   "seller_id": "demo-h",
+   "seller_id": "tung.giadung",
    "profile": "home_goods",
    "platform_supported_amount": 80000000,
    "weekly_payouts": [
@@ -228,7 +228,7 @@
    ]
   },
   {
-   "seller_id": "demo-i",
+   "seller_id": "han.store",
    "profile": "fashion_mid",
    "platform_supported_amount": 30000000,
    "weekly_payouts": [
@@ -247,7 +247,7 @@
    ]
   },
   {
-   "seller_id": "demo-j",
+   "seller_id": "hau.mart",
    "profile": "grocery",
    "platform_supported_amount": 150000000,
    "weekly_payouts": [

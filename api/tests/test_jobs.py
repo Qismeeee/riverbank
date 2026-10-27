@@ -81,15 +81,19 @@ def scripted_job(queue, kind="scripted"):
 
 
 def test_upload_job_runs_in_background_and_records_job_id(client, upload_service, queue):  # noqa: F811
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
-    seller = seller_headers("demo-c")
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
+    seller = seller_headers("ducthinh.tech")
     response = enqueue_upload(client, case, statement_csv(case), seller)
     assert response.status_code == 202, response.text
     job = response.json()
     assert response.headers["Location"] == f"/v1/jobs/{job['job_id']}"
-    assert (job["status"], job["kind"], job["submitted_by"]) == (QUEUED, STATEMENT_UPLOAD, "demo-c")
+    assert (job["status"], job["kind"], job["submitted_by"]) == (
+        QUEUED,
+        STATEMENT_UPLOAD,
+        "ducthinh.tech",
+    )
     assert upload_service.repository.get(case.case_id).version == case.version
-    other = {k: v for k, v in seller_headers("demo-b").items() if k != "Idempotency-Key"}
+    other = {k: v for k, v in seller_headers("minhchau.shop").items() if k != "Idempotency-Key"}
     assert client.get(f"/v1/jobs/{job['job_id']}", headers=other).status_code == 403
     worker = JobWorker(queue, [StatementUploadHandler(upload_service)], CFG)
     assert worker.run_once() and not worker.run_once()
@@ -106,9 +110,9 @@ def test_upload_job_runs_in_background_and_records_job_id(client, upload_service
 
 
 def test_upload_job_prechecks_before_queueing(client, upload_service, queue):  # noqa: F811
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     content = statement_csv(case)
-    assert enqueue_upload(client, case, content, seller_headers("demo-b")).status_code == 403
+    assert enqueue_upload(client, case, content, seller_headers("minhchau.shop")).status_code == 403
     assert enqueue_upload(client, case, content, version=case.version + 1).status_code == 409
     assert enqueue_upload(client, case, b"\x00\x81\xff").status_code == 415
     assert enqueue_upload(client, case, b"").status_code == 409
@@ -122,7 +126,7 @@ def test_unknown_job_is_not_found(client, queue):  # noqa: F811
 
 
 def test_upload_handler_is_idempotent_on_retry(client, upload_service, queue):  # noqa: F811
-    case = upload_service.repository.get(create(client, "demo-c")["case_id"])
+    case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     response = enqueue_upload(client, case, statement_csv(case))
     claim = queue.claim(60)
     handler = StatementUploadHandler(upload_service)
