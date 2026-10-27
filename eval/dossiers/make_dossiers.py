@@ -39,6 +39,7 @@ from services.statements.classifiers import PayoutClassifier, PayoutLabel  # noq
 from services.statements.factory import build_parsers  # noqa: E402
 from services.statements.reader import StatementReader  # noqa: E402
 from services.underwriting.cic import CicProfileBook, ProfileCicSource  # noqa: E402
+from services.underwriting.gates import GateDecision, GateInput, OpenCicGate  # noqa: E402
 from services.underwriting.models import Case, Plan, StatementUpload  # noqa: E402
 from services.underwriting.repository import MemoryCaseRepository  # noqa: E402
 from services.underwriting.risk import BaselineRiskModel, LightGbmRiskModel, RiskModel  # noqa: E402
@@ -316,6 +317,15 @@ class TruthClassifier(PayoutClassifier):
         return [PayoutLabel(PAYOUT_TAG.lower() in d.lower(), None) for d in descriptions]
 
 
+class StatementFirstGate(OpenCicGate):
+    model = "statement_match"
+    waits_for_statement = True
+
+    def evaluate(self, inp: GateInput) -> GateDecision:
+        eligible = inp.statement is None or bool(inp.statement.get("matched"))
+        return GateDecision(self.name, eligible, self.threshold, self.model)
+
+
 class Expectation:
     def __init__(self, window: Window, risk: RiskModel):
         self.window, self.risk = window, risk
@@ -327,6 +337,7 @@ class Expectation:
             self.risk,
             ProfileCicSource(),
             InternalLosAdapter(),
+            cic_gate=StatementFirstGate(),
             statements=StatementReader(build_parsers("off"), TruthClassifier()),
             clock=lambda: self.window.now,
         )
