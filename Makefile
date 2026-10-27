@@ -1,4 +1,6 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers
+.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers eval-gate test-postgres
+
+PYTHON ?= .venv/bin/python
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -16,10 +18,13 @@ dev:
 	cd api && .venv/bin/uvicorn main:app --reload --port 8000
 
 lint:
-	cd api && .venv/bin/ruff check . ../eval ../data/synth && .venv/bin/ruff format --check . ../eval ../data/synth
+	cd api && $(PYTHON) -m ruff check . ../eval ../data/synth && $(PYTHON) -m ruff format --check . ../eval ../data/synth
 
 test: lint
-	cd api && RIVERBANK_ENV=local .venv/bin/pytest -q
+	cd api && RIVERBANK_ENV=local $(PYTHON) -m pytest -q
+
+test-postgres:
+	cd api && $(PYTHON) ../eval/postgres_gate.py
 
 fmt:
 	cd api && .venv/bin/ruff format . ../eval ../data/synth && .venv/bin/ruff check --fix . ../eval ../data/synth
@@ -28,10 +33,13 @@ jev:
 	cd api && .venv/bin/python jev.py
 
 memo-gate:
-	cd api && .venv/bin/python ../eval/memo_gate.py $(ARGS)
+	cd api && RIVERBANK_ENV=local $(PYTHON) ../eval/memo_gate.py $(ARGS)
+
+eval-gate: memo-gate
+	cd api && RIVERBANK_ENV=local $(PYTHON) ../eval/workflow_gate.py
 
 llm-eval:
-	cd api && .venv/bin/python ../eval/llm_eval.py $(ARGS)
+	cd api && $(PYTHON) ../eval/llm_eval.py $(ARGS)
 
 synth:
 	cd api && .venv/bin/python ../data/synth/generate.py --out ../data/synth/out

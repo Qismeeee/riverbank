@@ -19,9 +19,17 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: riverbank
+          POSTGRES_DB: riverbank_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U riverbank -d riverbank_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,11 +37,16 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: api/requirements-dev.txt
-      - run: pip install -r requirements-dev.txt
-      - run: ruff check .
-      - run: pytest -q
+      - run: pip install -r api/requirements-dev.txt
+      - run: make test PYTHON=python
         env:
           RIVERBANK_ENV: local
+      - run: make eval-gate PYTHON=python
+      - run: make test-postgres PYTHON=python
+        env:
+          RIVERBANK_ENV: local
+          WORKFLOW_TEST_DATABASE_URL: postgresql://riverbank@127.0.0.1:5432/riverbank_test
+          DATABASE_URL: postgresql://riverbank@127.0.0.1:5432/riverbank_test
 
   build:
     needs: test
@@ -91,7 +104,7 @@ jobs:
       - name: smoke test
         run: |
           for i in $(seq 1 12); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://13-214-87-165.sslip.io/health || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://13-214-87-165.sslip.io/ready || true)
             [ "$code" = "200" ] && echo "health 200 after ${i}x5s" && exit 0
             sleep 5
           done

@@ -1,14 +1,18 @@
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
 from threading import RLock
-from typing import Iterator
+from typing import Callable, Iterator
 
 from services.traffic import in_created_window
 
 from .models import Case, WorkflowError
+
+
+def unguarded(connection: object | None = None) -> AbstractContextManager[None]:
+    return nullcontext()
 
 
 def case_header(case: Case) -> dict:
@@ -18,7 +22,7 @@ def case_header(case: Case) -> dict:
     return header
 
 
-OPEN_STATES = ("PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT")
+OPEN_STATES = ("PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT", "ANALYZING")
 DECIDED_STATES = ("ACCEPTED", "REJECTED")
 
 
@@ -51,7 +55,14 @@ class CaseRepository(ABC):
     def list_created(self, start: datetime | None, end: datetime | None) -> list[Case]: ...
 
     @abstractmethod
-    def transaction(self, case_id: str, version: int): ...
+    def transaction(
+        self, case_id: str, version: int, commit_guard: Callable = unguarded
+    ) -> AbstractContextManager[Case]: ...
+
+    @abstractmethod
+    def initializing(
+        self, case_id: str
+    ) -> AbstractContextManager[tuple[Case, Callable[[], None]]]: ...
 
 
 class MemoryCaseRepository(CaseRepository):
@@ -120,13 +131,28 @@ class MemoryCaseRepository(CaseRepository):
             )
 
     @contextmanager
-    def transaction(self, case_id: str, version: int) -> Iterator[Case]:
-        with self._lock:
+    def transaction(
+        self, case_id: str, version: int, commit_guard: Callable = unguarded
+    ) -> Iterator[Case]:
+        with self._lock, commit_guard(None) as validate:
             case = self.get(case_id)
             if case.version != version:
                 raise WorkflowError("CASE_VERSION_CONFLICT")
             yield case
+            if validate:
+                validate()
             case.version += 1
+            self._cases[case_id] = deepcopy(case)
+
+    @contextmanager
+    def initializing(self, case_id: str) -> Iterator[tuple[Case, Callable[[], None]]]:
+        with self._lock:
+            case = self.get(case_id)
+
+            def checkpoint() -> None:
+                self._cases[case_id].progress = deepcopy(case.progress)
+
+            yield case, checkpoint
             self._cases[case_id] = deepcopy(case)
 
 
@@ -289,11 +315,45 @@ class PostgresCaseRepository(CaseRepository):
             return [self._load(conn, row[0]) for row in rows]
 
     @contextmanager
-    def transaction(self, case_id: str, version: int) -> Iterator[Case]:
-        with self._connect() as conn:
+    def transaction(
+        self, case_id: str, version: int, commit_guard: Callable = unguarded
+    ) -> Iterator[Case]:
+        with self._connect() as conn, commit_guard(conn) as validate:
             case = self._load(conn, case_id, lock=True)
             if case.version != version:
                 raise WorkflowError("CASE_VERSION_CONFLICT")
             yield case
+            if validate:
+                validate()
             case.version += 1
             self._save(conn, case)
+
+    @contextmanager
+    def initializing(self, case_id: str) -> Iterator[tuple[Case, Callable[[], None]]]:
+        from psycopg.types.json import Jsonb
+
+        with self._connect() as conn:
+            acquired = conn.execute(
+                "select pg_try_advisory_lock(hashtextextended(%s, 0))", (case_id,)
+            ).fetchone()[0]
+            conn.commit()
+            if not acquired:
+                raise WorkflowError("ASSESSMENT_IN_PROGRESS", 409)
+            try:
+                case = self._load(conn, case_id)
+
+                def checkpoint() -> None:
+                    conn.execute(
+                        "update cases set header=jsonb_set(header, '{progress}', %s) "
+                        "where case_id=%s",
+                        (Jsonb(case.progress), case_id),
+                    )
+                    conn.commit()
+
+                yield case, checkpoint
+                self._save(conn, case)
+                conn.commit()
+            finally:
+                conn.rollback()
+                conn.execute("select pg_advisory_unlock(hashtextextended(%s, 0))", (case_id,))
+                conn.commit()

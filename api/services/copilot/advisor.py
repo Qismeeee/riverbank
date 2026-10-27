@@ -10,6 +10,7 @@ from services.guard import OutputGuard, expand_units, ints
 from services.guardrail import InputGuard, PiiRedactor
 from services.underwriting.models import Case
 
+from .answer_guard import NO_TARIFF, clauses, required_fields, semantic_errors
 from .history import ChatHistory, MemoryChatHistory
 from .models import Answer, AskInput, AskResponse, ChatTurn
 from .replies import vnd
@@ -73,6 +74,7 @@ def case_facts(case: Case) -> dict:
         "sell_weeks": case.plan.get("sell_weeks"),
         "requested_amount": case.plan.get("requested_amount"),
         "gap": cashflow.get("gap"),
+        "payout_warning_threshold": cashflow.get("payout_warning_threshold"),
         "amount_proposed": cashflow.get("amount_proposed"),
         "tenor_weeks": cashflow.get("tenor_weeks"),
         "weekly_deduction": max(cashflow.get("weekly_deductions") or [], default=None),
@@ -85,7 +87,9 @@ def case_facts(case: Case) -> dict:
 
 
 class FactsReply:
-    def compose(self, facts: dict) -> tuple[str, list[str]]:
+    def compose(self, facts: dict, question: str = "") -> tuple[str, list[str]]:
+        if required_fields(question, facts) == {"bank_tariff"}:
+            return NO_TARIFF, []
         parts, used = [STATUS_TEXT[facts["status"]]], ["status"]
         amount, tenor = self._terms(facts)
         if amount and tenor:
@@ -94,6 +98,15 @@ class FactsReply:
                 f"mỗi tuần trừ {vnd(facts['weekly_deduction'])} từ payout."
             )
             used += [amount, tenor, "weekly_deduction"]
+        if (
+            facts["status"] == "NO_LOAN_NEEDED"
+            and facts.get("payout_warning_threshold") is not None
+        ):
+            parts.append(
+                f"Hệ thống xác định không cần vay; ngưỡng cảnh báo payout là "
+                f"{facts['payout_warning_threshold']} VND mỗi tuần."
+            )
+            used.append("payout_warning_threshold")
         if window := facts["statement_window"]:
             parts.append(STATEMENT_STEP.format(**window))
             used.append("statement_window")
@@ -136,10 +149,17 @@ class CaseAdvisor:
         try:
             answer, model = self._ask(question, case.case_id, facts)
             codes = self._violations(answer, facts, case.status)
+            if not codes:
+                codes = semantic_errors(
+                    answer.answer_vi,
+                    question,
+                    facts,
+                    clauses(facts, STATUS_TEXT[case.status], STATEMENT_STEP),
+                )
         except (LlmError, ValidationError) as e:
             answer, model, codes = None, None, [type(e).__name__]
         if codes:
-            text, used = self.fallback.compose(facts)
+            text, used = self.fallback.compose(facts, question)
             turn = self._turn(case, question, text, used, "template", codes, None)
         else:
             turn = self._turn(
@@ -159,7 +179,14 @@ class CaseAdvisor:
         response = self.llm.complete_json(
             LlmRequest(
                 system=self.prompt.system,
-                user={"case": facts, "history": history, "question": question},
+                user={
+                    "case": facts,
+                    "history": history,
+                    "question": question,
+                    "approved_sentences": [
+                        c.text for c in clauses(facts, STATUS_TEXT[facts["status"]], STATEMENT_STEP)
+                    ],
+                },
                 schema=ANSWER_SCHEMA,
                 schema_name="case_answer",
                 temperature=self.prompt.temperature,

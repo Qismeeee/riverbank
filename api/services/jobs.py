@@ -1,10 +1,11 @@
 import logging
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from threading import Event, RLock
-from typing import Callable
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -93,10 +94,18 @@ class JobQueue(ABC):
     def claim(self, lease_seconds: int) -> Claim | None: ...
 
     @abstractmethod
-    def complete(self, job_id: str, result: dict) -> None: ...
+    def complete(self, job_id: str, result: dict, attempt: int) -> bool: ...
 
     @abstractmethod
-    def fail(self, job_id: str, error: dict, retry: bool) -> None: ...
+    def fail(self, job_id: str, error: dict, retry: bool, attempt: int) -> bool: ...
+
+    @abstractmethod
+    def committing(
+        self, job: Job, connection: Any = None
+    ) -> AbstractContextManager[Callable[[], None]]: ...
+
+    @abstractmethod
+    def metrics(self) -> dict: ...
 
 
 @dataclass
@@ -140,13 +149,26 @@ class MemoryJobQueue(JobQueue):
                     return Claim(slot.job, slot.content)
         return None
 
-    def complete(self, job_id: str, result: dict) -> None:
-        with self._lock:
-            self._finish(self._slots[job_id], SUCCEEDED, result=deepcopy(result))
+    def _owns(self, slot: _Slot, attempt: int) -> bool:
+        return (
+            slot.job.status == RUNNING
+            and slot.job.attempts == attempt
+            and slot.lease_until is not None
+            and slot.lease_until > self.clock()
+        )
 
-    def fail(self, job_id: str, error: dict, retry: bool) -> None:
+    def complete(self, job_id: str, result: dict, attempt: int) -> bool:
+        with self._lock:
+            if not self._owns(self._slots[job_id], attempt):
+                return False
+            self._finish(self._slots[job_id], SUCCEEDED, result=deepcopy(result))
+            return True
+
+    def fail(self, job_id: str, error: dict, retry: bool, attempt: int) -> bool:
         with self._lock:
             slot = self._slots[job_id]
+            if not self._owns(slot, attempt):
+                return False
             if retry and slot.job.attempts < slot.job.max_attempts:
                 slot.job = replace(
                     slot.job, status=QUEUED, error=error, updated_at=self.clock().isoformat()
@@ -154,10 +176,44 @@ class MemoryJobQueue(JobQueue):
                 slot.lease_until = None
             else:
                 self._finish(slot, FAILED, error=error)
+            return True
 
     def _finish(self, slot: _Slot, status: str, **fields) -> None:
         slot.job = replace(slot.job, status=status, updated_at=self.clock().isoformat(), **fields)
         slot.content, slot.lease_until = None, None
+
+    @contextmanager
+    def committing(self, job: Job, connection: Any = None) -> Iterator[Callable[[], None]]:
+        with self._lock:
+
+            def validate():
+                if not self._owns(self._slots[job.job_id], job.attempts):
+                    raise WorkflowError("JOB_LEASE_LOST", 409)
+
+            validate()
+            yield validate
+
+    def metrics(self) -> dict:
+        with self._lock:
+            now = self.clock()
+            jobs = [slot.job for slot in self._slots.values()]
+            counts = {
+                state: sum(job.status == state for job in jobs)
+                for state in (QUEUED, RUNNING, SUCCEEDED, FAILED)
+            }
+            counts["expired_leases"] = sum(
+                slot.job.status == RUNNING and slot.lease_until <= now
+                for slot in self._slots.values()
+            )
+            counts["retried"] = sum(job.attempts > 1 for job in jobs)
+            counts["recovered"] = sum(job.attempts > 1 and job.status == SUCCEEDED for job in jobs)
+            queued = [
+                (now - datetime.fromisoformat(job.created_at)).total_seconds()
+                for job in jobs
+                if job.status == QUEUED
+            ]
+            counts["oldest_queued_seconds"] = max(0, max(queued)) if queued else None
+            return counts
 
 
 COLUMNS = (
@@ -238,27 +294,69 @@ class PostgresJobQueue(JobQueue):
             ).fetchone()
         return Claim(_job(row), bytes(row[12])) if row else None
 
-    def complete(self, job_id: str, result: dict) -> None:
+    def complete(self, job_id: str, result: dict, attempt: int) -> bool:
         from psycopg.types.json import Jsonb
 
         with self._connect() as conn:
-            conn.execute(
+            updated = conn.execute(
                 "update jobs set status='SUCCEEDED',result=%s,content=null,lease_until=null,"
-                "updated_at=now() where id=%s and status='RUNNING'",
-                (Jsonb(result), job_id),
+                "updated_at=now() where id=%s and status='RUNNING' and attempts=%s "
+                "and lease_until>clock_timestamp() returning id",
+                (Jsonb(result), job_id, attempt),
             )
+            return updated.fetchone() is not None
 
-    def fail(self, job_id: str, error: dict, retry: bool) -> None:
+    def fail(self, job_id: str, error: dict, retry: bool, attempt: int) -> bool:
         from psycopg.types.json import Jsonb
 
         with self._connect() as conn:
-            conn.execute(
+            updated = conn.execute(
                 "update jobs set error=%s,updated_at=now(),lease_until=null,"
                 "status=case when %s and attempts<max_attempts then 'QUEUED' else 'FAILED' end,"
                 "content=case when %s and attempts<max_attempts then content else null end "
-                "where id=%s and status='RUNNING'",
-                (Jsonb(error), retry, retry, job_id),
+                "where id=%s and status='RUNNING' and attempts=%s "
+                "and lease_until>clock_timestamp() returning id",
+                (Jsonb(error), retry, retry, job_id, attempt),
             )
+            return updated.fetchone() is not None
+
+    @contextmanager
+    def committing(self, job: Job, connection: Any = None) -> Iterator[Callable[[], None]]:
+        with self._connect() if connection is None else nullcontext(connection) as conn:
+
+            def validate():
+                found = (
+                    conn.execute(
+                        "select id from jobs where id=%s and status='RUNNING' "
+                        "and attempts=%s and lease_until>clock_timestamp() for update",
+                        (job.job_id, job.attempts),
+                    ).fetchone()
+                    is not None
+                )
+                if not found:
+                    raise WorkflowError("JOB_LEASE_LOST", 409)
+
+            validate()
+            yield validate
+
+    def metrics(self) -> dict:
+        with self._connect() as conn:
+            row = conn.execute(
+                "select count(*) filter (where status='QUEUED'), "
+                "count(*) filter (where status='RUNNING'), "
+                "count(*) filter (where status='SUCCEEDED'), "
+                "count(*) filter (where status='FAILED'), count(*) filter (where status='RUNNING' "
+                "and lease_until<=clock_timestamp()), count(*) filter (where attempts>1), "
+                "count(*) filter (where attempts>1 and status='SUCCEEDED'), "
+                "max(extract(epoch from clock_timestamp()-created_at)) "
+                "filter (where status='QUEUED') "
+                "from jobs"
+            ).fetchone()
+        names = (QUEUED, RUNNING, SUCCEEDED, FAILED, "expired_leases", "retried", "recovered")
+        return {
+            **dict(zip(names, row[:7], strict=True)),
+            "oldest_queued_seconds": max(0, float(row[7])) if row[7] is not None else None,
+        }
 
 
 class JobHandler(ABC):
@@ -266,6 +364,9 @@ class JobHandler(ABC):
 
     @abstractmethod
     def handle(self, job: Job, content: bytes) -> dict: ...
+
+    def run(self, job: Job, content: bytes, commit_guard: Callable) -> dict:
+        return self.handle(job, content)
 
 
 def _error(exc: Exception) -> tuple[dict, bool]:
@@ -292,16 +393,21 @@ class JobWorker:
         job = claim.job
         handler = self.handlers.get(job.kind)
         if handler is None:
-            self.queue.fail(job.job_id, {"code": "JOB_KIND_UNKNOWN", "status": 500}, False)
+            self.queue.fail(
+                job.job_id, {"code": "JOB_KIND_UNKNOWN", "status": 500}, False, job.attempts
+            )
             return True
         try:
-            result = handler.handle(job, claim.content)
+            result = handler.run(
+                job, claim.content, lambda conn=None: self.queue.committing(job, conn)
+            )
         except Exception as exc:
             error, retry = _error(exc)
             log.warning("job %s attempt %s failed: %s", job.job_id, job.attempts, error["code"])
-            self.queue.fail(job.job_id, error, retry)
+            self.queue.fail(job.job_id, error, retry, job.attempts)
         else:
-            self.queue.complete(job.job_id, result)
+            if not self.queue.complete(job.job_id, result, job.attempts):
+                log.warning("job %s attempt %s lost its lease", job.job_id, job.attempts)
         return True
 
     def run(self, stop: Event) -> None:

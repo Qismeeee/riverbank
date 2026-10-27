@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
@@ -14,6 +15,7 @@ from services.statements.storage import DocumentStore, NoDocumentStore
 from services.traffic import MAX_TRAFFIC_CASES, build_traffic, parse_window
 
 from .evidence import digest, emit
+from .execution import checkpoint_active, execution, initial_checkpoint, step
 from .gates import CicGate, GateInput, OpenCicGate
 from .memo import CodeMemoWriter, MemoComposer, default_validator
 from .models import (
@@ -25,15 +27,16 @@ from .models import (
     StatementUpload,
     WorkflowError,
 )
-from .repository import CaseRepository
+from .repository import CaseRepository, unguarded
 from .risk import RiskInput, RiskModel
-from .sources import CicSource, FeatureSource, LosAdapter, validate_features
+from .sources import CicSource, FeatureSource, LosAdapter, validate_consent, validate_features
 
 ENGINE_VERSION = "cashflow-v2-base-int"
 POLICY_VERSION = "riverbank-r01-r10-v4"
 NOT_QUERIED = "not_queried"
 DEFERRED = "deferred_until_statement"
 CIC_RULE_IDS = frozenset({"R06", "R07"})
+log = logging.getLogger("riverbank.underwriting")
 
 
 def _valid_risk(risk: dict) -> bool:
@@ -129,16 +132,59 @@ class UnderwritingService:
             raise WorkflowError("BLOCKED_INPUT", 422, blocked)
         request_hash = digest(plan.model_dump())
         existing = self.repository.find_request(plan.seller_id, key, request_hash)
-        if existing:
+        if existing and existing.status != "ANALYZING":
             return existing
+        if existing:
+            return self._resume_initial(existing)
         now = self.clock()
         consent, features = self.features.fetch(plan.seller_id, plan.shop_id, now)
         validate_features(features, plan.seller_id, plan.shop_id, now)
         case = Case(str(uuid4()), plan.seller_id, plan.shop_id, plan.model_dump(), now.isoformat())
         case.consent = deepcopy(consent)
+        case.progress = {
+            "features": deepcopy(features),
+            "run_id": str(uuid4()),
+            "steps": {},
+            "engine_version": ENGINE_VERSION,
+            "engine_config": asdict(self.engine.cfg),
+            "policy_hash": self.policy_hash,
+            "risk_version": self.risk.describe(),
+        }
         self._event(case, plan.seller_id, "STATE_CHANGED", "DRAFT", "INPUT_AND_CONSENT_VALID")
-        self._assess(case, features)
-        return self.repository.create(case, key, request_hash)
+        case = self.repository.create(case, key, request_hash)
+        return self._resume_initial(case)
+
+    def _resume_initial(self, reserved: Case) -> Case:
+        with self.repository.initializing(reserved.case_id) as (case, checkpoint):
+            if case.status == "ANALYZING":
+                validate_consent(case.consent, self.clock())
+                current_consent, _ = self.features.fetch(case.seller_id, case.shop_id, self.clock())
+                validate_consent(current_consent, self.clock())
+                if current_consent["reference"] != case.consent["reference"]:
+                    raise WorkflowError("CONSENT_CHANGED", 409)
+                if (
+                    case.progress.get("engine_version") != ENGINE_VERSION
+                    or case.progress.get("engine_config") != asdict(self.engine.cfg)
+                    or case.progress.get("policy_hash") != self.policy_hash
+                    or case.progress.get("risk_version") != self.risk.describe()
+                ):
+                    raise WorkflowError("ASSESSMENT_VERSION_CHANGED", 409)
+                with initial_checkpoint(checkpoint):
+                    self._assess(case, case.progress["features"])
+                case.progress["completed"] = True
+        return self.repository.get(reserved.case_id)
+
+    def resume_pending(self, limit: int = 100) -> dict:
+        resumed, blocked = 0, 0
+        for case in self.repository.list_queue("ANALYZING", limit, 0):
+            try:
+                self._resume_initial(case)
+                resumed += 1
+            except Exception as exc:
+                blocked += 1
+                code = exc.code if isinstance(exc, WorkflowError) else type(exc).__name__
+                log.warning("assessment %s recovery deferred: %s", case.case_id, code)
+        return {"resumed": resumed, "blocked": blocked}
 
     def _policy_input(
         self,
@@ -176,10 +222,18 @@ class UnderwritingService:
         }
 
     def _inquire_cic(self, case: Case, inp: GateInput, now: datetime) -> dict:
-        gate = self.cic_gate.evaluate(inp)
-        if not gate.eligible:
-            return self._skipped_cic(case, NOT_QUERIED, gate.payload())
-        return {**self.cic.inquire(case.seller_id, now), "gate": gate.payload()}
+        if not self.cic.replay_safe and not checkpoint_active():
+            raise WorkflowError("CIC_IDEMPOTENCY_CONTRACT_REQUIRED", 503)
+        gate = step("CIC_GATE", asdict(inp), lambda: self.cic_gate.evaluate(inp).payload())
+        if not gate["eligible"]:
+            return self._skipped_cic(case, NOT_QUERIED, gate)
+        response = step(
+            "CIC_INQUIRY",
+            {"seller_id": case.seller_id},
+            lambda: self.cic.inquire(case.seller_id, now),
+            self.cic.replay_safe,
+        )
+        return {**response, "gate": gate}
 
     def _statement_required(self, case: Case, features: dict, cf: dict, risk: dict) -> bool:
         outcome = self.policy.evaluate(self._policy_input(case, features, cf, risk, {}, None))
@@ -215,14 +269,26 @@ class UnderwritingService:
         cic_override: dict | None = None,
     ) -> dict:
         now = self.clock()
-        run_id = str(uuid4())
+        run_id = case.progress.get("run_id", str(uuid4())) if not case.runs else str(uuid4())
         token, bucket = bind_run(case.case_id, run_id, self.clock)
+        if not case.runs:
+            for call in case.progress.get("model_calls", []):
+                bucket.append(dict(call))
         try:
-            run = self._compose_run(case, features, statement, counter, cic_override, now, run_id)
+            with execution(case, run_id, self.clock) as trace:
+                run = self._compose_run(
+                    case, features, statement, counter, cic_override, now, run_id
+                )
+            run["trace_id"] = run_id
+            run["steps"] = trace.spans
             finished = self.clock()
             run["started_at"] = now.isoformat()
             run["finished_at"] = finished.isoformat()
             run["duration_ms"] = (finished - now) // timedelta(milliseconds=1)
+            if run["run_no"] == 1:
+                run["workflow_elapsed_ms"] = (
+                    finished - datetime.fromisoformat(case.created_at)
+                ) // timedelta(milliseconds=1)
             run["model_calls"] = bucket.snapshot(run_id)
             return run
         finally:
@@ -245,15 +311,14 @@ class UnderwritingService:
             payout_weekly_history=[w["amount"] for w in features["weekly_payouts"]],
             requested_amount=case.plan["requested_amount"],
         )
-        result = self.engine.compute(inp)
-        cf = asdict(result)
+        cf = step("CASHFLOW", asdict(inp), lambda: asdict(self.engine.compute(inp)))
         if counter:
-            if not result.loan_needed:
+            if not cf["gap"]:
                 raise WorkflowError("NO_LOAN_NEEDED")
             terms = self.engine.counter_terms(
                 counter.final_amount,
                 counter.final_tenor_weeks,
-                result.payout_stress,
+                cf["payout_stress"],
             )
             cf.update(
                 amount_proposed=terms.amount,
@@ -294,9 +359,13 @@ class UnderwritingService:
         }
         previous = case.status
         case.reason = None
-        if result.loan_needed:
+        if cf["gap"]:
             # PD is re-scored on each run's terms. A new run keeps the first CIC snapshot taken.
-            risk = self.risk.predict(RiskInput(features, case.plan, cf))
+            risk = step(
+                "RISK",
+                {"features": features, "plan": case.plan, "cashflow": cf},
+                lambda: self.risk.predict(RiskInput(features, case.plan, cf)),
+            )
             if not _valid_risk(risk):
                 raise WorkflowError("INVALID_RISK_RESULT", 422)
             cic = self._resolve_cic(
@@ -325,7 +394,12 @@ class UnderwritingService:
             if statement:
                 refs["E8"] = emit(case, run_id, "E8", statement, now.isoformat())
                 policy_input.evidence_ids["R05"] = refs["E8"]["evidence_id"]
-            outcome = self.policy.evaluate(policy_input)
+            outcome = step(
+                "POLICY",
+                asdict(policy_input),
+                lambda: self.policy.evaluate(policy_input),
+                persist=False,
+            )
             run["policy_input"] = asdict(policy_input)
             policy = {
                 "results": [asdict(r) for r in outcome.results],
@@ -342,7 +416,14 @@ class UnderwritingService:
         else:
             case.status = "NO_LOAN_NEEDED"
         case.runs.append(run)
-        case.documents.extend(self.memo.compose(case, run, refs, now.isoformat()))
+        case.documents.extend(
+            step(
+                "MEMO",
+                {"run_id": run_id, "status": case.status},
+                lambda: self.memo.compose(case, run, refs, now.isoformat()),
+                persist=False,
+            )
+        )
         if not case.documents[-1]["validated"]:
             case.status, case.reason = "ESCALATED", "MEMO_VALIDATION_FAILED"
         self._event(
@@ -351,6 +432,8 @@ class UnderwritingService:
         return run
 
     def inquire_cic(self, case_id: str, request: CicInquiry, actor: str) -> Case:
+        if not self.cic.replay_safe:
+            raise WorkflowError("CIC_IDEMPOTENCY_CONTRACT_REQUIRED", 503)
         with self.repository.transaction(case_id, request.expected_version) as case:
             prior = case.runs[-1] if case.runs else None
             if (
@@ -454,6 +537,7 @@ class UnderwritingService:
         content: bytes,
         actor: str,
         job_id: str | None = None,
+        commit_guard: Callable = unguarded,
     ) -> Case:
         period = self.check_upload(case_id, request, content)
         token = open_scope(case_id, self.clock)
@@ -464,7 +548,9 @@ class UnderwritingService:
             details["original"] = self.documents.put(read.document, case_id)
             if job_id:
                 details["job_id"] = job_id
-            with self.repository.transaction(case_id, request.expected_version) as case:
+            with self.repository.transaction(
+                case_id, request.expected_version, commit_guard
+            ) as case:
                 period = self._statement_period(case, request.period_start, request.period_end)
                 self._record_statement(
                     case,

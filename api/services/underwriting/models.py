@@ -194,6 +194,7 @@ class Case:
     decision: dict | None = None
     handoff: dict | None = None
     consent: dict = field(default_factory=dict)
+    progress: dict = field(default_factory=dict)
 
 
 class WorkflowError(Exception):

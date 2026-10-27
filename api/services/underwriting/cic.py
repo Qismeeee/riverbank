@@ -95,6 +95,7 @@ class CicProfileBook:
 
 class ProfileCicSource(CicSource):
     name = "cic_profiles"
+    replay_safe = True
 
     def __init__(self, book: CicProfileBook | None = None):
         self.book = book or CicProfileBook.load()

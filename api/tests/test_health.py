@@ -24,3 +24,17 @@ def test_health_local_skips_external_checks():
 
 def test_root():
     assert client.get("/").json()["service"] == "riverbank-api"
+
+
+def test_readiness_returns_503_for_required_dependency_failure(monkeypatch):
+    monkeypatch.setattr("main._check_db", lambda: "error: OperationalError")
+    monkeypatch.setattr("main._check_s3", lambda: "ok")
+    assert client.get("/health").status_code == 200
+    response = client.get("/ready")
+    assert response.status_code == 503 and response.json()["status"] == "degraded"
+
+
+def test_readiness_passes_when_checks_are_healthy(monkeypatch):
+    monkeypatch.setattr("main._check_db", lambda: "ok")
+    monkeypatch.setattr("main._check_s3", lambda: "ok")
+    assert client.get("/ready").status_code == 200

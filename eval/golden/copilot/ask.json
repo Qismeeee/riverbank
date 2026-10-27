@@ -1,0 +1,672 @@
+[
+  {
+    "case_id": "FX-A",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "NO_LOAN_NEEDED",
+    "required_phrases": [
+      "dòng tiền không bị âm nên chưa cần vay"
+    ]
+  },
+  {
+    "case_id": "FX-A",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "NO_LOAN_NEEDED",
+    "required_phrases": [
+      "dòng tiền không bị âm nên chưa cần vay"
+    ]
+  },
+  {
+    "case_id": "FX-A",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "NO_LOAN_NEEDED",
+    "required_phrases": [
+      "dòng tiền không bị âm nên chưa cần vay"
+    ]
+  },
+  {
+    "case_id": "FX-A",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "NO_LOAN_NEEDED",
+    "required_phrases": [
+      "dòng tiền không bị âm nên chưa cần vay"
+    ]
+  },
+  {
+    "case_id": "FX-A",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "NO_LOAN_NEEDED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-B",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-B",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-B",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-B",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-B",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-C-awaiting",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "AWAITING_STATEMENT",
+    "required_phrases": [
+      "cần thêm sao kê tài khoản"
+    ]
+  },
+  {
+    "case_id": "FX-C-awaiting",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "AWAITING_STATEMENT",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-C-awaiting",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "AWAITING_STATEMENT",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-C-awaiting",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "AWAITING_STATEMENT",
+    "required_phrases": [
+      "cần thêm sao kê tài khoản"
+    ]
+  },
+  {
+    "case_id": "FX-C-awaiting",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "AWAITING_STATEMENT",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-C-mismatch",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-C-mismatch",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-C-mismatch",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-C-mismatch",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-C-mismatch",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-C-matched",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-C-matched",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-C-matched",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-C-matched",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-C-matched",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-C-boundary",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-C-boundary",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-C-boundary",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-C-boundary",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-C-boundary",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_3",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_3",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-cic_group_3",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_3",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_3",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_2",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_2",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-cic_group_2",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_2",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-cic_group_2",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-shop_age",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-shop_age",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-shop_age",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-shop_age",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-shop_age",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-return_rate_soft",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-return_rate_soft",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-return_rate_soft",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-return_rate_soft",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-return_rate_soft",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-outstanding_soft",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-outstanding_soft",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-outstanding_soft",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-outstanding_soft",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-outstanding_soft",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-e_lending_cap",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-e_lending_cap",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "165000000 VND",
+      "15 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-e_lending_cap",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11000000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-e_lending_cap",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-e_lending_cap",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_above_cap",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_above_cap",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-pd_above_cap",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_above_cap",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_above_cap",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_at_cap",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_at_cap",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-pd_at_cap",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_at_cap",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "đang chờ ngân hàng xem"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_at_cap",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "PENDING_REVIEW",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-pd_missing",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing_and_cic_group_3",
+    "question": "Hồ sơ của tôi đang ở bước nào?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing_and_cic_group_3",
+    "question": "Tôi được đề xuất vay bao nhiêu, trong bao lâu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "90000000 VND",
+      "8 tuần"
+    ],
+    "required_actor": "engine_proposal"
+  },
+  {
+    "case_id": "FX-E-pd_missing_and_cic_group_3",
+    "question": "Mỗi tuần bị trích bao nhiêu tiền payout?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "11250000 VND"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing_and_cic_group_3",
+    "question": "Vì sao hồ sơ chưa được duyệt?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "đang chờ ngân hàng xem kỹ hơn"
+    ]
+  },
+  {
+    "case_id": "FX-E-pd_missing_and_cic_group_3",
+    "question": "Lãi suất và phí là bao nhiêu?",
+    "expected_status": "ESCALATED",
+    "required_phrases": [
+      "Chưa có biểu phí từ ngân hàng"
+    ]
+  }
+]

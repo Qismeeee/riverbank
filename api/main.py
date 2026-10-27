@@ -2,7 +2,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -98,3 +98,10 @@ def health():
 @app.get("/")
 def root():
     return {"service": "riverbank-api", "docs": "/docs"}
+
+
+@app.get("/ready")
+def ready(response: Response) -> dict:
+    checks = health()
+    response.status_code = 200 if checks["status"] == "ok" else 503
+    return checks

@@ -157,6 +157,18 @@ def test_create_replay_and_changed_payload_conflict(client):
     assert response.status_code == 409
 
 
+def test_partial_assessment_is_visible_without_missing_document_crash(client, service, monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(service.memo, "compose", Mock(side_effect=RuntimeError("crash")))
+    with pytest.raises(RuntimeError):
+        service.create(Plan(**plan()), "partial-visible")
+    case = service.repository.list_by_seller("minhchau.shop", 100, 0)[0]
+    response = client.get(f"/v1/cases/{case.case_id}/seller-view", headers=seller_headers())
+    assert response.status_code == 200
+    assert response.json()["status"] == "ANALYZING" and response.json()["explanation"] == []
+
+
 @pytest.mark.parametrize(
     "changes",
     [
