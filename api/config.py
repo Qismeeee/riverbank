@@ -26,14 +26,12 @@ GUARD_BLOCK_PROBABILITY = float(os.getenv("RIVERBANK_GUARD_BLOCK_PROBABILITY", "
 KNOWLEDGE_DIR = Path(
     os.getenv("RIVERBANK_KNOWLEDGE_DIR", Path(__file__).resolve().parent.parent / "knowledge")
 )
-MEMO_WRITER = os.getenv("RIVERBANK_MEMO_WRITER", "template")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 LLM_CACHE_DIR = os.getenv("LLM_CACHE_DIR", "")
 LLM_PURPOSE_LIMITS = {
-    "memo_writer": (15.0, 1),
     "copilot_extract": (20.0, 1),
     "copilot_ask": (20.0, 1),
 }

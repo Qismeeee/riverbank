@@ -381,7 +381,9 @@ def test_expired_decision_cannot_handoff(service):
 
 def test_citations_require_correct_fields_and_snapshot_is_isolated(service):
     case = service.create(Plan(**plan()), "create")
-    sentence = case.documents[0]["seller_explanation"][1]
+    sentence = next(
+        item for item in case.documents[0]["seller_explanation"] if item["template"] == "gap"
+    )
     assert sentence["template"] == "gap"
     sentence["text"] = "Khoảng thiếu vốn là 90000000 VND."
     sentence["claims"]["gap"] = 90_000_000

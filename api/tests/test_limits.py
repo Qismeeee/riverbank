@@ -71,15 +71,15 @@ def test_requests_carry_request_id_and_are_timed(client):  # noqa: F811
 
 
 def test_llm_limits_per_purpose(monkeypatch):
-    assert config.llm_limits("memo_writer") == (15.0, 1)
+    assert config.llm_limits("copilot_ask") == (20.0, 1)
     assert config.llm_limits("statement_ocr") == (
         config.LLM_TIMEOUT_SECONDS,
         config.LLM_MAX_RETRIES,
     )
-    monkeypatch.setenv("LLM_MEMO_WRITER_TIMEOUT_SECONDS", "9")
-    assert config.llm_limits("memo_writer") == (9.0, 1)
+    monkeypatch.setenv("LLM_COPILOT_ASK_TIMEOUT_SECONDS", "9")
+    assert config.llm_limits("copilot_ask") == (9.0, 1)
     monkeypatch.setattr(config, "LLM_PROVIDER", "openai")
     monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-test")
     monkeypatch.setattr(config, "LLM_CACHE_DIR", "")
-    built = llm.build_llm_client("memo_writer")
+    built = llm.build_llm_client("copilot_ask")
     assert built._client.timeout == 9.0 and built._client.max_retries == 1

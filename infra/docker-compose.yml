@@ -43,7 +43,6 @@ services:
       RIVERBANK_WORKFLOW_FEATURES: demo
       RIVERBANK_WORKFLOW_RISK: lightgbm
       RIVERBANK_WORKFLOW_CIC_GATE: jev
-      RIVERBANK_MEMO_WRITER: llm
       RIVERBANK_STATEMENT_OCR: llm
       STATEMENT_OCR_PROVIDER: openrouter
       STATEMENT_OCR_MODEL: google/gemini-3.1-flash-lite

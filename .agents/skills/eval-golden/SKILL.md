@@ -14,12 +14,12 @@ Bộ khóa: FX-A, FX-B, FX-C, FX-D, FX-E, FX-F, FX-L.
 
 ## Tầng 2: chữ trên tờ trình
 
-`eval/golden/llm/*.json`. CI chạy validator Python trong `eval/score.py`: số khớp bằng chứng, từ cấm, lời văn trái trạng thái.
-Jev chấm bốn câu trong `knowledge/prompts/jev-eval-judge.md` khi có harness, không chấm lại Gap.
-`eval/run.py` (viết khi có agents):
-- Cache LLM theo `sha256(model + prompt)` trong `eval/.cache/`, commit cache để rerun free.
-- Metric: faithfulness (Jev score ≥ 4 và citation guard pass), số đúng 100%, latency p50, cost per case.
-- Judge khác model sinh. Người kiểm 10 case, ghi vào `eval/REVIEW.md`.
+`eval/golden/llm/*.json`. CI chạy validator Python trong `eval/score.py`: số khớp bằng chứng, từ cấm, lời văn trái trạng thái, câu khóa phải đúng nguyên văn (`locked_text`).
+Tờ trình do code viết. `make memo-gate` chạy mọi golden case qua service thật, kể cả nộp sao kê, so mọi trường nhãn, exit 1 khi lệch. Test tiêm lỗi trong `test_golden.py` dùng `eval/inject.py`.
+
+## Tầng 3: Copilot với model thật
+
+`make llm-eval` (`eval/llm_eval.py`) gọi model thật, không chạy trong CI. Trích kế hoạch: 12 tin nhắn có nhãn ở `eval/golden/copilot/extract.json`, đếm trường đúng, bỏ trống, sai, bịa. Hỏi đáp: 5 câu hỏi trên mỗi golden case, đếm câu qua guard và mã guard. `--judge` gọi Jev chấm bốn câu trong `knowledge/prompts/jev-eval-judge.md`. Kết quả ở `eval/out/<thời điểm>/`: `report.json` và `review.csv` có cột `human_ok` cho người chấm. Kết quả review tay ghi vào `eval/REVIEW.md`.
 
 ## Data huấn luyện risk model
 
@@ -27,7 +27,7 @@ Jev chấm bốn câu trong `knowledge/prompts/jev-eval-judge.md` khi có harnes
 
 ## Báo cáo
 
-`eval/report.md` sinh từ `run.py`: bảng case, pass/fail, cost. Đây là slide số liệu của buổi chấm.
+Số trình giám khảo lấy từ `api/studio/eval_report.json` (`make eval-report`), `make memo-gate` và `report.json` của `make llm-eval` gần nhất.
 
 ## Không làm
 

@@ -26,7 +26,7 @@ Hai số khóa:
 
 `rules.py` đã có và chạy trên prod. Prompt nào nhắc ngưỡng phải lấy đúng số trong `parameters.yaml`.
 
-Trạng thái hiện tại: `memo-writer.md` được `api/prompts.py` nạp khi `RIVERBANK_MEMO_WRITER=llm`. Các prompt khác là kế hoạch. Thư mục này được đóng vào image API tại `/app/knowledge`, đổi prompt là đổi `prompt_version` trong tờ trình.
+Trạng thái hiện tại: `copilot-extract.md`, `copilot-qa.md`, `statement-ocr.md` và các prompt Jev đang chạy trên prod. Tờ trình D09 và D10 do code viết từ mẫu câu trong `api/services/underwriting/evidence.py`, không qua LLM. Các prompt khác là kế hoạch. Thư mục này được đóng vào image API tại `/app/knowledge`, đổi prompt là đổi `prompt_version` trong tờ trình.
 
 ## Prompt
 
@@ -36,7 +36,6 @@ Mỗi file trong `knowledge/prompts/` là system prompt đóng sẵn. Gọi mode
 |---|---|---|
 | `copilot-extract.md` | LLM nhỏ | Seller chat ngôn ngữ tự nhiên, trước khi tạo hồ sơ |
 | `copilot-qa.md` | LLM nhỏ | Seller hỏi lại trên số đã khóa |
-| `memo-writer.md` | LLM nhỏ | Sinh D09 và D10 |
 | `monitor-proposal.md` | LLM nhỏ | Viết D22 sau khi engine đã tính phương án giãn |
 | `statement-ocr.md` | Vision | PDF/ảnh sao kê, chỉ bóc dòng |
 | `jev-input-guard.md` | Jev | Sau khi đã che PII |
