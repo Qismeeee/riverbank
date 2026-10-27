@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,9 @@ def _load(name: str):
 
 
 score = _load("score")
+sys.modules.setdefault("score", score)
 inject = _load("inject")
+memo_gate = _load("memo_gate")
 
 GOLDEN = ROOT / "eval" / "golden"
 LLM = GOLDEN / "llm"
@@ -150,6 +153,20 @@ def test_memo_guard(path: Path):
     assert score.score_memo(case) == case["expected"]
 
 
+def test_memo_release_gate_runs_statement_and_compares_every_expected_field():
+    case_id, inp, expected = next(row for row in CASES if row[0] == "FX-C-matched")
+    result = memo_gate.run(case_id, inp, expected)
+    assert result["passed"]
+    assert result["status"] == "PENDING_REVIEW"
+    assert result["mismatched_keys"] == []
+    assert result["attempts"][-1]["generator"] == "CODE"
+
+    bad = memo_gate.run(case_id, inp, {**expected, "amount_proposed": 1})
+    assert not bad["passed"]
+    assert bad["mismatched_keys"] == ["amount_proposed"]
+    assert bad["errors"] == ["EXPECTED_MISMATCH:amount_proposed"]
+
+
 def test_studio_eval_report_matches_golden():
     committed = json.loads(score.REPORT.read_text(encoding="utf-8"))
     assert committed == json.loads(json.dumps(score.build_report())), "chạy make eval-report"
@@ -163,17 +180,19 @@ def _memo_sentences() -> list[tuple]:
         except (ValidationError, WorkflowError):
             continue
         for audience in AUDIENCES:
-            rows += [(case, item) for item in case.documents[-1][audience]]
+            rows += [(case, audience, item) for item in case.documents[-1][audience]]
     return rows
 
 
-def test_memo_validator_catches_injected_errors():
+@pytest.mark.parametrize("legacy", [False, True], ids=["framed", "legacy"])
+def test_memo_validator_catches_injected_errors(legacy: bool):
     validator, missed, total = default_validator(), [], 0
-    for case, item in _memo_sentences():
-        assert validator.sentence_errors(case, item) == [], (case.case_id, item["text"])
+    for case, audience, item in _memo_sentences():
+        errors = validator.sentence_errors(case, item, audience, legacy)
+        assert errors == [], (case.case_id, item["text"])
         for kind, text in inject.mutations(item["text"]):
             total += 1
-            if not validator.sentence_errors(case, {**item, "text": text}):
+            if not validator.sentence_errors(case, {**item, "text": text}, audience, legacy):
                 missed.append((case.case_id, kind, text))
     assert total > 0
     assert missed == []

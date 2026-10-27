@@ -13,9 +13,8 @@ from pydantic import ValidationError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 
-import inject  # noqa: E402
 import score  # noqa: E402
-from memo_llm import inputs  # noqa: E402
+from memo_gate import inputs  # noqa: E402
 
 import config  # noqa: E402
 import jev  # noqa: E402
@@ -26,7 +25,6 @@ from services.copilot.extractor import PlanExtractor  # noqa: E402
 from services.copilot.models import AskInput, ExtractPlanInput  # noqa: E402
 from services.guard import OutputGuard  # noqa: E402
 from services.guardrail import GuardVerdict, InputGuard  # noqa: E402
-from services.underwriting.memo import AUDIENCES, build_composer, default_validator  # noqa: E402
 from services.underwriting.models import WorkflowError  # noqa: E402
 
 GOLDEN = ROOT / "eval" / "golden"
@@ -64,18 +62,16 @@ def rate(part: int, whole: int) -> float | None:
 
 def golden_rows(only: list[str]) -> list[tuple[str, dict]]:
     return [
-        row
+        (case_id, inp)
         for path in sorted(GOLDEN.glob("*.json"))
-        for row in inputs(path)
-        if not only or any(row[0].startswith(c) for c in only)
+        for case_id, inp, _ in inputs(path)
+        if not only or any(case_id.startswith(c) for c in only)
     ]
 
 
-def golden_case(case_id: str, inp: dict, writer: str):
+def golden_case(case_id: str, inp: dict):
     try:
-        return score.golden_service(inp, build_composer(writer)).create(
-            score.golden_plan(inp), case_id
-        )
+        return score.golden_service(inp).create(score.golden_plan(inp), case_id)
     except (ValidationError, WorkflowError):
         return None
 
@@ -85,56 +81,6 @@ class Section(ABC):
 
     @abstractmethod
     def run(self) -> tuple[dict, list[dict]]: ...
-
-
-class MemoSection(Section):
-    name = "memo"
-
-    def __init__(self, rows: list[tuple[str, dict]]):
-        self.rows, self.validator = rows, default_validator()
-
-    def run(self) -> tuple[dict, list[dict]]:
-        labeled = [(i, golden_case(i, inp, "llm")) for i, inp in self.rows]
-        labeled = [(i, c) for i, c in labeled if c and c.documents]
-        cases = [c for _, c in labeled]
-        errors, caught, injected, review = Counter(), Counter(), Counter(), []
-        for label, case in labeled:
-            for doc in case.documents:
-                errors.update(e.split(":", 1)[-1] for e in doc["validation_errors"])
-            final = case.documents[-1]
-            for audience in AUDIENCES:
-                for item in final[audience]:
-                    review.append(self._row(label, case, final, audience, item))
-                    if final["generator"] == "LLM":
-                        self._inject(case, item, caught, injected)
-        first = [c.documents[0] for c in cases]
-        return {
-            "cases": len(cases),
-            "llm_first_attempt_ok": sum(d["generator"] == "LLM" and d["validated"] for d in first),
-            "llm_final_ok": sum(c.documents[-1]["generator"] == "LLM" for c in cases),
-            "template_fallback": sum(c.documents[-1]["generator"] != "LLM" for c in cases),
-            "unvalidated": sum(not c.documents[-1]["validated"] for c in cases),
-            "validator_errors": dict(errors.most_common()),
-            "injection_catch_rate": {k: rate(caught[k], injected[k]) for k in sorted(injected)},
-        }, review
-
-    def _inject(self, case, item: dict, caught: Counter, injected: Counter) -> None:
-        for kind, text in inject.mutations(item["text"]):
-            injected[kind] += 1
-            caught[kind] += bool(self.validator.sentence_errors(case, {**item, "text": text}))
-
-    @staticmethod
-    def _row(label: str, case, doc: dict, audience: str, item: dict) -> dict:
-        return {
-            "section": "memo",
-            "case_id": label,
-            "item": f"{audience}.{item['template']}",
-            "status": case.status,
-            "evidence": json.dumps(item["claims"], ensure_ascii=False),
-            "text": item["text"],
-            "source": doc["generator"],
-            "codes": "",
-        }
 
 
 class ExtractSection(Section):
@@ -202,7 +148,7 @@ class AskSection(Section):
     def run(self) -> tuple[dict, list[dict]]:
         sources, codes, review = Counter(), Counter(), []
         for case_id, inp in self.rows:
-            case = golden_case(case_id, inp, "template")
+            case = golden_case(case_id, inp)
             if case is None:
                 continue
             for question in self.questions:
@@ -292,15 +238,14 @@ def write(out: Path, report: dict, review: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--section", action="append", choices=["memo", "extract", "ask"])
+    parser.add_argument("--section", action="append", choices=["extract", "ask"])
     parser.add_argument("--case", action="append", default=[])
     parser.add_argument("--judge", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    chosen = args.section or ["memo", "extract", "ask"]
+    chosen = args.section or ["extract", "ask"]
     rows = golden_rows(args.case)
     builders = {
-        "memo": lambda: MemoSection(rows),
         "extract": lambda: ExtractSection(json.loads(EXTRACT_SET.read_text(encoding="utf-8"))),
         "ask": lambda: AskSection(rows),
     }

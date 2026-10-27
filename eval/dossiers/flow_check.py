@@ -198,7 +198,7 @@ class DossierFlow:
             "matched": (want.get("statement") or {}).get("matched"),
         }
         diff = {k: {"got": got[k], "want": expect[k]} for k in got if got[k] != expect[k]}
-        return {"_ok": got["status"] == expect["status"], "got": got, "diff": diff}
+        return {"_ok": not diff, "got": got, "diff": diff}
 
     def case_status(self) -> str:
         detail = self.detail()
@@ -318,7 +318,7 @@ class DossierFlow:
         }
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default=os.getenv("RIVERBANK_BASE_URL", "http://127.0.0.1:8000"))
     ap.add_argument("--dossiers", required=True)
@@ -352,7 +352,8 @@ def main() -> None:
                 print(f"    ✗ {s['name']}: {json.dumps(s['detail'], ensure_ascii=False)[:400]}")
     Path(args.out).write_text(json.dumps(reports, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"report: {args.out}")
+    return 0 if reports and all(report["ok"] for report in reports) else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

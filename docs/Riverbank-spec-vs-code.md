@@ -66,7 +66,8 @@ Ghi chú: case C trong `worked-examples.md` dùng mức sàn 120.000.000, nên `
 
 | Đặc tả | Code hiện tại |
 |---|---|
-| Orchestrator, Data Analyst, Doc Verifier dùng LLM (TDD mục 3) | Chưa có. Memo Writer LLM đã có trong `services/underwriting/memo.py`, bật bằng `RIVERBANK_MEMO_WRITER=llm`, mặc định vẫn là template |
+| Orchestrator, Data Analyst, Doc Verifier dùng LLM (TDD mục 3) | Chưa có |
+| Memo Writer dùng LLM nhỏ (TDD mục 3) | Bỏ. Code viết mọi câu tờ trình từ mẫu câu và semantic frame (`services/underwriting/memo.py`, `CodeMemoWriter`). Review tay thấy LLM gán đề xuất của hệ thống thành "seller muốn vay", validator theo số không bắt được lỗi chủ thể |
 | Jev gate sao kê, chấm chéo memo | Chưa có. Jev mới dùng cho gate CIC (`services/underwriting/gates.py`) |
 | Che PII rồi lưu `sanitized_note` | Regex trong `service.py` chặn cả hồ sơ. TDD chọn regex miễn phí cho guardrail input, FR-03 cho phép chặn |
 | R06 đối chiếu sao kê, lý do `R06_MISMATCH` | Sao kê đi qua R05 (`docs_verified`). Lệch thì lý do `HARD_POLICY_FAILURE` |
