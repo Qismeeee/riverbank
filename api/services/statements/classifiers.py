@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import jev
+from services.metering import record_usage
 from services.underwriting.models import WorkflowError
 
 from .documents import fold
@@ -67,6 +68,7 @@ class JevPayoutClassifier(PayoutClassifier):
                 for i, text in enumerate(batch)
             }
             try:
+                jev.forget_last()
                 answers = self.decide(
                     ["Sao kê ngân hàng của một shop bán trên Shopee."],
                     questions,
@@ -77,6 +79,8 @@ class JevPayoutClassifier(PayoutClassifier):
                 raise WorkflowError(
                     "STATEMENT_CLASSIFIER_UNAVAILABLE", 503, [type(exc).__name__]
                 ) from exc
+            model, usage = jev.take_last()
+            record_usage("statement_classifier", "openrouter", model or self.model, usage, False)
             labels.extend(PayoutLabel(p >= self.threshold, p) for p in probabilities)
         return labels
 

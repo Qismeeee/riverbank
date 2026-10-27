@@ -245,20 +245,22 @@ def golden_service(inp: dict, memo: MemoComposer | None = None) -> UnderwritingS
     )
 
 
-def score_case(inp: dict) -> dict:
+def execute_case(
+    inp: dict, memo: MemoComposer | None = None, case_id: str = "golden"
+) -> tuple[dict, object | None]:
     out = _blank()
-    service = golden_service(inp)
+    service = golden_service(inp, memo)
     cic, risk = service.cic, service.risk
     try:
         plan = golden_plan(inp)
     except ValidationError:
         out["status"] = "INVALID_INPUT"
-        return out
+        return out, None
     try:
-        case = service.create(plan, "golden")
+        case = service.create(plan, case_id)
     except WorkflowError as exc:
         out["status"] = exc.code
-        return out
+        return out, None
     _read(case, out)
     if out["payout_warning_threshold"] is not None:
         at_min, below_gap = _warning(inp, out["payout_warning_threshold"])
@@ -285,6 +287,11 @@ def score_case(inp: dict) -> dict:
     out["cic_called"] = cic.calls > 0
     out["pd_scored"] = risk.calls > 0
     out["auto_rejected"] = case.status == "REJECTED"
+    return out, case
+
+
+def score_case(inp: dict) -> dict:
+    out, _ = execute_case(inp)
     return out
 
 
@@ -365,6 +372,8 @@ def score_memo(case: dict) -> dict:
     reasons = OutputGuard(forbidden_words()).check(
         case["sentence"], allowed, case.get("status_target", "")
     )
+    if case.get("locked_text") is not None and case["sentence"] != case["locked_text"]:
+        reasons.append("semantic_mismatch")
     return {"passed": not reasons, "reasons": reasons}
 
 

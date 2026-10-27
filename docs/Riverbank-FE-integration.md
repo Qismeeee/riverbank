@@ -24,9 +24,27 @@ async function login(subject, role, passcode) {
 }
 ```
 
-- Seller: `subject` là `seller_id` (`demo-a`, `demo-b`, `demo-c`, `demo-d`), `role: "seller"`. `demo-d` cùng số với `demo-b` nhưng hồ sơ shop rủi ro hơn, PD vượt trần nên R10 fail và hồ sơ sang `ESCALATED`.
-- Người thẩm định: `subject` là mã người duyệt bất kỳ, ví dụ `uw-01`, `role: "underwriter"`.
-- `passcode` là mã demo chung, chủ dự án đưa riêng. Không ghi mã vào code FE.
+- Chỉ tài khoản trong danh bạ `api/data/users.json` mới đăng nhập được. Sai `subject`, sai `role` hay sai mã đều trả `401 INVALID_CREDENTIALS`.
+- Phản hồi đăng nhập và `GET /v1/auth/me` có `full_name` và `display_name`. Hiển thị tên này trên header, không hiển thị `subject`.
+- `passcode` là mã truy cập chung, chủ dự án đưa riêng. Không ghi mã vào code FE.
+
+| `subject` | `role` | Họ tên | `display_name` | Ghi chú |
+|---|---|---|---|---|
+| `thuha.closet` | seller | Nguyễn Thu Hà | Hộ kinh doanh Thu Hà Closet | Payout 40 triệu mỗi tuần |
+| `minhchau.shop` | seller | Lê Minh Châu | Hộ kinh doanh Minh Châu Shop | Case B: thiếu 80 triệu, đề xuất 90 triệu, 8 tuần |
+| `ducthinh.tech` | seller | Phan Đức Thịnh | Hộ kinh doanh Đức Thịnh Tech | Sàn chỉ xác nhận 30 triệu, xin cao phải nộp sao kê |
+| `ngocvy.boutique` | seller | Hồ Ngọc Vy | Hộ kinh doanh Ngọc Vy Boutique | Cùng số với `minhchau.shop` nhưng shop rủi ro hơn, PD vượt trần, R10 fail, sang `ESCALATED` |
+| `maianh.fashion` | seller | Trần Thị Mai Anh | Hộ kinh doanh Mai Anh Fashion | Hồ sơ HS01 |
+| `phucan.beauty` | seller | Lê Hoàng Phúc | Hộ kinh doanh Phúc An Beauty | Hồ sơ HS02 |
+| `khang.phukien` | seller | Phạm Minh Khang | Hộ kinh doanh Khang Phụ Kiện | Hồ sơ HS03 |
+| `tung.giadung` | seller | Võ Thanh Tùng | Hộ kinh doanh Tùng Gia Dụng | Hồ sơ HS04 |
+| `han.store` | seller | Đỗ Ngọc Hân | Hộ kinh doanh Hân Store | Hồ sơ HS05 |
+| `hau.mart` | seller | Nguyễn Văn Hậu | Hộ kinh doanh Hậu Mart | Hồ sơ HS06 |
+| `tran.ngoclan` | underwriter | Trần Ngọc Lan | Chuyên viên thẩm định | |
+| `nguyen.ducminh` | underwriter | Nguyễn Đức Minh | Chuyên viên thẩm định | |
+| `le.thuthao` | underwriter | Lê Thu Thảo | Trưởng phòng thẩm định | |
+
+Mã cũ `demo-a` đến `demo-j` và `uw-01` không còn đăng nhập được.
 - Lưu `access_token` trong bộ nhớ trang hoặc `sessionStorage`. Hết hạn (`expires_at`, mặc định 8 giờ) thì đăng nhập lại.
 
 ```js
@@ -63,8 +81,8 @@ Thân `POST /v1/cases`:
 
 ```json
 {
-  "seller_id": "demo-b",
-  "shop_id": "demo-b",
+  "seller_id": "minhchau.shop",
+  "shop_id": "minhchau.shop",
   "lot_value": 200000000,
   "cash_on_hand": 120000000,
   "supplier_schedule": [{ "week": 0, "amount": 200000000 }],
@@ -101,6 +119,7 @@ Nút "Giữ để ký số" gọi `decisions` với `ACCEPT_PROPOSAL` hoặc `AC
 |---|---|
 | Bộ rule, ngưỡng, mã băm, model PD, Jev gate | `GET /v1/studio/policy` |
 | Kết quả golden eval | `GET /v1/studio/eval-metrics` |
+| Lưu lượng, thời gian, chi phí | `GET /v1/studio/traffic`, `Riverbank-API.md` mục 6.8 |
 
 ## 4. Trạng thái và lý do
 

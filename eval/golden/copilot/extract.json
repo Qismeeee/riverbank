@@ -1,0 +1,62 @@
+[
+  {
+    "id": "EX-01",
+    "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr",
+    "expected": {"lot_value": 200000000, "cash_on_hand": 120000000, "sell_weeks": 6, "requested_amount": 150000000}
+  },
+  {
+    "id": "EX-02",
+    "message": "Em nhập lô hàng 150 triệu, đang có sẵn 60 triệu, bán trong 6 tuần",
+    "expected": {"lot_value": 150000000, "cash_on_hand": 60000000, "sell_weeks": 6, "requested_amount": null}
+  },
+  {
+    "id": "EX-03",
+    "message": "Lô son 80 triệu, trong tài khoản còn 30 triệu, cần vay 50 triệu, dự kiến bán hết trong 4 tuần",
+    "expected": {"lot_value": 80000000, "cash_on_hand": 30000000, "sell_weeks": 4, "requested_amount": 50000000}
+  },
+  {
+    "id": "EX-04",
+    "message": "Shop mình muốn vay 100tr, bán khoảng 8 tuần",
+    "expected": {"lot_value": null, "cash_on_hand": null, "sell_weeks": 8, "requested_amount": 100000000}
+  },
+  {
+    "id": "EX-05",
+    "message": "Nhập 2 đợt: tuần 0 trả 60tr, tuần 2 trả 40tr, tổng lô 100tr. Có sẵn 25tr. Bán 5 tuần, xin 75tr.",
+    "expected": {"lot_value": 100000000, "cash_on_hand": 25000000, "sell_weeks": 5, "requested_amount": 75000000}
+  },
+  {
+    "id": "EX-06",
+    "message": "Mình có 1,5 tỷ tiền mặt, lô hàng 2 tỷ, bán 10 tuần, xin vay 500 triệu",
+    "expected": {"lot_value": 2000000000, "cash_on_hand": 1500000000, "sell_weeks": 10, "requested_amount": 500000000}
+  },
+  {
+    "id": "EX-07",
+    "message": "Lô hàng điện thoại trị giá 350.000.000 đồng, vốn tự có 150.000.000 đồng, cần vay 200.000.000 đồng, bán trong 12 tuần.",
+    "expected": {"lot_value": 350000000, "cash_on_hand": 150000000, "sell_weeks": 12, "requested_amount": 200000000}
+  },
+  {
+    "id": "EX-08",
+    "message": "Xin chào, mình muốn tìm hiểu vay vốn nhập hàng",
+    "expected": {"lot_value": null, "cash_on_hand": null, "sell_weeks": null, "requested_amount": null}
+  },
+  {
+    "id": "EX-09",
+    "message": "Lô 120 củ, có 40 củ, bán 6 tuần",
+    "expected": {"lot_value": 120000000, "cash_on_hand": 40000000, "sell_weeks": 6, "requested_amount": null}
+  },
+  {
+    "id": "EX-10",
+    "message": "Mình nhập lô 90 triệu, không có sẵn đồng nào, bán 8 tuần, vay đủ 90 triệu",
+    "expected": {"lot_value": 90000000, "cash_on_hand": 0, "sell_weeks": 8, "requested_amount": 90000000}
+  },
+  {
+    "id": "EX-11",
+    "message": "Có 100tr, cần vay thêm 200tr để nhập lô 300tr, bán trong 9 tuần.",
+    "expected": {"lot_value": 300000000, "cash_on_hand": 100000000, "sell_weeks": 9, "requested_amount": 200000000}
+  },
+  {
+    "id": "EX-12",
+    "message": "Nhập 2.000 cái áo, giá cả lô 180 triệu, có 80 triệu, bán 7 tuần, xin 100 triệu",
+    "expected": {"lot_value": 180000000, "cash_on_hand": 80000000, "sell_weeks": 7, "requested_amount": 100000000}
+  }
+]

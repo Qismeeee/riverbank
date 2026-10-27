@@ -15,9 +15,24 @@ Nhãn lấy từ `policy/worked-examples.md`, tức là hành vi của code đan
 | `fx_f_input_gate.json` | Ép duyệt, thuộc tính nhạy cảm, SĐT → `BLOCKED_INPUT`. Xin trên 300.000.000 → `INVALID_INPUT` (422 Pydantic). |
 | `planned/` | FX-D tiền ngoài sàn, FX-L giám sát. Chưa có code, test không đọc. |
 
-`make memo-llm` chạy Memo Writer LLM thật qua các case trên, in từng lần viết, lỗi validator và câu cuối. Thêm `ARGS="--case FX-B"` để chạy một case. Kết quả cache theo hash input ở `eval/.cache/llm`, xóa thư mục đó để gọi lại model.
+`make memo-gate` chạy mọi case trên qua `UnderwritingService` thật, kể cả bước nộp sao kê, so mọi trường trong nhãn, in câu tờ trình cuối và trả exit 1 khi lệch nhãn hoặc tờ trình không qua validator. Thêm `ARGS="--case FX-B"` để chạy một case. Không gọi model: tờ trình do code viết.
 
-`golden/llm/` khóa validator chữ: số phải có trong bằng chứng, không dùng từ trong `knowledge/guardrails.md`, không viết đã duyệt khi trạng thái chưa phải `ACCEPTED`. Jev chấm ngữ nghĩa ở ngoài CI, theo `knowledge/prompts/jev-eval-judge.md`.
+## Đo LLM thật
+
+`make llm-eval` gọi model thật cho Copilot, không cache, nên mỗi lần chạy tốn tiền API (vài chục lượt gọi). Cần `OPENAI_API_KEY` hoặc `OPENROUTER_API_KEY` trong `api/.env` như khi chạy API.
+
+| Phần | Đo gì |
+|---|---|
+| `copilot_extract` | 12 tin nhắn có nhãn ở `golden/copilot/extract.json`. Mỗi trường là `correct`, `missed` (bỏ trống), `wrong` (điền sai số) hoặc `invented` (nhãn trống mà vẫn điền). |
+| `copilot_ask` | 5 câu hỏi chuẩn trên mỗi case golden. Đếm câu trả lời LLM qua được guard và mã guard khi phải lùi về template. |
+
+`ARGS="--section ask"` chạy một phần. `ARGS="--case FX-B"` chạy một case. `ARGS="--judge"` gọi thêm Jev chấm 4 câu hỏi ngữ nghĩa trong `knowledge/prompts/jev-eval-judge.md` cho mọi câu LLM viết, cờ bật khi xác suất YES trên 0,5.
+
+Kết quả ở `eval/out/<thời điểm>/`: `report.json` là số tổng, `review.csv` là từng câu kèm bằng chứng và cột `human_ok` trống để người chấm tay. Validator và Jev chỉ bắt được lỗi có quy tắc. Lỗi nghĩa không có số chỉ người đọc mới chắc.
+
+`api/tests/test_golden.py::test_memo_validator_catches_injected_errors` tiêm 5 kiểu lỗi trong `eval/inject.py` (đổi chỗ hai số, sửa một số, bỏ một số, chèn "đã được duyệt", chèn "gian lận") vào mọi câu tờ trình golden, chạy trong `make test`. Chạy hai chế độ: tờ trình mới (có semantic frame, chữ phải đúng mẫu) và tờ trình cũ trên prod (chỉ kiểm số, thứ tự số, từ cấm, trạng thái).
+
+`golden/llm/` khóa validator chữ: số phải có trong bằng chứng, không dùng từ trong `knowledge/guardrails.md`, không viết đã duyệt hay đã chấp thuận khi trạng thái chưa phải `ACCEPTED`, câu có `locked_text` phải đúng nguyên văn (tráo số, sai chủ thể, số bằng chữ, phí bịa). Jev chấm ngữ nghĩa ở ngoài CI, theo `knowledge/prompts/jev-eval-judge.md`.
 
 ## Thêm case
 

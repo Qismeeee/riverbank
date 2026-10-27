@@ -645,8 +645,8 @@ Danh tính chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`: `token` (JWT HS256 từ 
 
 ```json
 {
-  "seller_id": "demo-b",
-  "shop_id": "demo-b",
+  "seller_id": "minhchau.shop",
+  "shop_id": "minhchau.shop",
   "lot_value": 200000000,
   "cash_on_hand": 120000000,
   "supplier_schedule": [{"week": 0, "amount": 200000000}],

@@ -25,7 +25,7 @@ def seed(conn, seller_id: str | None = None, shop_id: int | None = None) -> None
             ).fetchone()
         if not row or not row["n_tracked"] or row["gmv_30d"] <= 0:
             raise ValueError("ETL shop có tracked GMV dương là bắt buộc")
-        consent, feature = records[("demo-b", "demo-b")]
+        consent, feature = records[("minhchau.shop", "minhchau.shop")]
         consent["reference"] = f"consent-{seller_id}-{shop_id}"
         # Estimated weekly payout: 30-day GMV / 30 * 7 * 85%, integer VND.
         payout = row["gmv_30d"] * 7 * 85 // 3000
@@ -80,8 +80,8 @@ def main() -> None:
     parser.add_argument("--seller-id")
     parser.add_argument("--estimate-payout", action="store_true")
     args = parser.parse_args()
-    if config.ENV != "local" or config.WORKFLOW_MODE != "demo":
-        raise SystemExit("Seed chỉ chạy local với RIVERBANK_WORKFLOW_MODE=demo")
+    if config.ENV != "local" or config.WORKFLOW_MODE != "enabled":
+        raise SystemExit("Seed chỉ chạy local với RIVERBANK_WORKFLOW_MODE=enabled")
     if args.etl_shop_id is not None and (not args.seller_id or not args.estimate_payout):
         parser.error("ETL seed cần --seller-id và --estimate-payout")
     if not config.database_url():

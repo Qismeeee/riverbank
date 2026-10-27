@@ -37,13 +37,12 @@ services:
       DB_SECRET_ID: "rds!db-1893a3d4-b65e-47a7-bb55-2134b3deaff7"
       S3_BUCKET: riverbank-data-424016506356
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://ezxriverbank.vercel.app}
-      RIVERBANK_WORKFLOW_MODE: demo
+      RIVERBANK_WORKFLOW_MODE: enabled
       RIVERBANK_WORKFLOW_IDENTITY: token
       RIVERBANK_WORKFLOW_STORAGE: postgres
-      RIVERBANK_WORKFLOW_FEATURES: demo
+      RIVERBANK_WORKFLOW_FEATURES: seller_book
       RIVERBANK_WORKFLOW_RISK: lightgbm
       RIVERBANK_WORKFLOW_CIC_GATE: jev
-      RIVERBANK_MEMO_WRITER: llm
       RIVERBANK_STATEMENT_OCR: llm
       STATEMENT_OCR_PROVIDER: openrouter
       STATEMENT_OCR_MODEL: google/gemini-3.1-flash-lite

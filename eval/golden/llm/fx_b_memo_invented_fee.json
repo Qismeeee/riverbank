@@ -1,0 +1,9 @@
+{
+  "case_id": "FX-B-memo-invented-fee",
+  "sentence": "Hệ thống đề xuất 90000000 VND trong 8 tuần dựa trên khoảng thiếu vốn đã tính. Có thu phí xử lý.",
+  "locked_text": "Hệ thống đề xuất 90000000 VND trong 8 tuần dựa trên khoảng thiếu vốn đã tính.",
+  "evidence_ids": ["E5"],
+  "status_target": "PENDING_REVIEW",
+  "evidence": {"E5": {"amount_proposed": 90000000, "tenor_weeks": 8}},
+  "expected": {"passed": false, "reasons": ["semantic_mismatch"]}
+}

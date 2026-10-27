@@ -1,13 +1,43 @@
 import re
+from decimal import Decimal
 from pathlib import Path
 
 _NUMBER = re.compile(r"\d{1,3}(?:\.\d{3})+|\d+")
-_APPROVED = ("đã duyệt", "được duyệt", "accepted")
+_APPROVED = (
+    "đã duyệt",
+    "được duyệt",
+    "đã chấp thuận",
+    "được chấp thuận",
+    "đã phê duyệt",
+    "được phê duyệt",
+    "accepted",
+    "approved",
+)
 _REJECTED = ("đã từ chối", "rejected")
+_NOT_YET = ("chưa được duyệt",)
+_NO_LOAN = ("không cần vay", "chưa cần vay")
+_SCALED = re.compile(r"(?<![\d.,])(\d+)(?:[.,](\d{1,2}))?\s*(triệu|tỷ)(?!\w)", re.IGNORECASE)
+_SCALES = {"triệu": 10**6, "tỷ": 10**9}
 
 
 def numbers(text: str) -> list[int]:
     return [int(match.group().replace(".", "")) for match in _NUMBER.finditer(text)]
+
+
+def _expand(match: re.Match) -> str:
+    whole, fraction, unit = match.groups()
+    value = Decimal(f"{whole}.{fraction or 0}") * _SCALES[unit.casefold()]
+    return str(int(value)) if value == value.to_integral_value() else match.group()
+
+
+def expand_units(text: str) -> str:
+    return _SCALED.sub(_expand, text)
+
+
+def in_order(text: str, reference: str) -> bool:
+    expected = list(dict.fromkeys(numbers(reference)))
+    seen = list(dict.fromkeys(n for n in numbers(text) if n in expected))
+    return seen == [n for n in expected if n in seen]
 
 
 def ints(node: object) -> set[int]:
@@ -47,13 +77,16 @@ class OutputGuard:
     @staticmethod
     def contradicts(text: str, status: str) -> bool:
         folded = text.casefold()
+        for phrase in _NOT_YET:
+            folded = folded.replace(phrase, "")
         if status != "ACCEPTED" and any(token in folded for token in _APPROVED):
             return True
         if status != "REJECTED" and any(token in folded for token in _REJECTED):
             return True
-        if "không cần vay" in folded and status != "NO_LOAN_NEEDED":
+        no_loan = any(phrase in folded for phrase in _NO_LOAN)
+        if no_loan and status != "NO_LOAN_NEEDED":
             return True
-        needs_loan = "cần vay" in folded and "không cần vay" not in folded
+        needs_loan = "cần vay" in folded and not no_loan
         return needs_loan and status == "NO_LOAN_NEEDED"
 
     def check(self, text: str, allowed: set[int] | None, status: str) -> list[str]:

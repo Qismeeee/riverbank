@@ -342,7 +342,7 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-17 | Đạt | Mười rule R01 đến R10, mỗi rule có `evidence_id` |
 | FR-18 | Đạt một phần | Không có bước nạp bộ rule đã ký. Có `policy_hash`, đổi rule sau thẩm định thì chặn `ACCEPT_PROPOSAL` |
 | FR-19, FR-19b | Đạt | Rule cứng fail thì `ESCALATED`. R09 trần 100.000.000 |
-| FR-20 | Đạt | Prod viết tờ trình bằng LLM (`RIVERBANK_MEMO_WRITER=llm`) trên số đã khóa, lỗi thì quay về template. Không ghi ngược vào kết quả rule |
+| FR-20 | Đạt | Code viết tờ trình từ mẫu câu trên số đã khóa, mỗi câu kèm semantic frame (chủ thể, quan hệ, vai trò số, đơn vị). Không dùng LLM. Không ghi ngược vào kết quả rule |
 | FR-21 | Đạt | Đòi sao kê khi `max(xin, đề xuất) > 2,5 ×` mức sàn. Bằng đúng mốc thì không đòi |
 | FR-22 | Đạt | Seller hoặc người thẩm định nộp file CSV, PDF, ảnh qua `/statements/upload`. Code đọc dòng, phân loại tiền sàn, cộng tổng. Vẫn nhập tay được tổng qua `/statements`. Lệch trên 15% thì `ESCALATED` |
 | FR-23 | Đạt | Thông điệp "không khớp; cần xác minh" |
@@ -358,4 +358,4 @@ Kiểm ngày 23/10/2026 trên `main` commit `68588f2`, chạy `UnderwritingServi
 | FR-38 | Đạt | `case_events` chỉ thêm, có tác nhân và mã bằng chứng |
 | NFR-01 | Đạt, chưa đo trên prod | Thẩm định chạy xong trong yêu cầu. Engine và rule dưới 1 giây. Trên prod còn một lần gọi Jev (timeout 10 giây) và LLM viết tờ trình, chưa đo p50 |
 | NFR-02 | Đạt | Engine và rule thuần, golden khóa số |
-| NFR-06 | Chưa đo | Prod gọi Jev qua OpenRouter, Copilot và Memo Writer gọi `gpt-4.1-mini`. Chưa có số chi phí mỗi hồ sơ |
+| NFR-06 | Chưa đo | Prod gọi Jev qua OpenRouter, Copilot gọi `gpt-4.1-mini`, OCR sao kê gọi Gemini qua OpenRouter. Chưa có số chi phí mỗi hồ sơ |

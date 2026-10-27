@@ -1,4 +1,4 @@
-# Chính sách tín dụng Riverbank (bản demo)
+# Chính sách tín dụng Riverbank
 
 Bản này mô tả đúng bộ rule đang chạy trên prod: `api/policy/rules.py` (`policy_version = riverbank-r01-r10-v4`). Ngưỡng ở `parameters.yaml`, ví dụ tính tay ở `worked-examples.md`. Bảng tóm tắt cho dev nằm ở `api/policy/policy.md`.
 
@@ -22,7 +22,7 @@ Không có `ACCEPTED` hay `REJECTED` khi chưa có quyết định ghi qua `POST
 ## 2. Thứ tự xử lý trong `POST /v1/cases`
 
 1. Pydantic kiểm kiểu và trần cổng nhập. Sai thì `422`, không tạo hồ sơ.
-2. Regex quét `note`: lệnh bỏ qua chính sách hoặc ép duyệt, SĐT, CCCD 12 số, số tài khoản, thuộc tính nhạy cảm. Có thì `422 BLOCKED_INPUT`, không tạo hồ sơ.
+2. Regex quét `note`: lệnh bỏ qua chính sách hoặc ép duyệt, SĐT, CCCD 12 số, số tài khoản, thuộc tính nhạy cảm. Có thì `422 BLOCKED_INPUT`, `details` nêu từng lý do và câu tiếng Việt tương ứng, không tạo hồ sơ.
 3. Thiếu consent hiệu lực → `422 CONSENT_REQUIRED`, không đọc dữ liệu sàn. Snapshot feature sai → lỗi `422` hoặc `403` tương ứng.
 4. Tính Gap trên kịch bản cơ sở.
 5. Gap = 0 → `NO_LOAN_NEEDED`, kèm ngưỡng payout cảnh báo. Không gọi CIC, không chấm PD, không chạy rule.
@@ -104,7 +104,7 @@ Thứ tự chạy: R09, R01, R04, R08, R02, R03, R05, R06, R07, R10.
 
 ### R09 Trần cho vay điện tử
 
-- Cứng. Áp cho người vay cá nhân (`borrower_is_individual`, bản demo luôn là cá nhân).
+- Cứng. Áp cho người vay cá nhân (`borrower_is_individual`, hiện chỉ nhận người vay cá nhân).
 - Đạt khi `amount <= e_lending_cap_vnd` (100.000.000), theo Thông tư 06/2023/TT-NHNN.
 - Pháp chế còn phải xác nhận cách áp khi đứng tên hộ kinh doanh.
 - Bằng chứng E5.

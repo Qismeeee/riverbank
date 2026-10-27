@@ -52,7 +52,7 @@ def build(jev):
 @pytest.fixture(autouse=True)
 def demo_mode(monkeypatch):
     monkeypatch.setattr(routes.config, "ENV", "local")
-    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "demo")
+    monkeypatch.setattr(routes.config, "WORKFLOW_MODE", "enabled")
 
 
 def test_eligible_gate_queries_cic_and_records_decision():
@@ -125,7 +125,7 @@ def test_cic_inquiry_only_when_gate_skipped_cic():
 def test_statement_case_waits_for_statement_before_gate(p):
     jev = FakeJev(noul(p))
     service = build(jev)
-    case = create(service, "demo-c")
+    case = create(service, "ducthinh.tech")
     cic = case.runs[-1]["cic"]
     assert (case.status, case.reason) == ("AWAITING_STATEMENT", "STATEMENT_REQUIRED")
     assert jev.calls == [] and service.cic.calls == 0
@@ -146,7 +146,7 @@ def test_statement_case_waits_for_statement_before_gate(p):
 def test_counter_after_statement_reuses_gate_snapshot():
     jev = FakeJev(noul(0.9))
     service = build(jev)
-    case = create(service, "demo-c")
+    case = create(service, "ducthinh.tech")
     updated = service.submit_statement(case.case_id, statement_request(case), "uw-1")
     decision = DecisionInput(
         expected_version=updated.version,
@@ -163,7 +163,7 @@ def test_counter_after_statement_reuses_gate_snapshot():
 def test_statement_mismatch_reaches_gate_state():
     jev = FakeJev(noul(0.9))
     service = build(jev)
-    case = create(service, "demo-c")
+    case = create(service, "ducthinh.tech")
     updated = service.submit_statement(
         case.case_id, statement_request(case, marketplace_total=50_000_000), "uw-1"
     )

@@ -28,41 +28,43 @@ Mục 4 là API đang chạy trong `api/`, viết theo code `main` commit `68588
 
 ### 1.2 Danh tính và vai trò
 
-Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=demo`, nếu không thì trả `503 WORKFLOW_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
+Mọi đầu `/v1` chỉ chạy khi `RIVERBANK_WORKFLOW_MODE=enabled`, nếu không thì trả `503 WORKFLOW_DISABLED`. Cách xác thực chọn bằng `RIVERBANK_WORKFLOW_IDENTITY`.
 
 | Chế độ | Dùng ở | Cách gửi |
 |---|---|---|
 | `token` | Prod, FE Vercel | `Authorization: Bearer <access_token>` lấy từ `POST /v1/auth/token`. Header `X-Actor-*` bị bỏ qua |
 | `header` (mặc định) | Chỉ local (`RIVERBANK_ENV=local`) | `X-Actor-ID`, `X-Actor-Role`. Ngoài local trả `503 VERIFIED_IDENTITY_ADAPTER_REQUIRED` |
 
-**`POST /v1/auth/token`**, đăng nhập demo bằng mã chung:
+**`POST /v1/auth/token`**, đăng nhập bằng tài khoản trong danh bạ và mã truy cập:
 
 ```json
-{ "subject": "demo-b", "role": "seller", "passcode": "<DEMO_PASSCODE>" }
+{ "subject": "minhchau.shop", "role": "seller", "passcode": "<ACCESS_PASSCODE>" }
 ```
 
-`subject` gồm chữ, số, `.`, `_`, `-`, tối đa 64 ký tự. Với seller, `subject` là `seller_id`. Phản hồi `200`:
+`subject` gồm chữ, số, `.`, `_`, `-`, tối đa 64 ký tự. Với seller, `subject` là `seller_id`. `subject` phải có trong danh bạ `api/data/users.json` (đổi bằng `RIVERBANK_USER_DIRECTORY`) với đúng `role`, sai thì `401 INVALID_CREDENTIALS` như sai mã. Phản hồi `200`:
 
 ```json
 {
-  "subject": "demo-b",
+  "subject": "minhchau.shop",
   "role": "seller",
+  "full_name": "Lê Minh Châu",
+  "display_name": "Hộ kinh doanh Minh Châu Shop",
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "bearer",
   "expires_at": "2026-10-24T00:00:00+00:00"
 }
 ```
 
-Token là JWT HS256, ký bằng `AUTH_SIGNING_KEY` (tối thiểu 32 byte), sống `RIVERBANK_AUTH_TOKEN_TTL_SECONDS` giây (mặc định 8 giờ). Prod đọc `AUTH_SIGNING_KEY` và `DEMO_PASSCODE` từ secret `riverbank/auth`.
+Token là JWT HS256, ký bằng `AUTH_SIGNING_KEY` (tối thiểu 32 byte), sống `RIVERBANK_AUTH_TOKEN_TTL_SECONDS` giây (mặc định 8 giờ). Prod đọc `AUTH_SIGNING_KEY` và `ACCESS_PASSCODE` từ secret `riverbank/auth`. Token của người đã bị xoá khỏi danh bạ trả `401 INVALID_TOKEN`.
 
-**`GET /v1/auth/me`** trả `{ "subject": "...", "role": "..." }` của token đang dùng.
+**`GET /v1/auth/me`** trả `subject`, `role`, `full_name`, `display_name` của token đang dùng. Seller có `display_name` là tên hộ kinh doanh, người thẩm định có `display_name` là chức danh.
 
 | Vai trò | Được gọi |
 |---|---|
 | `seller` | Tạo hồ sơ của chính mình, đọc `seller-view` của chính mình |
 | `underwriter` | Hàng đợi, chi tiết hồ sơ, bằng chứng, nhập sao kê, quyết định, bàn giao |
 
-Mã chung chỉ hợp với demo. Bản thật thay `TokenIdentity` bằng adapter danh tính của ngân hàng, kế thừa `IdentityProvider` trong `api/routers/auth.py`. Không có vai trò hệ thống nào được gọi đầu quyết định (SRS FR-31).
+Mã truy cập dùng chung cho mọi tài khoản trong danh bạ. Khi nối với ngân hàng thì thay `TokenIdentity` bằng adapter danh tính của ngân hàng, kế thừa `IdentityProvider` trong `api/routers/auth.py`. Không có vai trò hệ thống nào được gọi đầu quyết định (SRS FR-31).
 
 ### 1.3 Chống ghi trùng và ghi đè
 
@@ -93,7 +95,7 @@ Lỗi sai kiểu dữ liệu do FastAPI trả, mã `422`:
 | `409` | Trạng thái hồ sơ không cho phép thao tác, xung đột `version`, khóa idempotency bị dùng lại, rule cứng fail |
 | `422` | Đầu vào sai, bị chặn ở cổng nhập, thiếu consent, thiếu dữ liệu payout |
 | `429` | Sai mã đăng nhập nhiều lần, hoặc gọi quá ngưỡng tần suất. Có header `Retry-After` (giây) |
-| `503` | Chế độ demo chưa bật, thiếu database |
+| `503` | Luồng `/v1` chưa bật, thiếu database |
 
 Bảng mã lỗi đầy đủ ở mục 5.
 
@@ -138,7 +140,7 @@ POST /cases ──> NO_LOAN_NEEDED
 |---|---|---|---|---|
 | `GET` | `/health` | Không cần | Có | Vận hành |
 | `GET` | `/` | Không cần | Có | Vận hành |
-| `POST` | `/v1/auth/token` | Không cần | Có | Đăng nhập demo, mục 1.2 |
+| `POST` | `/v1/auth/token` | Không cần | Có | Đăng nhập, mục 1.2 |
 | `GET` | `/v1/auth/me` | seller, underwriter | Có | Mục 1.2 |
 | `GET` | `/v1/me/cases` | seller | Có | FR-27 |
 | `POST` | `/v1/cases` | seller | Có | FR-01..FR-28 |
@@ -157,10 +159,11 @@ POST /cases ──> NO_LOAN_NEEDED
 | `POST` | `/v1/cases/{case_id}/copilot/ask` | seller của hồ sơ | Có | FR-27 |
 | `GET` | `/v1/cases/{case_id}/copilot/history` | seller của hồ sơ, underwriter | Có | FR-27 |
 | `POST` | `/v1/webhooks/los-status` | LOS ngân hàng | Chưa có | FR-36 |
-| `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter (demo) | Chưa có | FR-37 |
+| `POST` | `/v1/cases/{case_id}/simulate-p7-event` | underwriter | Chưa có | FR-37 |
 | `POST` | `/v1/cases/{case_id}/restructure-decision` | underwriter | Chưa có | FR-38 |
 | `GET` | `/v1/studio/policy` | underwriter | Có | FR-18 |
 | `GET` | `/v1/studio/eval-metrics` | underwriter | Có | NFR-01..NFR-06 |
+| `GET` | `/v1/studio/traffic` | underwriter | Có | NFR-01, NFR-06, mục 6.8 |
 
 ---
 
@@ -214,8 +217,8 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 
 ```json
 {
-  "seller_id": "demo-b",
-  "shop_id": "demo-b",
+  "seller_id": "minhchau.shop",
+  "shop_id": "minhchau.shop",
   "lot_value": 200000000,
   "cash_on_hand": 120000000,
   "supplier_schedule": [{ "week": 0, "amount": 200000000 }],
@@ -227,7 +230,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 
 **Thứ tự xử lý:**
 
-1. Quét `note`. Có lệnh bỏ qua chính sách hoặc ép duyệt, có SĐT, CCCD, số tài khoản, hoặc nhắc thuộc tính nhạy cảm thì trả `422 BLOCKED_INPUT`. Không tạo hồ sơ.
+1. Quét `note`. Có lệnh bỏ qua chính sách hoặc ép duyệt, có SĐT, CCCD, số tài khoản, hoặc nhắc thuộc tính nhạy cảm thì trả `422 BLOCKED_INPUT`. `details` liệt kê từng lý do khớp, theo thứ tự `PHONE`, `NATIONAL_ID`, `ACCOUNT`, `PROMPT_INJECTION`, `PROHIBITED_ATTRIBUTE`. Mỗi phần tử có `reason`, `field: "note"` và `message`. Không tạo hồ sơ.
 2. Kiểm tra khóa idempotency.
 3. Đọc consent và feature của đúng `seller_id` + `shop_id`. Consent phải có `reference`, mục đích `WORKING_CAPITAL_UNDERWRITING`, chưa thu hồi, còn hạn. Thiếu thì `422 CONSENT_REQUIRED`.
 4. Kiểm tra snapshot feature: đúng seller, có nguồn gốc payout (`observed` hoặc `estimated`), 4–104 tuần payout liên tục, mỗi tuần bắt đầu thứ Hai và đã kết thúc.
@@ -245,8 +248,8 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 ```json
 {
   "case_id": "6f1d2c1e-6a3b-4a51-9d2a-1b7c2f0e9a11",
-  "seller_id": "demo-b",
-  "shop_id": "demo-b",
+  "seller_id": "minhchau.shop",
+  "shop_id": "minhchau.shop",
   "status": "PENDING_REVIEW",
   "version": 1,
   "reason": null,
@@ -659,7 +662,7 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `HANDOFF_IN_PROGRESS` | 409 | Bàn giao | Đang có lần gửi khác |
 | `HANDOFF_HASH_MISMATCH` | 409 | Bàn giao | Gói bị đổi sau khi tạo |
 | `FEATURE_HASH_MISMATCH` | 409 | Tạo hồ sơ | Snapshot feature trong Postgres lệch mã băm |
-| `BLOCKED_INPUT` | 422 | Tạo hồ sơ | Ghi chú có lệnh ép duyệt, PII, hoặc thuộc tính nhạy cảm |
+| `BLOCKED_INPUT` | 422 | Tạo hồ sơ, rút kế hoạch | Ghi chú hoặc câu chat vi phạm cổng vào. `details[]` có `reason` và `message` |
 | `CONSENT_REQUIRED` | 422 | Tạo hồ sơ | Không có consent hiệu lực |
 | `PAYOUT_HISTORY_REQUIRED` | 422 | Tạo hồ sơ | Dưới 4 hoặc trên 104 tuần payout |
 | `INVALID_PAYOUT_PERIOD` | 422 | Tạo hồ sơ | `week_start` sai định dạng |
@@ -681,19 +684,22 @@ Riverbank không gửi lệnh giải ngân, hạch toán, hay trích nợ sang c
 | `JOB_NOT_FOUND` | 404 | `/v1/jobs/{job_id}` | Không có job |
 | `JOB_LEASE_EXPIRED`, `JOB_HANDLER_ERROR`, `JOB_KIND_UNKNOWN` | 500 | Trong `error` của job | Worker chết quá số lần, lỗi không lường trước, loại job lạ |
 | `STATEMENT_READER_UNAVAILABLE`, `STATEMENT_OCR_UNKNOWN`, `STATEMENT_OCR_NOT_CONFIGURED`, `STATEMENT_CLASSIFIER_UNKNOWN` | 503 | `/v1/*` | Cấu hình đọc sao kê sai hoặc thiếu key |
-| `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chưa có adapter danh tính ngoài chế độ demo local |
-| `WORKFLOW_DISABLED` | 503 | `/v1/*` | Chưa bật chế độ demo |
+| `VERIFIED_IDENTITY_ADAPTER_REQUIRED` | 503 | `/v1/*` | Chế độ `header` chỉ chạy local |
+| `WORKFLOW_DISABLED` | 503 | `/v1/*` | `RIVERBANK_WORKFLOW_MODE` khác `enabled` |
 | `INVALID_WORKFLOW_STORAGE`, `INVALID_WORKFLOW_FEATURES`, `INVALID_WORKFLOW_RISK`, `INVALID_WORKFLOW_CIC_GATE`, `INVALID_WORKFLOW_CIC_SOURCE`, `CIC_PROFILES_INVALID` | 503 | `/v1/*` | Cấu hình sai |
 | `DATABASE_REQUIRED` | 503 | `/v1/*` | Chọn Postgres nhưng thiếu `DATABASE_URL` |
 | `AUTHENTICATION_REQUIRED` | 401 | `/v1/*` | Thiếu danh tính hoặc thiếu `Authorization: Bearer` |
 | `INVALID_TOKEN`, `TOKEN_EXPIRED` | 401 | `/v1/*` | Token sai chữ ký, sai định dạng, hoặc hết hạn |
-| `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã demo |
+| `INVALID_CREDENTIALS` | 401 | `/v1/auth/token` | Sai mã truy cập, hoặc `subject` và `role` không có trong danh bạ |
+| `USER_DIRECTORY_INVALID` | 503 | `/v1/auth/*`, `/v1/*` | File danh bạ thiếu, sai định dạng, trùng `subject` hoặc thiếu họ tên |
 | `TOO_MANY_ATTEMPTS` | 429 | `/v1/auth/token` | Sai mã quá `RIVERBANK_AUTH_MAX_FAILURES` lần (mặc định 5) trong `RIVERBANK_AUTH_FAILURE_WINDOW_SECONDS` giây (mặc định 300) từ một IP |
 | `RATE_LIMITED` | 429 | Tạo hồ sơ, nộp sao kê (cả 2 đầu), Copilot extract-plan và ask | Một người gọi vượt ngưỡng trong cửa sổ trượt. Header `Retry-After` và `details[0].retry_after_seconds` cho biết số giây phải chờ. Ngưỡng dạng `số lần/giây`: `RIVERBANK_RATE_LIMIT_CASE_CREATE` (mặc định `30/3600`), `RIVERBANK_RATE_LIMIT_STATEMENT_UPLOAD` (`20/3600`, hai đầu nộp sao kê dùng chung), `RIVERBANK_RATE_LIMIT_COPILOT` (`20/60`). `0/...` là tắt. Đếm theo từng tiến trình, server chạy 2 tiến trình nên ngưỡng thật tối đa gấp đôi |
 | `SELLER_REQUIRED` | 403 | `/v1/me/cases` | Không phải vai trò seller |
 | `EVAL_REPORT_MISSING` | 503 | `/v1/studio/eval-metrics` | Thiếu `api/studio/eval_report.json` |
+| `TRAFFIC_WINDOW_INVALID` | 422 | `/v1/studio/traffic` | `from` sau `to`, hoặc ngày sai `YYYY-MM-DD` |
+| `TRAFFIC_WINDOW_TOO_WIDE` | 503 | `/v1/studio/traffic` | Cửa sổ có trên 5.000 hồ sơ |
 | `TOKEN_LOGIN_DISABLED` | 503 | `/v1/auth/token` | Không ở chế độ `token` |
-| `AUTH_NOT_CONFIGURED` | 503 | `/v1/auth/*`, `/v1/*` | Thiếu `DEMO_PASSCODE` hoặc `AUTH_SIGNING_KEY` ngắn hơn 32 byte |
+| `AUTH_NOT_CONFIGURED` | 503 | `/v1/auth/*`, `/v1/*` | Thiếu `ACCESS_PASSCODE` hoặc `AUTH_SIGNING_KEY` ngắn hơn 32 byte |
 | `INVALID_WORKFLOW_IDENTITY` | 503 | `/v1/*` | `RIVERBANK_WORKFLOW_IDENTITY` sai |
 | `OPENROUTER_KEY_REQUIRED` | 503 | `/v1/*` | Bật Jev gate CIC nhưng thiếu `OPENROUTER_API_KEY` |
 
@@ -708,20 +714,20 @@ Mục 6.1, 6.2, 6.3 đã có code. Từ 6.4 trở đi là kế hoạch, chưa c�
 Seller chat tự do, nhận lại bản nháp đúng dạng body của `POST /v1/cases`. Không tạo hồ sơ (FR-02). Header như `POST /v1/cases`, `X-Actor-ID` phải bằng `seller_id`.
 
 ```json
-{ "seller_id": "demo-b", "shop_id": "demo-b", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
+{ "seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": "Mình nhập lô 200tr, có 120tr, trả hết tuần 0, bán 6 tuần, xin 150tr" }
 ```
 
 Chat nhiều lượt: lượt sau gửi thêm `known` là `draft` của lượt trước. Câu mới chỉ cần nói phần còn thiếu hoặc phần muốn sửa.
 
 ```json
-{ "seller_id": "demo-b", "shop_id": "demo-b", "message": "à xin 120tr thôi", "known": { "lot_value": 200000000, "cash_on_hand": 120000000, "supplier_schedule": [{ "week": 0, "amount": 200000000 }], "sell_weeks": 6, "requested_amount": 150000000 } }
+{ "seller_id": "minhchau.shop", "shop_id": "minhchau.shop", "message": "à xin 120tr thôi", "known": { "lot_value": 200000000, "cash_on_hand": 120000000, "supplier_schedule": [{ "week": 0, "amount": 200000000 }], "sell_weeks": 6, "requested_amount": 150000000 } }
 ```
 
 ```json
 {
   "draft": {
-    "seller_id": "demo-b",
-    "shop_id": "demo-b",
+    "seller_id": "minhchau.shop",
+    "shop_id": "minhchau.shop",
     "lot_value": 200000000,
     "cash_on_hand": 120000000,
     "supplier_schedule": [{ "week": 0, "amount": 200000000 }],
@@ -740,7 +746,7 @@ Chat nhiều lượt: lượt sau gửi thêm `known` là `draft` của lượt 
 ```
 
 - Che SĐT, CCCD, số tài khoản trên `message` trước khi gọi Jev hoặc LLM (FR-03).
-- Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`, `details` liệt kê nhãn và xác suất. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
+- Jev `jev-input-guard` trên chữ đã che. Xác suất ≥ `guardrail.block_probability` thì `422 BLOCKED_INPUT`. `details` có `reason` (`PROMPT_INJECTION` hoặc `PROHIBITED_ATTRIBUTE`), `field: "message"`, `message`, `flag`, `probability`, `threshold`. Jev lỗi thì `503 GUARD_UNAVAILABLE`, không cho qua.
 - Prompt `copilot-extract` trả JSON theo schema cố định. Code kiểm lại: số tiền và số tuần phải có trong câu đã che, lịch xưởng phải cộng đúng `lot_value`. Sai thì trường đó về `null`, vào `missing_fields`, kèm `clarifying_question`.
 - Giá trị trong `known` chỉ được giữ khi câu mới không nói khác. Số mới mà không có trong câu thì bỏ, quay về số trong `known`. Lịch xưởng cũ chỉ giữ khi vẫn cộng đúng `lot_value` mới.
 - `reply` là câu trả lời để hiện trong khung chat, do code ghép từ `draft`, `clarifying_question`, `issues`. Không phải chữ LLM tự viết, nên số trong `reply` luôn khớp `draft`.
@@ -805,7 +811,7 @@ LOS ngân hàng báo trạng thái sau bàn giao.
 
 ### 6.5 `POST /v1/cases/{case_id}/simulate-p7-event`
 
-Chỉ bật ở demo. Giả lập payout tuần tụt để chạy Monitor.
+Chưa có. Dùng cho người thẩm định nhập sự kiện payout tuần tụt để chạy Monitor.
 
 ```json
 { "expected_version": 4, "current_week_payout": 42000000, "return_rate_90d": 0.14 }
@@ -833,7 +839,123 @@ Người ngân hàng duyệt hoặc giữ nguyên đề xuất D22.
 Đã có, chỉ đọc, vai trò `underwriter`. Không có đầu sửa rule qua API.
 
 - `policy` đọc thẳng từ service đang chạy: `policy_version`, `policy_hash` (băm `PolicyConfig`, `rules.py`, `engine.py`), `engine_version`, `policy_config`, `cashflow_config`, `rules[]` (`rule_id`, `hard`, `order` theo thứ tự chạy), `risk_model` (nguồn, phiên bản, feature, metric từ `pd_meta.json`), `cic_gate` (`gate`, `model`, `threshold`). Chưa có người xác nhận phiên bản (FR-18).
-- `eval-metrics` trả `api/studio/eval_report.json`: `golden_digest`, `summary` (`total`, `passed`, `failed`), `cases[]` (`case_id`, `passed`, `mismatched_keys`, `expected_status`, `status`, `gap`, `amount_proposed`, `cic_called`, `pd_scored`). File sinh bằng `make eval-report` từ `eval/golden/` qua `UnderwritingService` thật. `test_golden.py` đỏ khi file lệch golden. Chưa có chi phí theo case vì luồng chưa gọi LLM tính tiền. Thiếu file thì `503 EVAL_REPORT_MISSING`.
+- `eval-metrics` trả `api/studio/eval_report.json`: `golden_digest`, `summary` (`total`, `passed`, `failed`), `cases[]` (`case_id`, `passed`, `mismatched_keys`, `expected_status`, `status`, `gap`, `amount_proposed`, `cic_called`, `pd_scored`). File sinh bằng `make eval-report` từ `eval/golden/` qua `UnderwritingService` thật. `test_golden.py` đỏ khi file lệch golden. Chi phí và thời gian từng hồ sơ không nằm ở đầu này. Xem mục 6.8. Thiếu file thì `503 EVAL_REPORT_MISSING`.
+
+### 6.8 `GET /v1/studio/traffic`
+
+Chỉ đọc, vai trò `underwriter`, cùng cách xác thực với mục 6.7. Không có thân yêu cầu. Không sửa hồ sơ, không ghi `case_events`.
+
+Đầu này trả lưu lượng hồ sơ, thời gian lần tính, và chi phí model. Ba số đó là code tính. LLM không ghi thời gian, không ghi token, không ghi tiền.
+
+FE hiện không có đầu này. Tab Lưu lượng tự gọi `GET /v1/queue` (hàng đang mở, rồi `ACCEPTED`, rồi `REJECTED`) và `GET /v1/cases/{case_id}` từng hồ sơ. Thời gian FE đang lấy là hiệu `events[1].occurred_at − events[0].occurred_at` khi hiệu nằm trong 3 phút. Cách đó không phải hợp đồng. Chi phí FE để trống vì hồ sơ không lưu token. Khi đầu này có, FE chỉ gọi đầu này.
+
+#### Việc phải ghi lúc chạy, không phải đầu API mới
+
+`LlmResponse.usage` đã có trên client OpenAI (`prompt_tokens`, `completion_tokens`, `total_tokens`) nhưng `MemoWriter.write` chỉ giữ `model`. `documents[]` vì thế có `model`, không có usage. Jev (`cic_gate`, phân loại dòng sao kê) cũng không ghi usage.
+
+Mỗi lần gọi model gắn với một `run` thì thêm một dòng, chỉ thêm, không sửa dòng cũ:
+
+| Trường | Nội dung |
+|---|---|
+| `call_id` | UUID |
+| `case_id`, `run_id` | Hồ sơ và lần chạy. Cả hai bắt buộc |
+| `purpose` | `memo_writer`, `statement_ocr`, `statement_classifier`, `cic_gate` |
+| `provider` | `openai` hoặc `openrouter` |
+| `model` | Đúng chuỗi model trả về |
+| `prompt_tokens`, `completion_tokens`, `total_tokens` | Số nguyên, hoặc `null` khi provider không trả usage |
+| `cached` | `true` khi lấy từ cache local |
+| `cost_micro_usd` | Số nguyên, hoặc `null` khi thiếu usage hoặc thiếu đơn giá |
+| `occurred_at` | ISO 8601 |
+
+Đơn giá nằm ở `api/studio/model_prices.yaml`, code đọc. Không lấy từ `policy/parameters.yaml` (file đó chỉ là ngưỡng nghiệp vụ). Không để LLM điền tiền. Không ước token từ số ký tự. Model chưa có dòng đơn giá thì `cost_micro_usd` là `null`.
+
+`cost_micro_usd` là phần triệu USD: 1 USD = 1.000.000. Trần NFR-06 là 0,10 USD, tức `100000`.
+
+Mỗi lần gọi `complete_json` hoặc `jev.decide` trong một lần chạy là một dòng, kể cả lần viết tờ trình bị validator bắt làm lại. Tờ trình template và phân loại không qua model thì không có dòng.
+
+Copilot (`extract-plan`, hỏi lại) không gắn lần chạy thẩm định. Không đưa vào đầu này.
+
+Trên chính `run`, lúc bắt đầu và lúc ghi xong lần chạy, thêm `started_at`, `finished_at`, `duration_ms`. `duration_ms` là số nguyên, đồng hồ máy chủ, trọn lần chạy đó (kể cả viết lại tờ trình). Không lấy từ `case_events`. Quyết định của người ngân hàng nằm sau lần chạy, không cộng vào `duration_ms`.
+
+Hồ sơ tạo trước khi có các trường này vẫn có trong lưu lượng. `duration_ms` là `null`. Không suy thời gian từ hai event đầu.
+
+#### Tham số
+
+| Query | Kiểu | Mặc định |
+|---|---|---|
+| `from`, `to` | Ngày `YYYY-MM-DD`, tính theo `Asia/Ho_Chi_Minh`, cả hai đầu tính | Bỏ cả hai thì lấy mọi hồ sơ |
+| `recent` | 1–50 | 12 |
+
+`from` sau `to`, hoặc ngày sai dạng, thì `422 TRAFFIC_WINDOW_INVALID`. Cửa sổ có trên 5.000 hồ sơ thì `503 TRAFFIC_WINDOW_TOO_WIDE`.
+
+Ngày lọc theo `created_at` của hồ sơ, không theo lúc người bấm quyết định.
+
+#### Phản hồi `200`
+
+```json
+{
+  "zone": "Asia/Ho_Chi_Minh",
+  "generated_at": "2026-10-27T04:18:00+00:00",
+  "targets": { "latency_ms": 90000, "cost_micro_usd": 100000 },
+  "summary": {
+    "cases": 51,
+    "opened_today": 4,
+    "measured_runs": 48,
+    "unmeasured_runs": 3,
+    "latency_ms": { "p50": 3500, "p95": 5400 },
+    "cost": {
+      "known_cases": 40,
+      "unknown_cases": 11,
+      "total_micro_usd": 180000,
+      "p50_micro_usd": 4000
+    }
+  },
+  "by_day": [{ "day": "2026-10-27", "cases": 4 }],
+  "by_status": [{ "status": "ACCEPTED", "cases": 18 }],
+  "by_model": [{ "model": "gpt-4.1-mini-2025-04-14", "calls": 48, "cases": 40 }],
+  "recent": [
+    {
+      "case_id": "4789881e-0000-4000-8000-000000000000",
+      "seller_id": "demo-i",
+      "status": "REJECTED",
+      "reason": "HARD_POLICY_FAILURE",
+      "created_at": "2026-10-27T03:27:11+00:00",
+      "first_run": {
+        "run_id": "...",
+        "trigger": "INITIAL",
+        "started_at": "2026-10-27T03:27:11+00:00",
+        "finished_at": "2026-10-27T03:27:15+00:00",
+        "duration_ms": 3650
+      },
+      "models": ["gpt-4.1-mini-2025-04-14"],
+      "cost_micro_usd": 4200,
+      "cost_known": true
+    }
+  ]
+}
+```
+
+Số trong ví dụ chỉ để chỉ kiểu. Không hard-code các số đó trong test.
+
+Cách tính, làm trong service, không làm ở FE:
+
+| Khối | Cách tính |
+|---|---|
+| `summary.cases` | Mọi hồ sơ trong cửa sổ, kể cả `ACCEPTED` và `REJECTED` |
+| `opened_today` | `created_at` rơi vào ngày hôm nay theo `zone`, lấy đồng hồ máy chủ |
+| `by_day` | Đếm theo ngày `created_at` trong `zone`, ngày tăng dần, bỏ ngày không có hồ sơ |
+| `by_status` | Đếm theo `status`, nhiều trước |
+| `latency_ms` | Chỉ lần chạy đầu (`run_no` nhỏ nhất, `trigger = INITIAL`) có `duration_ms`. Hồ sơ chưa đo không đưa vào mẫu. `measured_runs` là số hồ sơ có số, `unmeasured_runs` là số còn lại. Mẫu rỗng thì `p50` và `p95` là `null` |
+| `p50`, `p95` | Xếp tăng dần. Vị trí `min(n − 1, max(0, ceil(p / 100 × n) − 1))` |
+| `cost` | Cộng `cost_micro_usd` của mọi lần gọi trên mọi `run` của hồ sơ. `cost_known` chỉ khi hồ sơ được ghi sau khi có metering và mọi dòng gọi đều có tiền. Lần chạy xong mà không gọi model nào thì tiền là `0` và `cost_known` là `true`. Thiếu một dòng đơn giá hoặc thiếu usage thì cả hồ sơ `cost_known = false` và không cộng vào `total_micro_usd`. Không có hồ sơ nào `cost_known` thì `total_micro_usd` và `p50_micro_usd` là `null`, không phải `0` |
+| `by_model` | Nhóm theo `model` của dòng gọi. `calls` là số dòng, `cases` là số hồ sơ phân biệt. Tên model cũ trên `documents[].model` chỉ để hiện ở `recent.models` khi chưa có dòng gọi. Tên đó không làm `cost_known` thành `true` và không vào `by_model` |
+| `recent` | Mới nhất theo `created_at`, tối đa `recent` phần tử |
+
+`targets` chép NFR-01 (90 giây) và NFR-06 (0,10 USD). Đây là mốc so sánh, không phải kết quả đo.
+
+Phản hồi không có câu tờ trình, không có plan, không có bằng chứng, không có số điện thoại, CCCD, số tài khoản.
+
+Seller gọi đầu này thì `403`, cùng các đầu Studio khác. Lỗi danh tính dùng các mã mục 5.
 
 ---
 

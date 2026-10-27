@@ -102,10 +102,10 @@ def test_postgres_lists_cases_by_seller(database):
     service = make_service(database)
     first = service.create(Plan(**plan()), "create-1")
     second = service.create(Plan(**plan(requested_amount=140_000_000)), "create-2")
-    service.create(Plan(**plan("demo-a")), "create-3")
-    mine = service.repository.list_by_seller("demo-b", 10, 0)
+    service.create(Plan(**plan("thuha.closet")), "create-3")
+    mine = service.repository.list_by_seller("minhchau.shop", 10, 0)
     assert {c.case_id for c in mine} == {first.case_id, second.case_id}
-    assert service.repository.list_by_seller("demo-b", 1, 1) == mine[1:]
+    assert service.repository.list_by_seller("minhchau.shop", 1, 1) == mine[1:]
 
 
 def test_postgres_rejects_cross_case_evidence_fk(database):
@@ -156,11 +156,11 @@ def test_seller_book_seed_and_postgres_source(database):
     with psycopg.connect(database) as conn:
         seed(conn)
     source = PostgresFeatureSource(database)
-    consent, features = source.fetch("demo-b", "demo-b", utc_now())
+    consent, features = source.fetch("minhchau.shop", "minhchau.shop", utc_now())
     assert consent["source"] == "seller_book"
     assert features["payout_origin"] == "estimated"
     with pytest.raises(WorkflowError, match="SCOPE"):
-        source.fetch("demo-a", "demo-b", utc_now())
+        source.fetch("thuha.closet", "minhchau.shop", utc_now())
 
 
 def test_etl_seed_preserves_source_and_labels_estimated_payout(database):

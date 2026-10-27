@@ -13,7 +13,6 @@ from services.statements.reader import StatementConfig
 from services.underwriting.cic import ProfileCicSource
 from services.underwriting.evidence import read_evidence
 from services.underwriting.gates import CicGate, JevCicGate, OpenCicGate
-from services.underwriting.memo import build_composer
 from services.underwriting.models import (
     Case,
     CaseDetail,
@@ -55,11 +54,11 @@ CIC_SOURCES: dict[str, type[CicSource]] = {"fixed": FixedCicSource, "profiles": 
 
 @lru_cache
 def get_service() -> UnderwritingService:
-    if config.WORKFLOW_MODE != "demo":
+    if config.WORKFLOW_MODE != "enabled":
         raise WorkflowError("WORKFLOW_DISABLED", 503)
     if config.WORKFLOW_STORAGE not in {"memory", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_STORAGE", 503)
-    if config.WORKFLOW_FEATURES not in {"demo", "postgres"}:
+    if config.WORKFLOW_FEATURES not in {"seller_book", "postgres"}:
         raise WorkflowError("INVALID_WORKFLOW_FEATURES", 503)
     if config.WORKFLOW_RISK not in RISK_MODELS:
         raise WorkflowError("INVALID_WORKFLOW_RISK", 503)
@@ -91,7 +90,6 @@ def get_service() -> UnderwritingService:
         CIC_SOURCES[config.WORKFLOW_CIC_SOURCE](),
         InternalLosAdapter(),
         cic_gate=CIC_GATES[config.WORKFLOW_CIC_GATE](),
-        memo=build_composer(config.MEMO_WRITER),
         statements=build_statement_reader(),
         documents=build_document_store(config.DOCUMENT_STORE),
     )

@@ -64,7 +64,7 @@ class OpenAICompatibleClient(LlmClient):
             raise LlmError("LLM_KEY_MISSING")
         from openai import OpenAI
 
-        self.model, self._gate, self._provider = model, gate, provider
+        self.model, self.provider, self._gate = model, provider, gate
         self._client = OpenAI(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries
         )
@@ -101,7 +101,7 @@ class OpenAICompatibleClient(LlmClient):
             if self._gate is None:
                 return self._send(request, response_format, system)
             return self._gate.call(
-                self._provider, lambda: self._send(request, response_format, system), transient
+                self.provider, lambda: self._send(request, response_format, system), transient
             )
         except GateRejected as exc:
             raise LlmError(exc.code) from exc
@@ -146,6 +146,7 @@ def _parse_json(text: str) -> object:
 class CachedLlmClient(LlmClient):
     def __init__(self, inner: LlmClient, directory: Path):
         self.inner, self.model, self.directory = inner, inner.model, Path(directory)
+        self.provider = getattr(inner, "provider", "openai")
 
     def complete_json(self, request: LlmRequest) -> LlmResponse:
         path = self.directory / f"{request.fingerprint(self.model)}.json"

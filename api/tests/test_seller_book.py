@@ -29,7 +29,7 @@ def write(tmp_path, sellers: list[dict], profiles: dict = PROFILES):
 def test_shipped_book_loads_every_seller():
     ids = [s.seller_id for s in SellerBook.load().sellers]
     assert len(ids) == len(set(ids))
-    assert {"demo-a", "demo-d", "demo-e", "demo-j"} <= set(ids)
+    assert {"thuha.closet", "ngocvy.boutique", "maianh.fashion", "hau.mart"} <= set(ids)
 
 
 def test_records_end_on_week_before_current_monday(tmp_path):

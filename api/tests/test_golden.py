@@ -1,21 +1,35 @@
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 import config
 from policy.engine import PolicyConfig
 from policy.rules import RULES
 from services.cashflow import ROUND_UNIT, CashFlowConfig
-from services.underwriting.memo import MemoConfig
-from services.underwriting.models import Plan
+from services.underwriting.memo import AUDIENCES, MemoConfig, default_validator
+from services.underwriting.models import Plan, WorkflowError
 
 ROOT = Path(__file__).resolve().parents[2]
-_SPEC = importlib.util.spec_from_file_location("riverbank_eval_score", ROOT / "eval" / "score.py")
-score = importlib.util.module_from_spec(_SPEC)
-assert _SPEC.loader is not None
-_SPEC.loader.exec_module(score)
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(
+        f"riverbank_eval_{name}", ROOT / "eval" / f"{name}.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+score = _load("score")
+sys.modules.setdefault("score", score)
+inject = _load("inject")
+memo_gate = _load("memo_gate")
 
 GOLDEN = ROOT / "eval" / "golden"
 LLM = GOLDEN / "llm"
@@ -139,6 +153,46 @@ def test_memo_guard(path: Path):
     assert score.score_memo(case) == case["expected"]
 
 
+def test_memo_release_gate_runs_statement_and_compares_every_expected_field():
+    case_id, inp, expected = next(row for row in CASES if row[0] == "FX-C-matched")
+    result = memo_gate.run(case_id, inp, expected)
+    assert result["passed"]
+    assert result["status"] == "PENDING_REVIEW"
+    assert result["mismatched_keys"] == []
+    assert result["attempts"][-1]["generator"] == "CODE"
+
+    bad = memo_gate.run(case_id, inp, {**expected, "amount_proposed": 1})
+    assert not bad["passed"]
+    assert bad["mismatched_keys"] == ["amount_proposed"]
+    assert bad["errors"] == ["EXPECTED_MISMATCH:amount_proposed"]
+
+
 def test_studio_eval_report_matches_golden():
     committed = json.loads(score.REPORT.read_text(encoding="utf-8"))
     assert committed == json.loads(json.dumps(score.build_report())), "chạy make eval-report"
+
+
+def _memo_sentences() -> list[tuple]:
+    rows = []
+    for case_id, inp, _ in CASES:
+        try:
+            case = score.golden_service(inp).create(score.golden_plan(inp), case_id)
+        except (ValidationError, WorkflowError):
+            continue
+        for audience in AUDIENCES:
+            rows += [(case, audience, item) for item in case.documents[-1][audience]]
+    return rows
+
+
+@pytest.mark.parametrize("legacy", [False, True], ids=["framed", "legacy"])
+def test_memo_validator_catches_injected_errors(legacy: bool):
+    validator, missed, total = default_validator(), [], 0
+    for case, audience, item in _memo_sentences():
+        errors = validator.sentence_errors(case, item, audience, legacy)
+        assert errors == [], (case.case_id, item["text"])
+        for kind, text in inject.mutations(item["text"]):
+            total += 1
+            if not validator.sentence_errors(case, {**item, "text": text}, audience, legacy):
+                missed.append((case.case_id, kind, text))
+    assert total > 0
+    assert missed == []
