@@ -103,7 +103,7 @@ def main() -> int:
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(rendered + "\n", encoding="utf-8")
-    return 0 if report["summary"]["failed"] == 0 else 1
+    return 0 if results and report["summary"]["failed"] == 0 else 1
 
 
 if __name__ == "__main__":

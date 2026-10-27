@@ -91,6 +91,18 @@ def test_percentile_uses_the_ceiling_rank():
     assert percentile([10, 20, 30], 95) == 30
 
 
+def test_latency_breaches_include_recovery_time_and_support_legacy_runs():
+    resumed = _metered("resumed", "INITIAL", 1, 1000)
+    resumed["workflow_elapsed_ms"] = 120_000
+    legacy = _metered("legacy", "INITIAL", 1, 100_000)
+    cases = [
+        _case("resumed", CLOCK.isoformat(), "PENDING_REVIEW", [resumed]),
+        _case("legacy", CLOCK.isoformat(), "PENDING_REVIEW", [legacy]),
+    ]
+    report = build_traffic(cases, CLOCK, 2)
+    assert report["summary"]["workflow"]["latency_target_breaches"] == 2
+
+
 def test_price_file_quotes_tokens_and_ignores_text_length():
     assert load_prices()["gpt-4.1-mini"] == (400_000, 1_600_000)
     assert quote("gpt-4.1-mini", 1_000_000, 0) == 400_000

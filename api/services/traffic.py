@@ -37,6 +37,7 @@ class TrafficSummary(BaseModel):
     unmeasured_runs: int
     latency_ms: TrafficLatency
     cost: TrafficCost
+    workflow: dict
 
 
 class TrafficDay(BaseModel):
@@ -153,6 +154,12 @@ def _duration(run: dict | None) -> int | None:
     return value if type(value) is int else None
 
 
+def _initial_elapsed(case: Case) -> int | None:
+    run = _initial(case)
+    value = run.get("workflow_elapsed_ms") if run else None
+    return value if type(value) is int and value >= 0 else _duration(run)
+
+
 def _metered(run: dict) -> bool:
     return (
         isinstance(run.get("started_at"), str)
@@ -266,6 +273,7 @@ def build_traffic(cases: list[Case], now: datetime, recent: int) -> dict:
                 "total_micro_usd": sum(known) if known else None,
                 "p50_micro_usd": percentile(known, 50),
             },
+            "workflow": workflow_metrics(cases, now),
         },
         "by_day": [{"day": day, "cases": days[day]} for day in sorted(days)],
         "by_status": [
@@ -277,4 +285,34 @@ def build_traffic(cases: list[Case], now: datetime, recent: int) -> dict:
             for name in sorted(models, key=lambda name: (-models[name][0], name))
         ],
         "recent": recent_rows,
+    }
+
+
+def workflow_metrics(cases: list[Case], now: datetime) -> dict:
+    completed = sum(case.status != "ANALYZING" for case in cases)
+    stuck = sum(
+        case.status == "ANALYZING"
+        and (now - created_at(case.created_at)).total_seconds() * 1000 > LATENCY_TARGET_MS
+        for case in cases
+    )
+    recovered = sum(
+        case.progress.get("completed", False) and bool(case.progress.get("last_error"))
+        for case in cases
+    )
+    failed_steps: dict[str, int] = {}
+    for case in cases:
+        if error := case.progress.get("last_error"):
+            name = error["step"]
+            failed_steps[name] = failed_steps.get(name, 0) + 1
+    return {
+        "started": len(cases),
+        "completed": completed,
+        "in_progress": len(cases) - completed,
+        "completion_rate": completed / len(cases) if cases else None,
+        "stuck_initial_assessments": stuck,
+        "recovered_initial_assessments": recovered,
+        "last_failed_steps": failed_steps,
+        "latency_target_breaches": sum(
+            (_initial_elapsed(case) or 0) > LATENCY_TARGET_MS for case in cases
+        ),
     }

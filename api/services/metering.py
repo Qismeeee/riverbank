@@ -131,6 +131,11 @@ def reset_meter(token: Token | None) -> None:
         _bucket.reset(token)
 
 
+def snapshot_run_calls(run_id: str) -> list[dict]:
+    bucket = _bucket.get()
+    return bucket.snapshot(run_id) if bucket else []
+
+
 def record_usage(purpose: str, provider: str, model: str, usage: dict | None, cached: bool) -> None:
     bucket = _bucket.get()
     if bucket is None or not model:

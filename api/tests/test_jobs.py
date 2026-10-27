@@ -184,3 +184,12 @@ def test_expired_lease_is_reclaimed_then_failed_after_max_attempts():
 def test_worker_is_off_outside_prod(monkeypatch):
     monkeypatch.setattr(job_routes.config, "JOB_WORKER", "off")
     assert job_routes.start_worker() is None
+
+
+def test_queue_health_is_bank_only_and_counts_backlog(client, queue):  # noqa: F811
+    scripted_job(queue)
+    response = client.get("/v1/studio/queue-health", headers=BANK)
+    assert response.status_code == 200
+    assert response.json()[QUEUED] == 1
+    assert response.json()["oldest_queued_seconds"] >= 0
+    assert client.get("/v1/studio/queue-health", headers=seller_headers()).status_code == 403

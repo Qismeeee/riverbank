@@ -134,7 +134,9 @@ def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict
     return {
         **summary(case),
         "explanation": (
-            case.documents[-1]["seller_explanation"] if case.documents[-1]["validated"] else []
+            case.documents[-1]["seller_explanation"]
+            if case.documents and case.documents[-1]["validated"]
+            else []
         ),
         "decision": (
             {

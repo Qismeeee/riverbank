@@ -3,11 +3,17 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from routers.auth import BankUser
+from routers.jobs import Jobs
 from routers.underwriting import Service
 from services.studio import EvalReport, StudioPolicy, eval_report, policy_snapshot
 from services.traffic import TrafficReport
 
 router = APIRouter(prefix="/v1/studio", tags=["studio"])
+
+
+@router.get("/queue-health")
+def queue_health(jobs: Jobs, actor: BankUser) -> dict:
+    return jobs.metrics()
 
 
 @router.get("/policy", response_model=StudioPolicy)

@@ -238,6 +238,7 @@ def validate_features(features: dict, seller_id: str, shop_id: str, now: datetim
 
 class CicSource(ABC):
     name: str
+    replay_safe = False
 
     @abstractmethod
     def inquire(self, seller_id: str, now: datetime) -> dict: ...
@@ -248,6 +249,7 @@ class CicSource(ABC):
 
 class FixedCicSource(CicSource):
     name = "fixed"
+    replay_safe = True
 
     def inquire(self, seller_id: str, now: datetime) -> dict:
         return {

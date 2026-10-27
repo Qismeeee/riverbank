@@ -26,6 +26,15 @@ invents_fee_or_interest:
 cites_number_absent_from_evidence:
   - NO
   - YES
+assigns_fact_to_wrong_actor_or_unit:
+  - NO
+  - YES
+fails_to_answer_question:
+  - NO
+  - YES
+omits_required_answer_facts:
+  - NO
+  - YES
 ```
 
 `contradicts_engine_outcome`: văn bản nói đã duyệt, đã từ chối, không cần vay, hoặc cần vay, trái với `status_target` và cờ rule trong nhãn.

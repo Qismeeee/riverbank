@@ -85,9 +85,9 @@ def start_worker() -> Event | None:
     def run() -> None:
         while not stop.is_set():
             try:
-                worker = JobWorker(
-                    get_jobs(), [StatementUploadHandler(get_service())], job_config()
-                )
+                service = get_service()
+                service.resume_pending()
+                worker = JobWorker(get_jobs(), [StatementUploadHandler(service)], job_config())
             except Exception:
                 log.exception("job worker cannot start")
                 stop.wait(30)

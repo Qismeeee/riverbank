@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -212,10 +214,10 @@ def test_postgres_job_queue_claims_once_retries_and_expires(database):
     assert queue.claim(60) is None
     first, second = sorted(claims, key=lambda c: c.job.payload["n"])
     assert first.content == b"f0" and first.job.status == "RUNNING"
-    queue.complete(first.job.job_id, {"ok": True})
+    queue.complete(first.job.job_id, {"ok": True}, first.job.attempts)
     done = queue.get(first.job.job_id)
     assert (done.status, done.result) == ("SUCCEEDED", {"ok": True})
-    queue.fail(second.job.job_id, {"code": "X", "status": 503}, True)
+    queue.fail(second.job.job_id, {"code": "X", "status": 503}, True, second.job.attempts)
     assert queue.get(second.job.job_id).status == "QUEUED"
     again = queue.claim(0)
     assert (again.job.attempts, again.content) == (2, b"f1")
@@ -229,3 +231,67 @@ def test_postgres_job_queue_claims_once_retries_and_expires(database):
 
 def test_postgres_queue_lists_decided_cases_newest_first(database):
     check_queue_scopes(make_service(database))
+
+
+def test_postgres_stale_attempt_cannot_write_job_or_case(database):
+    service = make_service(database)
+    case = service.create(Plan(**plan()), "fenced")
+    queue = PostgresJobQueue(database)
+    job = queue.enqueue(Job.new("test", case.case_id, "uw", {}, JobConfig()), b"file")
+    assert queue.metrics()["QUEUED"] == 1
+    old = queue.claim(0)
+    current = queue.claim(60)
+    assert current.job.attempts == 2
+    assert not queue.complete(job.job_id, {"old": True}, old.job.attempts)
+    assert not queue.fail(job.job_id, {"old": True}, False, old.job.attempts)
+    with pytest.raises(WorkflowError, match="JOB_LEASE_LOST"):
+        with service.repository.transaction(
+            case.case_id, case.version, lambda conn: queue.committing(old.job, conn)
+        ) as locked:
+            locked.reason = "must not be saved"
+    assert service.repository.get(case.case_id) == case
+    assert queue.complete(job.job_id, {"new": True}, current.job.attempts)
+    assert queue.get(job.job_id).result == {"new": True}
+    metrics = queue.metrics()
+    assert metrics["SUCCEEDED"] == 1 and metrics["recovered"] == 1
+    assert metrics["retried"] == 1 and metrics["expired_leases"] == 0
+    assert metrics["oldest_queued_seconds"] is None
+
+
+def test_postgres_process_exit_after_cic_resumes_without_repeat(database, monkeypatch):
+    code = """
+import os, sys, psycopg
+os.environ["RIVERBANK_ENV"] = "local"
+from tests.test_underwriting_postgres import make_service
+from tests.test_underwriting import plan
+from services.underwriting.models import Plan
+url = sys.argv[1]
+service = make_service(url)
+original = service.cic.inquire
+def inquire(seller, now):
+    with psycopg.connect(url) as conn:
+        conn.execute("insert into crash_probe values (1)")
+    return original(seller, now)
+service.cic.inquire = inquire
+service.memo.compose = lambda *args: os._exit(77)
+service.create(Plan(**plan()), "process-exit")
+"""
+    with psycopg.connect(database) as conn:
+        conn.execute("create table crash_probe (n integer)")
+    child = subprocess.run(
+        [sys.executable, "-c", code, database],
+        timeout=30,
+        capture_output=True,
+    )
+    assert child.returncode == 77, child.stderr.decode(errors="replace")
+    restarted = make_service(database)
+
+    def forbidden(*args):
+        pytest.fail("completed CIC step must not execute twice")
+
+    monkeypatch.setattr(restarted.cic, "inquire", forbidden)
+    assert restarted.resume_pending() == {"resumed": 1, "blocked": 0}
+    case = restarted.create(Plan(**plan()), "process-exit")
+    assert case.status == "PENDING_REVIEW" and len(case.runs) == 1
+    with psycopg.connect(database) as conn:
+        assert conn.execute("select count(*) from crash_probe").fetchone()[0] == 1
