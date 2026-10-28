@@ -60,7 +60,9 @@ create index event_outbox_pending on event_outbox (created_at) where published_a
 
 If publish or flush fails, the transaction rolls back, rows stay pending, and the relay retries after `retry_seconds`. Kafka being down never affects underwriting; events pile up in the outbox and drain when it is back.
 
-`start_relay()` runs the loop in a daemon thread from the FastAPI lifespan, the same way `start_worker()` runs the job worker. Off unless `RIVERBANK_EVENT_RELAY=on`.
+`start_relay()` runs the loop in a daemon thread from the FastAPI lifespan, the same way `start_worker()` runs the job worker. Off unless `RIVERBANK_EVENT_RELAY=on`. With `RIVERBANK_MESSAGE_BUS=memory` it refuses to start and logs an error, because the memory bus would mark every event published while nothing leaves the process.
+
+The same loop deletes published rows older than `RIVERBANK_EVENT_OUTBOX_RETENTION_HOURS` (default 336, matching topic retention) once every `RIVERBANK_EVENT_OUTBOX_PRUNE_SECONDS`. Pending rows are never deleted.
 
 `MemoryCaseRepository` keeps an in-process outbox with the same contract, for tests and local runs.
 
@@ -158,8 +160,10 @@ Prod: `auto.create.topics.enable=false` on the brokers, and create topics from a
 | `RIVERBANK_EVENT_RELAY_BATCH_SIZE` | 100 | rows per transaction |
 | `RIVERBANK_EVENT_RELAY_IDLE_SECONDS` | 1 | wait when the outbox is drained |
 | `RIVERBANK_EVENT_RELAY_RETRY_SECONDS` | 10 | wait after a failure |
+| `RIVERBANK_EVENT_OUTBOX_RETENTION_HOURS` | 336 | published rows older than this are deleted |
+| `RIVERBANK_EVENT_OUTBOX_PRUNE_SECONDS` | 3600 | how often the relay prunes |
 
-Local: `make kafka-up` (starts the broker and creates the topic), then `RIVERBANK_MESSAGE_BUS=kafka RIVERBANK_EVENT_RELAY=on`. Prod has no broker in `infra/docker-compose.yml` yet, so leave it off there until one exists (container or MSK).
+Local: `make kafka-up` (starts the broker and creates the topic), then `RIVERBANK_MESSAGE_BUS=kafka RIVERBANK_EVENT_RELAY=on`. Prod (`infra/docker-compose.yml`, profile `events`): one KRaft broker `kafka` (heap 256 MB, container limit 640 MB, 128 MB per partition, no published port), a one-shot `kafka-topics` that creates the topic with 6 partitions on every deploy, and `valkey` (no persistence, 48 MB, no published port). `infra/.env.prod` turns it on with `COMPOSE_PROFILES=events`, `RIVERBANK_MESSAGE_BUS=kafka`, `RIVERBANK_EVENT_RELAY=on`, `RIVERBANK_KV_STORE=valkey`. Single broker means RF 1: a lost EBS volume loses the stream, the permanent record stays in `case_events`. The api does not depend on either container to start: Kafka down leaves events in the outbox, Valkey down makes ModelGate fail open.
 
 ## Tests (`api/tests/test_events.py`)
 
@@ -174,5 +178,4 @@ Local: `make kafka-up` (starts the broker and creates the topic), then `RIVERBAN
 
 - Consumers (Monitor, notifications). This only produces the stream.
 - `KafkaLosAdapter` for the handoff.
-- Pruning published outbox rows.
 - Schema registry. `schema` field versions the payload.

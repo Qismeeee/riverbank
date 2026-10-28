@@ -246,3 +246,18 @@ def test_postgres_outbox_queues_events_once_and_relays_one_at_a_time(database):
         assert [m["reason"] for m in batch] == ["TEST"]
     with repository.publishing(100) as batch:
         assert batch == []
+
+
+def test_postgres_outbox_prunes_only_old_published_rows(database):
+    service = make_service(database)
+    first = service.create(Plan(**plan()), "create-1")
+    repository = service.repository
+    with repository.publishing(100):
+        pass
+    second = service.create(Plan(**plan("ducthinh.tech")), "create-2")
+    assert repository.prune_published(1) == 0
+    with psycopg.connect(database) as conn:
+        conn.execute("update event_outbox set published_at = published_at - interval '2 hours'")
+    assert repository.prune_published(1) == len(first.events)
+    with repository.publishing(100) as batch:
+        assert {m["case_id"] for m in batch} == {second.case_id}

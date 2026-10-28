@@ -12,6 +12,9 @@ log = logging.getLogger("riverbank.events")
 def start_relay() -> Event | None:
     if config.EVENT_RELAY != "on":
         return None
+    if config.MESSAGE_BUS == "memory":
+        log.error("event relay needs RIVERBANK_MESSAGE_BUS=kafka, memory would drop every event")
+        return None
     stop = Event()
 
     def run() -> None:

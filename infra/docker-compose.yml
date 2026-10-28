@@ -48,6 +48,12 @@ services:
       STATEMENT_OCR_MODEL: google/gemini-3.1-flash-lite
       RIVERBANK_DOCUMENT_STORE: local
       RIVERBANK_DOCUMENT_DIR: /var/lib/riverbank/statements
+      RIVERBANK_MESSAGE_BUS: ${RIVERBANK_MESSAGE_BUS:-memory}
+      RIVERBANK_EVENT_RELAY: ${RIVERBANK_EVENT_RELAY:-off}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      RIVERBANK_KV_STORE: ${RIVERBANK_KV_STORE:-memory}
+      RIVERBANK_MODEL_GATE_STORE: ${RIVERBANK_KV_STORE:-memory}
+      VALKEY_HOST: valkey
     volumes:
       - statement_files:/var/lib/riverbank/statements
     deploy:
@@ -70,7 +76,94 @@ services:
           memory: 128m
     logging: *cw-logging
 
+  kafka:
+    image: apache/kafka:3.9.1
+    profiles: ["events"]
+    restart: unless-stopped
+    expose:
+      - "9092"
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 336
+      KAFKA_LOG_RETENTION_BYTES: 134217728
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 640m
+    logging: *cw-logging
+
+  kafka-topics:
+    image: apache/kafka:3.9.1
+    profiles: ["events"]
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint:
+      - /opt/kafka/bin/kafka-topics.sh
+      - --bootstrap-server
+      - kafka:9092
+      - --create
+      - --if-not-exists
+      - --topic
+      - ${RIVERBANK_CASE_EVENTS_TOPIC:-riverbank.case-events}
+      - --partitions
+      - "6"
+      - --replication-factor
+      - "1"
+    logging: *cw-logging
+
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    profiles: ["events"]
+    restart: unless-stopped
+    command:
+      - valkey-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 48mb
+      - --maxmemory-policy
+      - volatile-ttl
+      - --protected-mode
+      - "no"
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 15s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 96m
+    logging: *cw-logging
+
 volumes:
+  kafka_data:
   caddy_data:
   caddy_config:
   statement_files:

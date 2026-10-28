@@ -64,6 +64,9 @@ class CaseRepository(ABC):
     @abstractmethod
     def publishing(self, limit: int): ...
 
+    @abstractmethod
+    def prune_published(self, older_than_hours: float) -> int: ...
+
 
 class MemoryCaseRepository(CaseRepository):
     def __init__(self) -> None:
@@ -160,6 +163,9 @@ class MemoryCaseRepository(CaseRepository):
         sent = {message["event_id"] for message in batch}
         with self._lock:
             self._outbox = [m for m in self._outbox if m["event_id"] not in sent]
+
+    def prune_published(self, older_than_hours: float) -> int:
+        return 0
 
 
 class PostgresCaseRepository(CaseRepository):
@@ -367,3 +373,11 @@ class PostgresCaseRepository(CaseRepository):
                     "where event_id = any(%s)",
                     ([row[0] for row in rows],),
                 )
+
+    def prune_published(self, older_than_hours: float) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "delete from event_outbox where published_at "
+                "< clock_timestamp() - make_interval(secs => %s)",
+                (older_than_hours * 3600,),
+            ).rowcount
