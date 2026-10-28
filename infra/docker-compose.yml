@@ -134,6 +134,24 @@ services:
       - "1"
     logging: *cw-logging
 
+  kafka-console:
+    image: redpandadata/console:v3.12.0
+    profiles: ["events"]
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      SERVER_BASEPATH: /kafka
+    expose:
+      - "8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 160m
+    logging: *cw-logging
+
   valkey:
     image: valkey/valkey:8.1-alpine
     profiles: ["events"]

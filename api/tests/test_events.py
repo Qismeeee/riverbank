@@ -201,3 +201,16 @@ def test_relay_config_reads_outbox_retention(monkeypatch):
     monkeypatch.setattr(config, "EVENT_OUTBOX_PRUNE_SECONDS", 60.0)
     cfg = relay_config()
     assert (cfg.retention_hours, cfg.prune_seconds) == (24.0, 60.0)
+
+
+def test_failed_batch_records_attempts_and_error():
+    service = build(BaselineRiskModel())
+    case = create(service)
+    repository = service.repository
+    bus = FlakyBus(failures=2)
+    for _ in range(2):
+        with pytest.raises(KafkaClientError):
+            relay(repository, bus).run_once()
+    ids = [e["event_id"] for e in case.events]
+    assert {repository.failures[i] for i in ids} == {(2, "KafkaClientError: KAFKA_DELIVERY_FAILED")}
+    assert relay(repository, bus).run_once() == len(ids)
