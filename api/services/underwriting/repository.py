@@ -18,6 +18,14 @@ def case_header(case: Case) -> dict:
     return header
 
 
+EVENT_SCHEMA = "case-event/v1"
+EVENT_RELAY_LOCK = 70481002
+
+
+def event_message(case_id: str, ordinal: int, event: dict) -> dict:
+    return {"schema": EVENT_SCHEMA, "case_id": case_id, "ordinal": ordinal, **deepcopy(event)}
+
+
 OPEN_STATES = ("PENDING_REVIEW", "ESCALATED", "NO_LOAN_NEEDED", "AWAITING_STATEMENT")
 DECIDED_STATES = ("ACCEPTED", "REJECTED")
 
@@ -53,12 +61,24 @@ class CaseRepository(ABC):
     @abstractmethod
     def transaction(self, case_id: str, version: int): ...
 
+    @abstractmethod
+    def publishing(self, limit: int): ...
+
 
 class MemoryCaseRepository(CaseRepository):
     def __init__(self) -> None:
         self._cases: dict[str, Case] = {}
         self._requests: dict[tuple[str, str], tuple[str, str]] = {}
+        self._outbox: list[dict] = []
         self._lock = RLock()
+
+    def _queue_events(self, previous: Case | None, case: Case) -> None:
+        known = {e["event_id"] for e in previous.events} if previous else set()
+        self._outbox.extend(
+            event_message(case.case_id, ordinal, event)
+            for ordinal, event in enumerate(case.events)
+            if event["event_id"] not in known
+        )
 
     def find_request(self, seller_id: str, key: str, request_hash: str) -> Case | None:
         with self._lock:
@@ -76,6 +96,7 @@ class MemoryCaseRepository(CaseRepository):
                 return existing
             self._cases[case.case_id] = deepcopy(case)
             self._requests[(case.seller_id, key)] = (request_hash, case.case_id)
+            self._queue_events(None, case)
             return deepcopy(case)
 
     def get(self, case_id: str) -> Case:
@@ -127,7 +148,18 @@ class MemoryCaseRepository(CaseRepository):
                 raise WorkflowError("CASE_VERSION_CONFLICT")
             yield case
             case.version += 1
+            self._queue_events(self._cases[case_id], case)
             self._cases[case_id] = deepcopy(case)
+
+    @contextmanager
+    def publishing(self, limit: int) -> Iterator[list[dict]]:
+        # Publish outside the lock: a slow broker must not stall case reads and writes.
+        with self._lock:
+            batch = deepcopy(self._outbox[:limit])
+        yield batch
+        sent = {message["event_id"] for message in batch}
+        with self._lock:
+            self._outbox = [m for m in self._outbox if m["event_id"] not in sent]
 
 
 class PostgresCaseRepository(CaseRepository):
@@ -179,13 +211,29 @@ class PostgresCaseRepository(CaseRepository):
             ("assessment_runs", case.runs, "run_id"),
             ("evidence", case.evidence, "evidence_id"),
             ("generated_documents", case.documents, "document_id"),
-            ("case_events", case.events, "event_id"),
         ):
             for ordinal, item in enumerate(items):
                 conn.execute(
                     f"insert into {table} (id,case_id,ordinal,payload) values (%s,%s,%s,%s) "
                     "on conflict (id) do nothing",
                     (item[id_key], case.case_id, ordinal, Jsonb(item)),
+                )
+        for ordinal, event in enumerate(case.events):
+            inserted = conn.execute(
+                "insert into case_events (id,case_id,ordinal,payload) values (%s,%s,%s,%s) "
+                "on conflict (id) do nothing returning id",
+                (event["event_id"], case.case_id, ordinal, Jsonb(event)),
+            ).fetchone()
+            if inserted:
+                conn.execute(
+                    "insert into event_outbox (event_id,case_id,ordinal,payload) "
+                    "values (%s,%s,%s,%s)",
+                    (
+                        event["event_id"],
+                        case.case_id,
+                        ordinal,
+                        Jsonb(event_message(case.case_id, ordinal, event)),
+                    ),
                 )
         if case.decision:
             conn.execute(
@@ -297,3 +345,25 @@ class PostgresCaseRepository(CaseRepository):
             yield case
             case.version += 1
             self._save(conn, case)
+
+    @contextmanager
+    def publishing(self, limit: int) -> Iterator[list[dict]]:
+        with self._connect() as conn:
+            locked = conn.execute(
+                "select pg_try_advisory_xact_lock(%s)", (EVENT_RELAY_LOCK,)
+            ).fetchone()[0]
+            if not locked:
+                yield []
+                return
+            rows = conn.execute(
+                "select event_id,payload from event_outbox where published_at is null "
+                "order by created_at,case_id,ordinal limit %s",
+                (limit,),
+            ).fetchall()
+            yield [row[1] for row in rows]
+            if rows:
+                conn.execute(
+                    "update event_outbox set published_at=clock_timestamp() "
+                    "where event_id = any(%s)",
+                    ([row[0] for row in rows],),
+                )

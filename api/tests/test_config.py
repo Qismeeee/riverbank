@@ -10,7 +10,7 @@ def _reload(monkeypatch, **env):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    sys.modules.pop("config", None)
+    monkeypatch.delitem(sys.modules, "config", raising=False)
     return importlib.import_module("config")
 
 

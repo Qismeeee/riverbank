@@ -32,7 +32,7 @@ def test_rate_limiter_slides_and_reports_retry_after():
 
 
 def test_create_case_returns_429_with_retry_after(client, monkeypatch):  # noqa: F811
-    monkeypatch.setitem(config.RATE_LIMIT_DEFAULTS, "case_create", "1/60")
+    monkeypatch.setenv("RIVERBANK_RATE_LIMIT_CASE_CREATE", "1/60")
     first = client.post("/v1/cases", json=plan(), headers=seller_headers(key="a"))
     assert first.status_code == 201, first.text
     second = client.post("/v1/cases", json=plan(), headers=seller_headers(key="b"))

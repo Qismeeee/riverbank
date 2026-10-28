@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers
+.PHONY: setup db-up db-down kafka-up kafka-down kafka-topics valkey-up valkey-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -11,6 +11,29 @@ db-up:
 
 db-down:
 	docker compose -f infra/docker-compose.local.yml down
+
+KAFKA_TOPICS = docker exec rb-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092
+CASE_EVENTS_TOPIC ?= riverbank.case-events
+
+kafka-up:
+	docker compose -f infra/docker-compose.local.yml --profile kafka up -d kafka
+	$(MAKE) kafka-topics
+
+# Tạo topic trước khi relay chạy, tránh broker tự tạo 1 partition. Thiết kế ở docs/Riverbank-case-events.md
+kafka-topics:
+	@for i in $$(seq 1 30); do $(KAFKA_TOPICS) --list >/dev/null 2>&1 && break; sleep 1; done
+	$(KAFKA_TOPICS) --create --if-not-exists --topic $(CASE_EVENTS_TOPIC) \
+		--partitions 6 --replication-factor 1 --config retention.ms=1209600000
+	@$(KAFKA_TOPICS) --describe --topic $(CASE_EVENTS_TOPIC) | head -1
+
+kafka-down:
+	docker compose -f infra/docker-compose.local.yml --profile kafka stop kafka
+
+valkey-up:
+	docker compose -f infra/docker-compose.local.yml --profile valkey up -d valkey
+
+valkey-down:
+	docker compose -f infra/docker-compose.local.yml --profile valkey stop valkey
 
 dev:
 	cd api && .venv/bin/uvicorn main:app --reload --port 8000

@@ -11,6 +11,7 @@ from middleware import RequestTiming
 from routers.auth import router as auth_router
 from routers.copilot import cases_router as copilot_cases_router
 from routers.copilot import router as copilot_router
+from routers.events import start_relay
 from routers.jobs import router as jobs_router
 from routers.jobs import start_worker
 from routers.studio import router as studio_router
@@ -20,10 +21,11 @@ from services.underwriting.models import WorkflowError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    stop = start_worker()
+    stops = [start_worker(), start_relay()]
     yield
-    if stop:
-        stop.set()
+    for stop in stops:
+        if stop:
+            stop.set()
 
 
 app = FastAPI(title="Riverbank API", version="0.1.0", lifespan=lifespan)

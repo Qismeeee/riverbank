@@ -10,9 +10,30 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - rb-pg-data:/var/lib/postgresql/data
+      # Postgres 18 cần mount ở /var/lib/postgresql, dữ liệu nằm trong 18/docker
+      - rb-pg-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U riverbank"]
+      interval: 5s
+      retries: 10
+
+  # Kafka một node KRaft, chỉ chạy khi gọi make kafka-up
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: rb-kafka
+    profiles: ["kafka"]
+    ports:
+      - "9092:9092"
+
+  # Valkey một node, chỉ chạy khi gọi make valkey-up
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    container_name: rb-valkey
+    profiles: ["valkey"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       retries: 10
 

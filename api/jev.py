@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 import config
+from services.modelgate import model_gate
 
 URL = "https://openrouter.ai/api/alpha/decisions"
 MODEL = "typesafe/jev-1.14"
@@ -51,23 +52,34 @@ def decide(
 ) -> dict:
     if not config.OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY chưa cấu hình (.env local hoặc Secrets Manager)")
-    with httpx.Client(transport=httpx.HTTPTransport(retries=retries), timeout=timeout) as client:
-        r = client.post(
-            URL,
-            headers={
-                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
-                "HTTP-Referer": "https://github.com/Qismeeee/riverbank",
-                "X-OpenRouter-Title": "Riverbank",
-            },
-            json={"model": MODEL, "state": state, "questions": questions},
-        )
-    r.raise_for_status()
-    payload = r.json()
-    answers = payload["answers"]
-    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-    model = payload.get("model")
-    note_usage(model if isinstance(model, str) and model else MODEL, usage)
-    return answers
+
+    def post() -> dict:
+        transport = httpx.HTTPTransport(retries=retries)
+        with httpx.Client(transport=transport, timeout=timeout) as client:
+            r = client.post(
+                URL,
+                headers={
+                    "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                    "HTTP-Referer": "https://github.com/Qismeeee/riverbank",
+                    "X-OpenRouter-Title": "Riverbank",
+                },
+                json={"model": MODEL, "state": state, "questions": questions},
+            )
+        r.raise_for_status()
+        payload = r.json()
+        answers = payload["answers"]
+        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+        model = payload.get("model")
+        note_usage(model if isinstance(model, str) and model else MODEL, usage)
+        return answers
+
+    return model_gate().call("jev", post, transient)
+
+
+def transient(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
 
 
 def noul_probability(answers: dict, name: str) -> float:

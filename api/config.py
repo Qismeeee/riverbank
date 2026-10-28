@@ -63,6 +63,29 @@ JOB_LEASE_SECONDS = int(os.getenv("RIVERBANK_JOB_LEASE_SECONDS", "600"))
 STATEMENT_CLASSIFIER = os.getenv("RIVERBANK_STATEMENT_CLASSIFIER", "jev")
 STATEMENT_PAYOUT_PATTERN = os.getenv("RIVERBANK_STATEMENT_PAYOUT_PATTERN", "shopee")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+MESSAGE_BUS = os.getenv("RIVERBANK_MESSAGE_BUS", "memory")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+KAFKA_CLIENT_ID = os.getenv("KAFKA_CLIENT_ID", "riverbank-api")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "riverbank")
+KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "")
+EVENT_RELAY = os.getenv("RIVERBANK_EVENT_RELAY", "off")
+CASE_EVENTS_TOPIC = os.getenv("RIVERBANK_CASE_EVENTS_TOPIC", "riverbank.case-events")
+EVENT_RELAY_BATCH_SIZE = int(os.getenv("RIVERBANK_EVENT_RELAY_BATCH_SIZE", "100"))
+EVENT_RELAY_IDLE_SECONDS = float(os.getenv("RIVERBANK_EVENT_RELAY_IDLE_SECONDS", "1"))
+EVENT_RELAY_RETRY_SECONDS = float(os.getenv("RIVERBANK_EVENT_RELAY_RETRY_SECONDS", "10"))
+KV_STORE = os.getenv("RIVERBANK_KV_STORE", "memory")
+VALKEY_HOST = os.getenv("VALKEY_HOST", "localhost")
+VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
+VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
+VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in {"1", "true", "yes"}
+VALKEY_KEY_PREFIX = os.getenv("VALKEY_KEY_PREFIX", "riverbank:")
+VALKEY_TIMEOUT_SECONDS = float(os.getenv("VALKEY_TIMEOUT_SECONDS", "5"))
+MODEL_GATE = os.getenv("RIVERBANK_MODEL_GATE", "on")
+MODEL_GATE_STORE = os.getenv("RIVERBANK_MODEL_GATE_STORE", KV_STORE)
+MODEL_GATE_DEFAULTS = {"openai": (8, 120), "openrouter": (8, 120), "jev": (8, 120)}
+# OCR chạy song song từng trang, một trang bị MODEL_BUSY là hỏng cả sao kê, nên chờ slot lâu hơn
+MODEL_GATE_PURPOSE_WAIT = {"statement_ocr": 60.0}
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 ]
@@ -106,6 +129,16 @@ ADDLIVETAG_API_KEY = _from_env_or_secret(
 )
 
 
+def _service_login(service: str) -> tuple[str, str]:
+    keys = [f"{service.upper()}_{field}" for field in ("USERNAME", "PASSWORD")]
+    login = [_from_env_or_secret(k, f"riverbank/{service}", k, required=False) for k in keys]
+    return login[0], login[1]
+
+
+KAFKA_USERNAME, KAFKA_PASSWORD = _service_login("kafka")
+VALKEY_USERNAME, VALKEY_PASSWORD = _service_login("valkey")
+
+
 def database_url(refresh: bool = False) -> str:
     url = os.getenv("DATABASE_URL")
     if url or ENV == "local":
@@ -130,3 +163,24 @@ def llm_limits(purpose: str) -> tuple[float, int]:
 
 def rate_limit(scope: str) -> str:
     return os.getenv(f"RIVERBANK_RATE_LIMIT_{scope.upper()}", RATE_LIMIT_DEFAULTS[scope])
+
+
+def model_gate_limits(provider: str) -> dict:
+    concurrency, per_minute = MODEL_GATE_DEFAULTS.get(provider, (8, 120))
+    prefix = f"RIVERBANK_MODEL_GATE_{provider.upper()}"
+    return {
+        "concurrency": int(os.getenv(f"{prefix}_CONCURRENCY", concurrency)),
+        "per_minute": int(os.getenv(f"{prefix}_PER_MINUTE", per_minute)),
+        "breaker_failures": int(os.getenv("RIVERBANK_MODEL_GATE_BREAKER_FAILURES", "5")),
+        "breaker_window_seconds": int(
+            os.getenv("RIVERBANK_MODEL_GATE_BREAKER_WINDOW_SECONDS", "60")
+        ),
+        "breaker_open_seconds": int(os.getenv("RIVERBANK_MODEL_GATE_BREAKER_OPEN_SECONDS", "30")),
+        "wait_seconds": float(os.getenv("RIVERBANK_MODEL_GATE_WAIT_SECONDS", "2")),
+        "lease_seconds": int(os.getenv("RIVERBANK_MODEL_GATE_LEASE_SECONDS", "120")),
+    }
+
+
+def model_gate_wait(purpose: str) -> float | None:
+    wait = os.getenv(f"RIVERBANK_MODEL_GATE_{purpose.upper()}_WAIT_SECONDS")
+    return float(wait) if wait else MODEL_GATE_PURPOSE_WAIT.get(purpose)

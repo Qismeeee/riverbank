@@ -24,7 +24,7 @@ FX-A: gap 0, ngưỡng cảnh báo 20 triệu/tuần.
 ## Cấu trúc
 
 ```
-api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client), llm.py (LlmClient, một cửa gọi OpenAI hoặc OpenRouter, cache khi eval), prompts.py (nạp knowledge/prompts)
+api/            FastAPI. main.py, config.py (secrets), jev.py (Jev client), llm.py (LlmClient, một cửa gọi OpenAI hoặc OpenRouter, cache khi eval), messaging/ (MessageClient: KafkaClient qua kafka-python, MemoryClient cho test; cấu hình ở messaging/config.py; thử broker: python -m messaging.client), kv/ (KVClient: ValkeyClient qua valkey-py, MemoryKVClient cho test; cấu hình ở kv/config.py; thử server: python -m kv.client), prompts.py (nạp knowledge/prompts)
 api/services/   engine code thuần: cashflow.py, features.py (FeatureBuilder, một nguồn feature cho train và serving), risk.py (RiskModel từ api/models/); shopee/ (schemas, weekly, seller_export, openapi_client)
 api/policy/     engine.py là PolicyEngine, rules.py là bộ rule R01 đến R10, policy.md tóm tắt; bản đầy đủ ở policy/policy.md
 api/etl/        RawStore, Extractor, Transformer, Loader, Pipeline; bản addlivetag + PostgresLoader
@@ -36,6 +36,8 @@ api/services/copilot/      extractor.py (chat ra bản nháp kế hoạch, nhớ
 api/services/jobs.py        hàng đợi job (memory hoặc Postgres SKIP LOCKED, lease, thử lại lỗi 5xx) và JobWorker. Handler nộp sao kê ở underwriting/uploads.py, worker bật trong lifespan của main.py
 api/services/directory.py   UserDirectory đọc api/data/users.json (subject, role, họ tên, display_name). Chỉ người có trong danh bạ mới lấy được token, /v1/auth/me trả họ tên
 api/services/guard.py       OutputGuard: số phải có trong bằng chứng, từ cấm, câu nói ngược trạng thái. Dùng cho memo, eval và Copilot
+api/services/events.py      EventRelay: đọc event_outbox (ghi cùng transaction với case_events), đẩy sang Kafka topic riverbank.case-events, key case_id. Bật bằng RIVERBANK_EVENT_RELAY=on, chạy trong lifespan qua routers/events.py. Xem docs/Riverbank-case-events.md
+api/services/modelgate.py   ModelGate: mọi lượt gọi OpenAI, OpenRouter, Jev đi qua đây. Giới hạn song song, lượt/phút, cầu dao khi nhà cung cấp lỗi; trạng thái ở kv/ (memory hoặc valkey). Xem docs/Riverbank-model-gateway.md
 api/tests/      pytest, chạy không cần AWS, không cần mạng
 eval/golden/    case chuẩn, test_golden.py đọc tự động
 eval/pdlib.py, train_pd.py, train_pd.ipynb   metric, trainer, calibration dùng chung; train headless; notebook đầy đủ (xem docs/Riverbank-risk-model.md)
@@ -50,6 +52,9 @@ infra/          docker-compose.yml, Caddyfile, .env.prod cho EC2
 ```
 make setup      tạo venv Python 3.12 bằng uv, cài dev deps, cài pre-commit
 make db-up      Postgres local trong docker
+make kafka-up   Kafka local một node tại localhost:9092, tạo luôn topic qua make kafka-topics
+make kafka-topics  tạo riverbank.case-events (6 partition, giữ 14 ngày) nếu chưa có
+make valkey-up  Valkey local một node tại localhost:6379
 make dev        uvicorn reload tại :8000
 make test       ruff check + ruff format --check (api, eval, data/synth) + pytest
 make fmt        ruff format
