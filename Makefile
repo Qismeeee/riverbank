@@ -1,4 +1,4 @@
-.PHONY: setup db-up db-down kafka-up kafka-down kafka-topics valkey-up valkey-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers
+.PHONY: setup db-up db-down kafka-up kafka-down kafka-topics valkey-up valkey-down dev test fmt lint jev synth etl export train-data test-data oracle train-pd notebook eval-report memo-gate llm-eval dossiers load-test
 
 setup:
 	cd api && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
@@ -85,3 +85,6 @@ eval-report:
 
 dossiers:
 	cd api && .venv/bin/python ../eval/dossiers/make_dossiers.py --date $${DATE:-$$(date +%F)}
+
+load-test:
+	cd api && .venv/bin/python ../eval/load/load_test.py $(ARGS)
