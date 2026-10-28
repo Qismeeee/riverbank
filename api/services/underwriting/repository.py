@@ -67,12 +67,16 @@ class CaseRepository(ABC):
     @abstractmethod
     def prune_published(self, older_than_hours: float) -> int: ...
 
+    @abstractmethod
+    def record_failure(self, event_ids: list[str], error: str) -> None: ...
+
 
 class MemoryCaseRepository(CaseRepository):
     def __init__(self) -> None:
         self._cases: dict[str, Case] = {}
         self._requests: dict[tuple[str, str], tuple[str, str]] = {}
         self._outbox: list[dict] = []
+        self.failures: dict[str, tuple[int, str]] = {}
         self._lock = RLock()
 
     def _queue_events(self, previous: Case | None, case: Case) -> None:
@@ -166,6 +170,13 @@ class MemoryCaseRepository(CaseRepository):
 
     def prune_published(self, older_than_hours: float) -> int:
         return 0
+
+    def record_failure(self, event_ids: list[str], error: str) -> None:
+        with self._lock:
+            pending = {m["event_id"] for m in self._outbox}
+            for event_id in pending.intersection(event_ids):
+                attempts = self.failures.get(event_id, (0, ""))[0]
+                self.failures[event_id] = (attempts + 1, error)
 
 
 class PostgresCaseRepository(CaseRepository):
@@ -373,6 +384,15 @@ class PostgresCaseRepository(CaseRepository):
                     "where event_id = any(%s)",
                     ([row[0] for row in rows],),
                 )
+
+    def record_failure(self, event_ids: list[str], error: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "update event_outbox set attempts=attempts+1, last_error=%s, "
+                "last_attempt_at=clock_timestamp() "
+                "where event_id = any(%s) and published_at is null",
+                (error, event_ids),
+            )
 
     def prune_published(self, older_than_hours: float) -> int:
         with self._connect() as conn:

@@ -8,6 +8,7 @@ from messaging import MessageClient
 from services.underwriting.repository import CaseRepository
 
 log = logging.getLogger("riverbank.events")
+ERROR_LIMIT = 500
 
 
 @dataclass(frozen=True)
@@ -31,17 +32,28 @@ def relay_config() -> RelayConfig:
     )
 
 
+def describe(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"[:ERROR_LIMIT]
+
+
 class EventRelay:
     def __init__(self, outbox: CaseRepository, bus: MessageClient, cfg: RelayConfig | None = None):
         self.outbox, self.bus, self.cfg = outbox, bus, cfg or RelayConfig()
 
     def run_once(self) -> int:
-        with self.outbox.publishing(self.cfg.batch_size) as messages:
-            for message in messages:
-                self.bus.publish(self.cfg.topic, message, key=message["case_id"])
-            if messages:
-                self.bus.flush()
-        return len(messages)
+        batch: list[dict] = []
+        try:
+            with self.outbox.publishing(self.cfg.batch_size) as messages:
+                batch = messages
+                for message in messages:
+                    self.bus.publish(self.cfg.topic, message, key=message["case_id"])
+                if messages:
+                    self.bus.flush()
+        except Exception as exc:
+            if batch:
+                self.outbox.record_failure([m["event_id"] for m in batch], describe(exc))
+            raise
+        return len(batch)
 
     def prune(self) -> int:
         removed = self.outbox.prune_published(self.cfg.retention_hours)

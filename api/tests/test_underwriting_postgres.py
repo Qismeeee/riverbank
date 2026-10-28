@@ -261,3 +261,26 @@ def test_postgres_outbox_prunes_only_old_published_rows(database):
     assert repository.prune_published(1) == len(first.events)
     with repository.publishing(100) as batch:
         assert {m["case_id"] for m in batch} == {second.case_id}
+
+
+def test_postgres_outbox_records_failures_in_status_view(database):
+    service = make_service(database)
+    case = service.create(Plan(**plan()), "create-1")
+    repository = service.repository
+    ids = [e["event_id"] for e in case.events]
+    repository.record_failure(ids, "KafkaClientError: KAFKA_DELIVERY_FAILED")
+    repository.record_failure(ids[:1], "KafkaClientError: KAFKA_QUEUE_FULL")
+    with psycopg.connect(database) as conn:
+        rows = conn.execute(
+            "select status, attempts, last_error from event_outbox_status order by ordinal"
+        ).fetchall()
+    assert rows[0] == ("FAILING", 2, "KafkaClientError: KAFKA_QUEUE_FULL")
+    assert {r[:2] for r in rows[1:]} == {("FAILING", 1)}
+    with repository.publishing(100):
+        pass
+    repository.record_failure(ids, "late")
+    with psycopg.connect(database) as conn:
+        statuses = conn.execute(
+            "select distinct status, attempts from event_outbox_status"
+        ).fetchall()
+    assert {s[0] for s in statuses} == {"PUBLISHED"}

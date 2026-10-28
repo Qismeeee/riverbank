@@ -66,6 +66,28 @@ The same loop deletes published rows older than `RIVERBANK_EVENT_OUTBOX_RETENTIO
 
 `MemoryCaseRepository` keeps an in-process outbox with the same contract, for tests and local runs.
 
+## Observing
+
+| What | Where |
+|---|---|
+| Messages on the topic, per partition, key and JSON value | Redpanda Console at `https://<SITE_ADDRESS>/kafka`, same basic auth as `/db` |
+| Each event's delivery state | pgweb, view `event_outbox_status`: `PENDING`, `FAILING` (with `attempts`, `last_error`, `last_attempt_at`), `PUBLISHED` |
+| Relay failures over time | CloudWatch `/riverbank/app`, log line `event relay failed` |
+
+A failed batch rolls back, then the relay adds one to `attempts` and stores the error on every row of that batch in a separate transaction. Rows keep their `attempts` after they are finally published, so `PUBLISHED` with `attempts > 0` means "delivered after a retry".
+
+```sql
+select status, count(*), max(attempts), min(created_at) as oldest
+from event_outbox_status group by status;
+
+select case_id, reason, attempts, last_error, last_attempt_at
+from event_outbox_status where status = 'FAILING' order by created_at limit 20;
+```
+
+The console (`kafka-console`, Go, about 30 MiB) can also produce and delete records. It sits behind the same basic auth as pgweb; give that login only to the team.
+
+Consumer-side errors (a consumer that cannot process a message) belong in that consumer's `riverbank.<consumer>.dlq`, see Topic design. No consumer exists yet.
+
 ## Message
 
 Topic `riverbank.case-events`, key `case_id`, value JSON:

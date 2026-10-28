@@ -12,6 +12,13 @@
         reverse_proxy pgweb:8081
     }
 
+    handle /kafka* {
+        basic_auth {
+            {$DB_UI_USER:riverbank} {$DB_UI_PASS_HASH:$2b$14$ekv85y9Bi8KUUTOZCh4IEuABr2mrBfyn8IIO1rMKJfXuvxjeEsxPa}
+        }
+        reverse_proxy kafka-console:8080
+    }
+
     handle {
         reverse_proxy api:8000
     }
