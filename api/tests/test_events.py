@@ -173,3 +173,31 @@ def test_relay_config_reads_app_config(monkeypatch):
 def test_relay_off_by_default(monkeypatch):
     monkeypatch.setattr(config, "EVENT_RELAY", "off")
     assert start_relay() is None
+
+
+def test_relay_refuses_memory_bus(monkeypatch):
+    monkeypatch.setattr(config, "EVENT_RELAY", "on")
+    monkeypatch.setattr(config, "MESSAGE_BUS", "memory")
+    assert start_relay() is None
+
+
+def test_relay_loop_prunes_before_sending():
+    calls = []
+    stop = Event()
+
+    class Outbox(MemoryCaseRepository):
+        def prune_published(self, older_than_hours: float) -> int:
+            calls.append(older_than_hours)
+            stop.set()
+            return 3
+
+    cfg = RelayConfig(TOPIC, 100, 0, 0, retention_hours=48, prune_seconds=3600)
+    EventRelay(Outbox(), MemoryClient(), cfg).run(stop)
+    assert calls == [48]
+
+
+def test_relay_config_reads_outbox_retention(monkeypatch):
+    monkeypatch.setattr(config, "EVENT_OUTBOX_RETENTION_HOURS", 24.0)
+    monkeypatch.setattr(config, "EVENT_OUTBOX_PRUNE_SECONDS", 60.0)
+    cfg = relay_config()
+    assert (cfg.retention_hours, cfg.prune_seconds) == (24.0, 60.0)
