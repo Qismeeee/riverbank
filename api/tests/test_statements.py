@@ -1017,6 +1017,26 @@ def test_local_store_round_trip_rejects_a_path_outside_the_root(tmp_path):
     assert factory.build_document_store("local").name == "local"
 
 
+def test_seller_view_locks_statement_period_from_payout_weeks(client, upload_service):  # noqa: F811
+    waiting = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
+    weeks = waiting.runs[-1]["input_snapshot"]["features"]["weekly_payouts"]
+    starts = [date.fromisoformat(row["week_start"]) for row in weeks]
+    view = client.get(
+        f"/v1/cases/{waiting.case_id}/seller-view", headers=seller_headers("ducthinh.tech")
+    )
+    assert view.json()["statement_period"] == {
+        "start": min(starts).isoformat(),
+        "end": (max(starts) + timedelta(days=7)).isoformat(),
+    }
+    ready = create(client)
+    assert (
+        client.get(f"/v1/cases/{ready['case_id']}/seller-view", headers=seller_headers()).json()[
+            "statement_period"
+        ]
+        is None
+    )
+
+
 def test_statement_file_and_reading_can_be_downloaded(client, upload_service, tmp_path):  # noqa: F811
     upload_service.documents = LocalDocumentStore(tmp_path)
     case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
