@@ -457,7 +457,7 @@ Seller của hồ sơ hoặc người thẩm định nộp file. Hệ thống b�
 1. Excel `.xls` đời cũ: `xlrd` đọc, ô ngày đổi đúng theo cài đặt ngày của file. File hỏng thì ghi lý do vào `notes` rồi `422`.
 2. PDF có lớp chữ và kẻ bảng: `pdfplumber` đọc bảng, bảng tràn sang trang sau không lặp header vẫn đọc tiếp. Không gọi model, không tốn phí.
 3. PDF có lớp chữ nhưng không kẻ bảng: đọc theo vị trí chữ. Cột lấy từ vị trí header, ô chữ cách nhau xa mới tách cột, nên số nằm trong mô tả (ví dụ "tuần 40") không bị hiểu là số tiền. Dòng mô tả xuống hàng được ghép vào giao dịch gần nhất.
-4. PDF scan hoặc ảnh: prompt `statement-ocr` qua model đọc ảnh, mỗi trang một lượt, 4 trang chạy song song, tối đa `STATEMENT_OCR_MAX_PAGES` trang (mặc định 20). Ảnh được xoay theo EXIF, đổi HEIC và WEBP sang JPEG, thu cạnh dài về 2400 px trước khi gửi. Ảnh không mở được thì `422 STATEMENT_IMAGE_UNREADABLE`. Chỉ chạy khi `RIVERBANK_STATEMENT_OCR=llm`. Model đặt ở `STATEMENT_OCR_PROVIDER`, `STATEMENT_OCR_MODEL`. Prod dùng `openrouter` với `google/gemini-3.1-flash-lite`.
+4. PDF scan hoặc ảnh: prompt `statement-ocr` qua model đọc ảnh, mỗi trang một lượt, tối đa `STATEMENT_OCR_WORKERS` trang chạy song song (mặc định 8, bằng giới hạn song song của ModelGate), tối đa `STATEMENT_OCR_MAX_PAGES` trang (mặc định 20). Trang PDF được vẽ thành JPEG chất lượng 90. Trang nào lệch số dư thì đọc lại ngay trong luồng của trang đó, không chờ các trang khác. Mỗi trang ghi một dòng log `ocr_page` và mỗi sao kê một dòng `ocr_document`, có số giây, xem trong CloudWatch `/riverbank/app`. Ảnh được xoay theo EXIF, đổi HEIC và WEBP sang JPEG, thu cạnh dài về 2400 px trước khi gửi. Ảnh không mở được thì `422 STATEMENT_IMAGE_UNREADABLE`. Chỉ chạy khi `RIVERBANK_STATEMENT_OCR=llm`. Model đặt ở `STATEMENT_OCR_PROVIDER`, `STATEMENT_OCR_MODEL`. Prod dùng `openrouter` với `google/gemini-3.1-flash-lite`.
 
 **PDF lẫn trang chữ và trang ảnh** (khi OCR bật): trang không có lớp chữ, hoặc ảnh phủ từ 50% diện tích trang mà không có chữ nào đọc ra ngày, được bỏ khỏi bước 2 và 3 rồi gửi riêng cho model. Dòng ghép lại theo thứ tự trang, `extraction.parser` là ví dụ `pdf_text+vision`, `extraction.image_pages` liệt kê trang đã gửi model. OCR tắt thì đọc như cũ.
 
@@ -503,11 +503,11 @@ Giống 4.8a nhưng không bắt client chờ OCR. Dùng cho PDF scan hoặc ả
 | `error` | `code`, `status`, `details`, cùng mã lỗi như 4.8a |
 | `created_at`, `updated_at` | ISO 8601 |
 
-**Cách chạy:** job và file nằm trong bảng `jobs` của Postgres (memory khi chạy local). Worker là một thread trong tiến trình API, bật bằng `RIVERBANK_JOB_WORKER=on` (mặc định bật khi `RIVERBANK_ENV=prod`). Worker nhận job bằng `FOR UPDATE SKIP LOCKED`, nên chạy nhiều tiến trình không nhận trùng. Mỗi lần nhận có hạn `RIVERBANK_JOB_LEASE_SECONDS` (mặc định 600). Tiến trình chết giữa chừng thì hết hạn xong job được nhận lại. Lỗi `5xx` (model, Jev, S3 lỗi) được thử lại. Lỗi `4xx` (file không đọc được, hồ sơ đã đổi version) dừng luôn. Job xong thì xóa file khỏi bảng. Chạy lại một job đã ghi sao kê không ghi lần hai, E8 có `job_id` để đối chiếu.
+**Cách chạy:** job và file nằm trong bảng `jobs` của Postgres (memory khi chạy local). Worker là một thread trong tiến trình API, bật bằng `RIVERBANK_JOB_WORKER=on` (mặc định bật khi `RIVERBANK_ENV=prod`). Worker nhận job bằng `FOR UPDATE SKIP LOCKED`, nên chạy nhiều tiến trình không nhận trùng. Tiến trình nhận upload đánh thức worker của nó ngay, không chờ vòng hỏi 2 giây. Mỗi lần nhận có hạn `RIVERBANK_JOB_LEASE_SECONDS` (mặc định 600). Tiến trình chết giữa chừng thì hết hạn xong job được nhận lại. Lỗi `5xx` (model, Jev, S3 lỗi) được thử lại. Lỗi `4xx` (file không đọc được, hồ sơ đã đổi version) dừng luôn. Job xong thì xóa file khỏi bảng. Chạy lại một job đã ghi sao kê không ghi lần hai, E8 có `job_id` để đối chiếu.
 
 ### 4.8d `GET /v1/jobs/{job_id}`, Xem trạng thái job
 
-Seller của hồ sơ hoặc người thẩm định. Phản hồi `200`: `JobView`. Không có thì `404 JOB_NOT_FOUND`. FE gọi lại mỗi 2 giây đến khi `SUCCEEDED` hoặc `FAILED`, rồi tải lại hồ sơ.
+Seller của hồ sơ hoặc người thẩm định. Phản hồi `200`: `JobView`. Không có thì `404 JOB_NOT_FOUND`. FE gọi lại mỗi 1 giây đến khi `SUCCEEDED` hoặc `FAILED`, rồi tải lại hồ sơ.
 
 ```bash
 curl -X POST $API/v1/cases/$C/statements/upload-jobs -H "Authorization: Bearer $T" \

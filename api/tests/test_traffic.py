@@ -147,7 +147,7 @@ def test_pattern_classification_has_no_row_and_each_jev_batch_does():
     assert calls[0]["prompt_tokens"] == 4 and calls[0]["cost_micro_usd"] is None
 
 
-def test_ocr_pages_in_worker_threads_stay_on_the_run(monkeypatch):
+def test_ocr_pages_in_worker_threads_stay_on_the_run():
     class Client(LlmClient):
         model = "gpt-4.1-mini"
         provider = "openai"
@@ -164,14 +164,14 @@ def test_ocr_pages_in_worker_threads_stay_on_the_run(monkeypatch):
                 {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1},
             )
 
-    monkeypatch.setattr("services.statements.vision.render_pages", lambda *args: {1: "u1", 2: "u2"})
+    renderer = SimpleNamespace(url=lambda number, scale: f"u{number}")
     parser = VisionStatementParser(
         Client(), SimpleNamespace(system="s", temperature=0, version="v")
     )
     token = open_scope("case-1", lambda: CLOCK)
     try:
         _, bucket = bind_run("case-1", "run-1", lambda: CLOCK)
-        parser._read(SimpleNamespace(), [1, 2], 2, 1.0, False)
+        parser._read(renderer, (1, 2), 2)
         calls = bucket.snapshot("run-1")
     finally:
         reset_meter(token)

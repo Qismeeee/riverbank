@@ -1,10 +1,14 @@
 import base64
 import io
+import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass
+from threading import Lock
 
 from llm import LlmClient, LlmError, LlmRequest
+from logs import stdout_logger
 from prompts import Prompt
 from services.metering import record_usage
 from services.underwriting.models import WorkflowError
@@ -12,8 +16,8 @@ from services.underwriting.models import WorkflowError
 from .balance import check_balances
 from .documents import (
     IMAGES,
+    JPEG,
     PDF,
-    PNG,
     ParsedStatement,
     StatementDocument,
     StatementLine,
@@ -25,6 +29,8 @@ from .documents import (
 from .images import ImageNormalizer
 from .parsers import PageParser
 
+log = stdout_logger("riverbank.ocr")
+_PDFIUM = Lock()
 _NULLABLE_INT = {"type": ["integer", "null"]}
 OCR_SCHEMA = {
     "type": "object",
@@ -64,7 +70,8 @@ class VisionConfig:
     max_pages: int = 10
     render_scale: float = 2.0
     retry_scale: float = 3.0
-    workers: int = 4
+    workers: int = 8
+    jpeg_quality: int = 90
 
 
 @dataclass(frozen=True)
@@ -83,6 +90,12 @@ class PageResult:
         return self.mismatches < other.mismatches and len(self.lines) >= len(other.lines)
 
 
+@dataclass(frozen=True)
+class PageRead:
+    result: PageResult
+    retried: bool
+
+
 def _data_url(media_type: str, content: bytes) -> str:
     return f"data:{media_type};base64,{base64.b64encode(content).decode()}"
 
@@ -92,34 +105,35 @@ def page_count(document: StatementDocument) -> int:
         return 1
     import pypdfium2
 
-    pdf = pypdfium2.PdfDocument(document.content)
-    try:
-        return len(pdf)
-    finally:
-        pdf.close()
+    with _PDFIUM:
+        pdf = pypdfium2.PdfDocument(document.content)
+        try:
+            return len(pdf)
+        finally:
+            pdf.close()
 
 
-def render_pages(
-    document: StatementDocument,
-    numbers: list[int],
-    scale: float,
-    images: ImageNormalizer | None = None,
-) -> dict[int, str]:
-    if document.media_type != PDF:
-        url = _data_url(*(images or ImageNormalizer()).normalize(document.content))
-        return {number: url for number in numbers}
-    import pypdfium2
+class PageRenderer:
+    def __init__(self, document: StatementDocument, images: ImageNormalizer, quality: int):
+        self.document, self.images, self.quality = document, images, quality
+        self._photo: str | None = None
 
-    pdf = pypdfium2.PdfDocument(document.content)
-    try:
-        urls = {}
-        for number in numbers:
-            buffer = io.BytesIO()
-            pdf[number - 1].render(scale=scale).to_pil().save(buffer, format="PNG")
-            urls[number] = _data_url(PNG, buffer.getvalue())
-        return urls
-    finally:
-        pdf.close()
+    def url(self, number: int, scale: float) -> str:
+        if self.document.media_type != PDF:
+            if self._photo is None:
+                self._photo = _data_url(*self.images.normalize(self.document.content))
+            return self._photo
+        import pypdfium2
+
+        with _PDFIUM:
+            pdf = pypdfium2.PdfDocument(self.document.content)
+            try:
+                image = pdf[number - 1].render(scale=scale).to_pil()
+            finally:
+                pdf.close()
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=self.quality)
+        return _data_url(JPEG, buffer.getvalue())
 
 
 class VisionStatementParser(PageParser):
@@ -144,41 +158,45 @@ class VisionStatementParser(PageParser):
             raise WorkflowError(
                 "STATEMENT_TOO_MANY_PAGES", 422, [{"max_pages": self.cfg.max_pages}]
             )
+        started = time.perf_counter()
         total = page_count(document)
-        results = self._read(document, list(pages), total, self.cfg.render_scale, False)
-        notes: list[str] = []
-        retry = [n for n in pages if results[n].mismatches]
-        if retry:
-            again = self._read(document, retry, total, self.cfg.retry_scale, True)
-            for number in retry:
-                notes.append(f"PAGE_{number}_RETRIED")
-                if again[number].better_than(results[number]):
-                    results[number] = again[number]
-        notes += [f"PAGE_{n}_UNREADABLE" for n in pages if results[n].unreadable]
-        lines = [line for n in pages for line in results[n].lines]
-        model = results[pages[-1]].model if pages else self.client.model
+        reads = self._read(PageRenderer(document, self.images, self.cfg.jpeg_quality), pages, total)
+        retried = [n for n in pages if reads[n].retried]
+        notes = [f"PAGE_{n}_RETRIED" for n in retried]
+        notes += [f"PAGE_{n}_UNREADABLE" for n in pages if reads[n].result.unreadable]
+        lines = [line for n in pages for line in reads[n].result.lines]
+        model = reads[pages[-1]].result.model if pages else self.client.model
         summary = StatementSummary()
         for number in pages:
-            summary = summary.merge(results[number].summary)
+            summary = summary.merge(reads[number].result.summary)
+        self._log("ocr_document", pages=len(pages), retried=len(retried), started=started)
         return ParsedStatement(
             self.name, lines, total, model, self.prompt.version, notes, summary=summary
         )
 
     def _read(
-        self,
-        document: StatementDocument,
-        numbers: list[int],
-        total: int,
-        scale: float,
-        retry: bool,
-    ) -> dict[int, PageResult]:
-        urls = render_pages(document, numbers, scale, self.images)
-        jobs = [(number, copy_context()) for number in numbers]
-        with ThreadPoolExecutor(max_workers=self.cfg.workers) as pool:
-            found = pool.map(
-                lambda job: job[1].run(self._ask, urls[job[0]], job[0], total, retry), jobs
-            )
-            return dict(zip(numbers, found, strict=True))
+        self, renderer: PageRenderer, pages: tuple[int, ...], total: int
+    ) -> dict[int, PageRead]:
+        jobs = [(number, copy_context()) for number in pages]
+        workers = max(1, min(self.cfg.workers, len(pages)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            found = pool.map(lambda job: job[1].run(self._page, renderer, job[0], total), jobs)
+            return dict(zip(pages, found, strict=True))
+
+    def _page(self, renderer: PageRenderer, number: int, total: int) -> PageRead:
+        started = time.perf_counter()
+        first = self._ask(renderer.url(number, self.cfg.render_scale), number, total, False)
+        result, retried = first, False
+        if first.mismatches:
+            again = self._ask(renderer.url(number, self.cfg.retry_scale), number, total, True)
+            result, retried = (again if again.better_than(first) else first), True
+        self._log("ocr_page", page=number, retried=retried, started=started)
+        return PageRead(result, retried)
+
+    def _log(self, event: str, started: float, **fields) -> None:
+        seconds = round(time.perf_counter() - started, 2)
+        record = {"event": event, "model": self.client.model, **fields, "seconds": seconds}
+        log.info(json.dumps(record))
 
     def _ask(self, url: str, number: int, total: int, retry: bool) -> PageResult:
         user = {"page": number, "pages": total}

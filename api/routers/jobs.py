@@ -24,6 +24,7 @@ from services.underwriting.uploads import STATEMENT_UPLOAD, StatementUploadHandl
 
 log = logging.getLogger("riverbank.jobs")
 router = APIRouter(prefix="/v1", tags=["jobs"])
+_wake = Event()
 
 
 @lru_cache
@@ -65,6 +66,7 @@ def upload_statement_job(
         Job.new(STATEMENT_UPLOAD, case_id, actor.subject, request.model_dump(), job_config()),
         content,
     )
+    _wake.set()
     response.headers["Location"] = f"/v1/jobs/{job.job_id}"
     return job.view()
 
@@ -86,7 +88,7 @@ def start_worker() -> Event | None:
         while not stop.is_set():
             try:
                 worker = JobWorker(
-                    get_jobs(), [StatementUploadHandler(get_service())], job_config()
+                    get_jobs(), [StatementUploadHandler(get_service())], job_config(), _wake
                 )
             except Exception:
                 log.exception("job worker cannot start")
