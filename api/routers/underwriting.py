@@ -9,7 +9,12 @@ import config
 from db.migrate import apply as migrate_database
 from routers.auth import BankUser, Principal, Role, SellerUser, seller_of
 from routers.limits import rate_limited
-from services.statements.archive import file_summary, latest_uploaded_statement, reading_payload
+from services.statements.archive import (
+    file_summary,
+    latest_uploaded_statement,
+    reading_payload,
+    statement_period,
+)
 from services.statements.factory import build_document_store, build_statement_reader
 from services.statements.reader import StatementConfig
 from services.statements.storage import EXTENSIONS
@@ -146,6 +151,7 @@ def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict
             else None
         ),
         "statement_file": file_summary(uploaded) if uploaded else None,
+        "statement_period": statement_period(case),
     }
 
 

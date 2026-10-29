@@ -276,6 +276,7 @@ Seller gửi kế hoạch một lô hàng. Hệ thống chạy hết nhánh th�
 | `explanation` | Danh sách câu của bản seller (D10). Rỗng khi bản mới nhất chưa qua kiểm tra |
 | `decision` | `null` khi chưa có quyết định. Có thì gồm `decision_type`, `final_amount`, `final_tenor_weeks` |
 | `statement_file` | `null` khi chưa nộp file. Có thì gồm `media_type`, `pages`, `parser`, `lines`, `stored`. `stored` là file gốc còn tải được |
+| `statement_period` | `null` khi không đang chờ sao kê. Có thì `start` và `end` là thứ Hai, khoảng `[start, end)` trùng các tuần payout của hồ sơ |
 
 Mỗi câu (`MemoSentence`):
 
