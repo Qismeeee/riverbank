@@ -280,10 +280,12 @@ class JobWorker:
         queue: JobQueue,
         handlers: list[JobHandler],
         cfg: JobConfig | None = None,
+        wake: Event | None = None,
     ):
         self.queue = queue
         self.handlers = {h.kind: h for h in handlers}
         self.cfg = cfg or JobConfig()
+        self.wake = wake or Event()
 
     def run_once(self) -> bool:
         claim = self.queue.claim(self.cfg.lease_seconds)
@@ -312,4 +314,5 @@ class JobWorker:
                 log.exception("job worker loop failed")
                 busy = False
             if not busy:
-                stop.wait(self.cfg.idle_seconds)
+                self.wake.wait(self.cfg.idle_seconds)
+                self.wake.clear()

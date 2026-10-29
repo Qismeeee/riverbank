@@ -1,10 +1,11 @@
 import io
 import json
+import logging
 import zipfile
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from threading import Lock
+from threading import Barrier, Event, Lock
 from types import SimpleNamespace
 
 import pytest
@@ -135,6 +136,15 @@ def zip_bytes(name: str) -> bytes:
     with zipfile.ZipFile(out, "w") as archive:
         archive.writestr(name, "x")
     return out.getvalue()
+
+
+class Captured(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.lines: list[str] = []
+
+    def emit(self, record):
+        self.lines.append(record.getMessage())
 
 
 class ScriptedVision(LlmClient):
@@ -291,7 +301,7 @@ def test_scanned_pdf_falls_back_to_vision_page_by_page():
     assert read.parsed.parser == "vision" and read.parsed.model == "vision-test-2026"
     assert read.parsed.prompt_version.startswith("statement-ocr@")
     request = vision_client.requests[0]
-    assert request.images[0].startswith("data:image/png;base64,")
+    assert request.images[0].startswith("data:image/jpeg;base64,")
     assert request.user == {"page": 1, "pages": 1} and request.temperature == 0
 
 
@@ -817,6 +827,54 @@ def test_vision_reads_pages_in_parallel_but_keeps_order():
     parsed = vision.parse(StatementDocument.sniff(content))
     assert [x.raw_desc for x in parsed.lines] == ["P1", "P2", "P3", "P4"]
     assert parsed.pages == 4
+
+
+def test_vision_rereads_a_page_while_other_pages_are_still_reading():
+    retried = Event()
+
+    class Slow(ScriptedVision):
+        def complete_json(self, request):
+            if "retry_reason" in request.user:
+                retried.set()
+            elif request.user["page"] == 2:
+                assert retried.wait(5), "page 2 blocked the retry of page 1"
+            return super().complete_json(request)
+
+    wrong = ocr_page(
+        ocr_line("2026-10-05", "A", 1, balance=1), ocr_line("2026-10-06", "B", 1, balance=9)
+    )
+    right = ocr_page(
+        ocr_line("2026-10-05", "A", 1, balance=1), ocr_line("2026-10-06", "B", 8, balance=9)
+    )
+    ocr = Slow(wrong, ocr_page(ocr_line("2026-10-07", "C", 5)), retries={1: right})
+    vision = VisionStatementParser(ocr, default_prompts().get("statement-ocr"))
+    parsed = vision.parse(StatementDocument.sniff(pdf_bytes(*[[["", "", "", ""]]] * 2)))
+    assert [x.credit for x in parsed.lines] == [1, 8, 5]
+    assert parsed.notes == ["PAGE_1_RETRIED"]
+
+
+def test_vision_reads_all_pages_at_once_and_logs_timings():
+    gate = Barrier(8, timeout=5)
+
+    class Together(ScriptedVision):
+        def complete_json(self, request):
+            gate.wait()
+            return super().complete_json(request)
+
+    pages = [ocr_page(ocr_line("2026-10-05", f"P{n}", n)) for n in range(1, 9)]
+    vision = VisionStatementParser(Together(*pages), default_prompts().get("statement-ocr"))
+    captured, log = Captured(), logging.getLogger("riverbank.ocr")
+    log.addHandler(captured)
+    try:
+        parsed = vision.parse(StatementDocument.sniff(pdf_bytes(*[[["", "", "", ""]]] * 8)))
+    finally:
+        log.removeHandler(captured)
+    assert [x.raw_desc for x in parsed.lines] == [f"P{n}" for n in range(1, 9)]
+    events = [json.loads(line) for line in captured.lines]
+    assert sorted(e["page"] for e in events if e["event"] == "ocr_page") == list(range(1, 9))
+    document = events[-1]
+    assert (document["event"], document["pages"], document["retried"]) == ("ocr_document", 8, 0)
+    assert document["seconds"] >= 0 and document["model"] == "vision-test"
 
 
 def heic_bytes() -> bytes:

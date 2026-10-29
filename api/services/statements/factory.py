@@ -59,7 +59,10 @@ def build_parsers(ocr: str) -> list[StatementParser]:
             VisionStatementParser(
                 client,
                 default_prompts().get("statement-ocr"),
-                VisionConfig(max_pages=config.STATEMENT_OCR_MAX_PAGES),
+                VisionConfig(
+                    max_pages=config.STATEMENT_OCR_MAX_PAGES,
+                    workers=config.STATEMENT_OCR_WORKERS,
+                ),
             )
         )
     return parsers

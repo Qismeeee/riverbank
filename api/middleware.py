@@ -1,25 +1,18 @@
 import json
 import logging
 import re
-import sys
 import time
 from uuid import uuid4
 
 import config
+from logs import stdout_logger
 
 REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 QUIET_PATHS = frozenset({"/health"})
 
 
 def access_logger() -> logging.Logger:
-    log = logging.getLogger("riverbank.access")
-    if not log.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        log.addHandler(handler)
-        log.setLevel(logging.INFO)
-        log.propagate = False
-    return log
+    return stdout_logger("riverbank.access")
 
 
 class RequestTiming:

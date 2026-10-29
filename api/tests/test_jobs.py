@@ -1,4 +1,6 @@
+import time
 from datetime import timedelta
+from threading import Event, Thread
 
 import pytest
 
@@ -83,8 +85,10 @@ def scripted_job(queue, kind="scripted"):
 def test_upload_job_runs_in_background_and_records_job_id(client, upload_service, queue):  # noqa: F811
     case = upload_service.repository.get(create(client, "ducthinh.tech")["case_id"])
     seller = seller_headers("ducthinh.tech")
+    job_routes._wake.clear()
     response = enqueue_upload(client, case, statement_csv(case), seller)
     assert response.status_code == 202, response.text
+    assert job_routes._wake.is_set()
     job = response.json()
     assert response.headers["Location"] == f"/v1/jobs/{job['job_id']}"
     assert (job["status"], job["kind"], job["submitted_by"]) == (
@@ -154,6 +158,24 @@ def test_transient_errors_retry_then_fail_and_client_errors_fail_at_once():
     job = scripted_job(queue)
     worker.run_once()
     assert (queue.get(job.job_id).status, queue.get(job.job_id).attempts) == (FAILED, 1)
+
+
+def test_worker_wakes_as_soon_as_a_job_is_queued():
+    queue, wake, stop = MemoryJobQueue(), Event(), Event()
+    worker = JobWorker(queue, [Scripted({"ok": True})], JobConfig(idle_seconds=30), wake)
+    thread = Thread(target=worker.run, args=(stop,))
+    thread.start()
+    try:
+        job = scripted_job(queue)
+        wake.set()
+        deadline = time.monotonic() + 2
+        while queue.get(job.job_id).status != SUCCEEDED and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert queue.get(job.job_id).status == SUCCEEDED
+    finally:
+        stop.set()
+        wake.set()
+        thread.join(2)
 
 
 def test_unknown_kind_fails_without_retry():
