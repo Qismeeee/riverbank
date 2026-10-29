@@ -37,7 +37,7 @@ class Plan(InputModel):
     cash_on_hand: Money
     supplier_schedule: Annotated[list[Payment], Field(min_length=1, max_length=100)]
     sell_weeks: Annotated[int, Field(strict=True, ge=1, le=26)]
-    requested_amount: Annotated[int, Field(strict=True, gt=0, le=300_000_000)]
+    requested_amount: Annotated[int | None, Field(strict=True, gt=0, le=300_000_000)] = None
     note: FreeText = ""
 
     @model_validator(mode="after")

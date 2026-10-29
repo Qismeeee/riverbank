@@ -157,6 +157,25 @@ def test_create_replay_and_changed_payload_conflict(client):
     assert response.status_code == 409
 
 
+def test_requested_amount_can_be_omitted(client):
+    body = plan()
+    del body["requested_amount"]
+    omitted = client.post("/v1/cases", headers=seller_headers(key="create-no-ask"), json=body)
+    assert omitted.status_code == 201, omitted.text
+    explicit = client.post(
+        "/v1/cases",
+        headers=seller_headers(key="create-null-ask"),
+        json=plan(requested_amount=None),
+    )
+    assert explicit.status_code == 201, explicit.text
+    zero = client.post(
+        "/v1/cases",
+        headers=seller_headers(key="create-zero-ask"),
+        json=plan(requested_amount=0),
+    )
+    assert zero.status_code == 422
+
+
 @pytest.mark.parametrize(
     "changes",
     [
