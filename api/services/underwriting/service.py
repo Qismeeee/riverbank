@@ -160,7 +160,11 @@ class UnderwritingService:
             docs_verified=statement["matched"] if statement else None,
             cic_group=cic.get("bureau_group"),
             cic_outstanding=cic.get("outstanding"),
-            requested_amount=max(case.plan["requested_amount"], cf["amount_proposed"]),
+            requested_amount=(
+                None
+                if case.plan["requested_amount"] is None
+                else max(case.plan["requested_amount"], cf["amount_proposed"])
+            ),
             pd_bps=risk.get("pd_bps"),
         )
 
