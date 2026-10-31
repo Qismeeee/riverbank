@@ -44,6 +44,22 @@ docker compose up -d
 
 Mật khẩu UI và mật khẩu role gửi riêng cho từng người, không dán vào chat nhóm.
 
+## Valkey UI và migration hồ sơ
+
+`/redis` là Redis Commander chỉ đọc, cùng Basic Auth với `/db`; chạy trong profile `events`,
+không publish cổng riêng. Đã cấu hình `SCAN` thay vì liệt kê toàn bộ key bằng `KEYS`,
+giới hạn RAM 128 MB. Valkey là nơi giữ bộ đếm ModelGate, không dùng UI để xóa hoặc đổi
+trạng thái giới hạn khi đang chạy.
+
+`007_optional_requested_amount` bỏ ràng buộc `NOT NULL` của cột sinh `cases.requested_amount`,
+khớp API cho phép bỏ trống số tiền xin vay. Dùng runner `db.migrate` để giữ advisory lock
+và checksum ledger; không sửa migration `001` đã chạy. Test nâng cấp phải dùng Postgres
+local `riverbank_test` và `WORKFLOW_TEST_DATABASE_URL`, không dùng RDS production.
+
+`infra/cloudwatch-5xx.json` chỉ đếm access log `http.log.access*` có status từ 500,
+giữ cả lỗi upstream 502 nhưng không cộng trùng middleware/error log. Dùng
+`aws logs test-metric-filter` trước khi cập nhật; filter không sửa lại metric lịch sử.
+
 ## Xuất data để train model
 
 `python -m etl.export --run-date YYYY-MM-DD` chạy trên EC2 (`docker compose exec api ...`) hoặc local: ghi CSV từng bảng (`v_shop_features`, `shop_snapshot`, `product_snapshot`, `etl_run`) vào `data/exports/<ngày>/` và S3 `exports/<ngày>/`. Dev tải về bằng `aws s3 sync s3://riverbank-data-424016506356/exports/<ngày>/ ./data/exports/<ngày>/ --profile riverbank`.

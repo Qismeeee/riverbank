@@ -143,3 +143,7 @@ Mọi lỗi nghiệp vụ có dạng `{ "detail": { "code": "...", "details": []
 | `429 TOO_MANY_ATTEMPTS` | Sai mã nhiều lần, chờ 5 phút |
 | `429 RATE_LIMITED` | Gọi quá nhanh. Đọc header `Retry-After` (giây), báo "thử lại sau N giây", không tự gọi lại liên tục |
 | `503 AUTH_NOT_CONFIGURED`, `503 OPENROUTER_KEY_REQUIRED` | Báo lỗi cấu hình server |
+
+Mặc định tạo hồ sơ, upload sao kê và Copilot đều giới hạn 60 request trong 60 giây,
+đếm riêng theo người gọi, nhóm API và tiến trình Uvicorn. Đây chưa phải quota dùng
+chung giữa nhiều worker. Giới hạn đăng nhập sai và quota nhà cung cấp model là riêng.

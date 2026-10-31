@@ -60,12 +60,26 @@ Test khóa các số này. Đổi engine thì đổi docs và `eval/golden/` cù
 | DB | RDS Postgres 18, mật khẩu trong Secrets Manager |
 | Files | S3 riverbank-data-424016506356 |
 | Keys | Secrets Manager riverbank/openai, riverbank/anthropic, riverbank/openrouter |
-| Alerts | SNS riverbank-alerts, 3 CloudWatch alarm |
+| Alerts | CloudWatch Logs và alarm qua SNS riverbank-alerts |
 | Xem DB | https://13-214-87-165.sslip.io/db (pgweb readonly, basic auth, hỏi admin tài khoản) |
+| Xem Valkey | https://13-214-87-165.sslip.io/redis (Redis Commander chỉ đọc, Basic Auth như `/db`, profile `events`) |
 | Data train | S3 `exports/<ngày>/*.csv`, sinh bằng `make export` |
 
 EC2 đọc secret bằng IAM role, không có access key trong repo hay trên máy. Local dùng `.env`, không bao giờ commit.
 Vận hành, rollback, thêm secret: `.agents/skills/deploy-ops/SKILL.md`.
+
+Migration `007_optional_requested_amount` cho phép tạo hồ sơ khi không nhập số tiền xin vay,
+khớp contract `Plan`; cột vẫn được sinh từ kế hoạch, số dương đã nhập vẫn được kiểm tra.
+Migration chạy qua `db.migrate`, không sửa checksum migration cũ hoặc thay giá trị hồ sơ.
+CI dùng PostgreSQL local riêng `riverbank_test` để kiểm persistence và nâng cấp schema.
+Không đặt lại `NOT NULL` khi rollback nếu đã có hồ sơ không nhập số tiền; rollback image
+không đồng nghĩa rollback dữ liệu.
+
+Alarm `riverbank-5xx` đếm một access log Caddy cho mỗi request 5xx, kể cả 502 khi API
+chưa sẵn sàng; không cộng trùng log middleware hoặc error log proxy. Cấu hình filter
+nằm trong `infra/cloudwatch-5xx.json`; cập nhật bằng `aws logs put-metric-filter
+--cli-input-json file://infra/cloudwatch-5xx.json --region ap-southeast-1` với profile
+đúng tài khoản. Filter mới chỉ áp dụng cho log mới, không sửa metric lịch sử.
 
 ## Nguyên tắc code
 

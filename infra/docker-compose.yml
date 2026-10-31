@@ -43,6 +43,9 @@ services:
       RIVERBANK_WORKFLOW_FEATURES: seller_book
       RIVERBANK_WORKFLOW_RISK: lightgbm
       RIVERBANK_WORKFLOW_CIC_GATE: jev
+      RIVERBANK_RATE_LIMIT_CASE_CREATE: ${RIVERBANK_RATE_LIMIT_CASE_CREATE:-60/60}
+      RIVERBANK_RATE_LIMIT_STATEMENT_UPLOAD: ${RIVERBANK_RATE_LIMIT_STATEMENT_UPLOAD:-60/60}
+      RIVERBANK_RATE_LIMIT_COPILOT: ${RIVERBANK_RATE_LIMIT_COPILOT:-60/60}
       RIVERBANK_STATEMENT_OCR: llm
       STATEMENT_OCR_PROVIDER: openrouter
       STATEMENT_OCR_MODEL: google/gemini-3.1-flash-lite
@@ -150,6 +153,34 @@ services:
       resources:
         limits:
           memory: 160m
+    logging: *cw-logging
+
+  redis-ui:
+    image: ghcr.io/joeferner/redis-commander:0.9.1@sha256:2c2404630820613c7e540ec26a8d1dd24b671d1a80373c3dfad287c7a1374ad1
+    profiles: ["events"]
+    restart: unless-stopped
+    user: redis
+    environment:
+      REDIS_HOSTS: valkey:valkey:6379
+      URL_PREFIX: /redis
+      READ_ONLY: "true"
+      NOSAVE: "true"
+      NO_LOG_DATA: "true"
+      USE_SCAN: "true"
+      NODE_OPTIONS: --max-old-space-size=64
+    expose:
+      - "8081"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     logging: *cw-logging
 
   valkey:

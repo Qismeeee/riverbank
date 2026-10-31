@@ -108,6 +108,50 @@ def test_postgres_lists_cases_by_seller(database):
     assert service.repository.list_by_seller("minhchau.shop", 1, 1) == mine[1:]
 
 
+@pytest.mark.parametrize(
+    "requested", [{}, {"requested_amount": None}, {"requested_amount": 150_000_000}]
+)
+def test_postgres_persists_optional_requested_amount(database, requested):
+    payload = plan()
+    payload.pop("requested_amount")
+    payload.update(requested)
+    service = make_service(database)
+    case = service.create(Plan(**payload), "optional-amount")
+
+    assert make_service(database).repository.get(case.case_id) == case
+    with psycopg.connect(database) as conn:
+        amount = conn.execute(
+            "select requested_amount from cases where case_id=%s", (case.case_id,)
+        ).fetchone()[0]
+    assert amount == requested.get("requested_amount")
+
+
+def test_migration_upgrades_required_requested_amount_without_changing_cases(database):
+    service = make_service(database)
+    existing = service.create(Plan(**plan()), "existing-amount")
+    payload = plan()
+    payload.pop("requested_amount")
+    with psycopg.connect(database) as conn:
+        conn.execute("alter table cases alter column requested_amount set not null")
+        conn.execute(
+            "delete from underwriting_migrations where version=%s",
+            ("007_optional_requested_amount",),
+        )
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        service.create(Plan(**payload), "optional-amount")
+
+    with psycopg.connect(database) as conn:
+        migrate(conn)
+        migrate(conn)
+
+    restarted = make_service(database)
+    assert restarted.repository.get(existing.case_id) == existing
+    created = restarted.create(Plan(**payload), "optional-amount")
+    assert created.plan["requested_amount"] is None
+    assert restarted.create(Plan(**payload), "optional-amount") == created
+
+
 def test_postgres_rejects_cross_case_evidence_fk(database):
     service = make_service(database)
     one = service.create(Plan(**plan()), "one")
