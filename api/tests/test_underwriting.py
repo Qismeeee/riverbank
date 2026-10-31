@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +11,7 @@ from policy import RULES
 from routers import underwriting as routes
 from services.guardrail import BLOCK_MESSAGES
 from services.underwriting.evidence import read_evidence
-from services.underwriting.models import DecisionInput, Plan, Statement, WorkflowError
+from services.underwriting.models import Case, DecisionInput, Plan, Statement, WorkflowError
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
@@ -513,3 +514,95 @@ def check_queue_scopes(service):
 
 def test_queue_lists_decided_cases_newest_first(service):
     check_queue_scopes(service)
+
+
+def seed_listing_cases(
+    repository, count=137, seller="minhchau.shop", status="PENDING_REVIEW", start=1
+):
+    ids = []
+    for number in range(start, start + count):
+        case_id = str(UUID(int=number))
+        case = Case(case_id, seller, seller, plan(seller), NOW.isoformat(), status=status)
+        repository.create(case, f"listing-{number}", f"hash-{number}")
+        ids.append(case_id)
+    return ids
+
+
+@pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
+def test_case_lists_accept_large_pages_and_legacy_offsets(client, service, path):
+    ids = seed_listing_cases(service.repository)
+    headers = BANK if path == "/v1/queue" else seller_headers()
+    if path == "/v1/me/cases":
+        ids.reverse()
+    first = client.get(path, params={"limit": 125}, headers=headers)
+    assert first.status_code == 200
+    page = first.json()
+    assert [item["case_id"] for item in page["items"]] == ids[:125]
+    assert page["has_more"] and page["next_offset"] == 125
+    last = client.get(path, params={"limit": 125, "offset": 125}, headers=headers).json()
+    assert [item["case_id"] for item in last["items"]] == ids[125:]
+    assert not last["has_more"] and last["next_cursor"] is None and last["next_offset"] is None
+
+
+def test_queue_cursor_visits_every_case_with_equal_timestamps(client, service):
+    ids = seed_listing_cases(service.repository)
+    params, seen = {}, []
+    for _ in range(5):
+        response = client.get("/v1/queue", params=params, headers=BANK)
+        assert response.status_code == 200
+        page = response.json()
+        assert page["limit"] == 50
+        seen.extend(item["case_id"] for item in page["items"])
+        if not page["has_more"]:
+            break
+        params = {"cursor": page["next_cursor"]}
+    else:
+        pytest.fail("Pagination did not terminate")
+    assert seen == ids
+
+
+def test_seller_cursor_ignores_new_front_rows_and_rejects_other_scopes(client, service):
+    ids = seed_listing_cases(service.repository, count=5)
+    seed_listing_cases(service.repository, count=2, seller="thuha.closet", start=100)
+    first = client.get("/v1/me/cases?limit=2", headers=seller_headers()).json()
+    assert [item["case_id"] for item in first["items"]] == ids[-1:-3:-1]
+    token = first["next_cursor"]
+    seed_listing_cases(service.repository, count=1, start=1000)
+    seen = [item["case_id"] for item in first["items"]]
+    while token:
+        page = client.get(
+            "/v1/me/cases", params={"limit": 2, "cursor": token}, headers=seller_headers()
+        ).json()
+        assert page["next_offset"] is None
+        seen.extend(item["case_id"] for item in page["items"])
+        assert len(seen) <= len(ids)
+        token = page["next_cursor"]
+    assert seen == list(reversed(ids))
+    assert (
+        client.get(
+            "/v1/me/cases",
+            params={"cursor": first["next_cursor"]},
+            headers=seller_headers("thuha.closet"),
+        ).status_code
+        == 422
+    )
+    assert (
+        client.get("/v1/queue", params={"cursor": first["next_cursor"]}, headers=BANK).status_code
+        == 422
+    )
+
+
+@pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
+@pytest.mark.parametrize(
+    "params", [{"cursor": "invalid"}, {"cursor": ""}, {"limit": 0}, {"offset": -1}]
+)
+def test_invalid_case_pagination_is_rejected(client, path, params):
+    headers = BANK if path == "/v1/queue" else seller_headers()
+    assert client.get(path, params=params, headers=headers).status_code == 422
+
+
+def test_queue_cursor_rejects_changed_filter_or_nonzero_offset(client, service):
+    seed_listing_cases(service.repository, count=3)
+    token = client.get("/v1/queue?limit=1", headers=BANK).json()["next_cursor"]
+    for params in ({"cursor": token, "status": "ACCEPTED"}, {"cursor": token, "offset": 1}):
+        assert client.get("/v1/queue", params=params, headers=BANK).status_code == 422

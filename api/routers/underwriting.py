@@ -39,6 +39,7 @@ from services.underwriting.models import (
     VersionInput,
     WorkflowError,
 )
+from services.underwriting.pagination import decode_cursor, encode_cursor
 from services.underwriting.repository import MemoryCaseRepository, PostgresCaseRepository
 from services.underwriting.risk import BaselineRiskModel, LightGbmRiskModel, RiskModel
 from services.underwriting.service import UnderwritingService, utc_now
@@ -106,6 +107,9 @@ def get_service() -> UnderwritingService:
 Service = Annotated[UnderwritingService, Depends(get_service)]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)]
 Identifier = Annotated[str, Path(pattern=r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")]
+PageLimit = Annotated[int, Query(ge=1, le=(1 << 63) - 2)]
+PageOffset = Annotated[int, Query(ge=0, le=(1 << 63) - 1)]
+PageCursor = Annotated[str | None, Query(max_length=2048)]
 
 
 def summary(case: Case) -> dict:
@@ -117,6 +121,19 @@ def summary(case: Case) -> dict:
         "version": case.version,
         "reason": case.reason,
         "created_at": case.created_at,
+    }
+
+
+def case_page(cases: list[Case], limit: int, offset: int, scope: str, cursor: str | None) -> dict:
+    items = cases[:limit]
+    has_more = len(cases) > limit
+    return {
+        "items": [summary(case) for case in items],
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+        "next_cursor": encode_cursor(items[-1], scope) if has_more else None,
+        "next_offset": offset + len(items) if has_more and cursor is None else None,
     }
 
 
@@ -160,25 +177,32 @@ def queue(
     service: Service,
     actor: BankUser,
     status: Status | None = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: PageLimit = 50,
+    offset: PageOffset = 0,
+    cursor: PageCursor = None,
 ) -> dict:
-    return {
-        "items": [summary(c) for c in service.repository.list_queue(status, limit, offset)],
-        "limit": limit,
-        "offset": offset,
-    }
+    if cursor is not None and offset:
+        raise WorkflowError("INVALID_PAGINATION", 422)
+    scope = f"queue:{status or 'open'}"
+    after = decode_cursor(cursor, scope) if cursor is not None else None
+    cases = service.repository.list_queue(status, limit + 1, offset, after)
+    return case_page(cases, limit, offset, scope, cursor)
 
 
 @router.get("/me/cases", response_model=QueueResponse)
 def my_cases(
     service: Service,
     actor: SellerUser,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: PageLimit = 50,
+    offset: PageOffset = 0,
+    cursor: PageCursor = None,
 ) -> dict:
-    cases = service.repository.list_by_seller(actor.subject, limit, offset)
-    return {"items": [summary(c) for c in cases], "limit": limit, "offset": offset}
+    if cursor is not None and offset:
+        raise WorkflowError("INVALID_PAGINATION", 422)
+    scope = f"seller:{actor.subject}"
+    after = decode_cursor(cursor, scope) if cursor is not None else None
+    cases = service.repository.list_by_seller(actor.subject, limit + 1, offset, after)
+    return case_page(cases, limit, offset, scope, cursor)
 
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)

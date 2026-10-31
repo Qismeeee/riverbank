@@ -162,6 +162,9 @@ class QueueResponse(BaseModel):
     items: list[CaseSummary]
     limit: int
     offset: int
+    has_more: bool
+    next_cursor: str | None
+    next_offset: int | None
 
 
 class CaseDetail(CaseSummary):

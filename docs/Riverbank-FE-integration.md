@@ -105,6 +105,27 @@ Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau 
 | Nộp file sao kê thay seller | `POST /v1/cases/{case_id}/statements/upload`, `multipart/form-data` với `expected_version`, `period_start`, `period_end`, `file` |
 | Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source` là `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê chưa nộp) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
 | Chấp nhận, sửa số, từ chối | `POST /v1/cases/{case_id}/decisions` với `Idempotency-Key` |
+
+### Phân trang danh sách hồ sơ
+
+`GET /v1/queue` và `GET /v1/me/cases` mặc định 50 hồ sơ/trang, không còn trần
+100 hồ sơ/trang. `limit` là số nguyên dương; có thể yêu cầu trang lớn hơn khi cần,
+nhưng nên tải từng trang để giao diện phản hồi nhanh. Tổng số hồ sơ duyệt qua không bị giới hạn.
+
+Response giữ `items`, `limit`, `offset`, bổ sung `has_more`, `next_cursor`, `next_offset`.
+Gọi trang đầu với `?limit=50`, sau đó truyền nguyên `next_cursor` vào
+`?limit=50&cursor=...` cho tới khi `has_more=false`. Cursor dùng cặp thời gian tạo/ID,
+có index hỗ trợ và không cần đếm toàn bộ bảng hoặc bỏ qua offset lớn ở từng lần gọi.
+
+Thứ tự giữ nguyên: queue đang xử lý cũ trước, hồ sơ đã quyết định và danh sách seller
+mới trước; ID phân biệt các hồ sơ cùng thời điểm. Đây là danh sách cập nhật trực tiếp,
+không phải snapshot: hồ sơ đổi trạng thái có thể rời/đi vào bộ lọc trong lúc duyệt.
+Đổi seller hoặc bộ lọc `status` thì bắt đầu lại trang đầu, không tái dùng cursor cũ.
+Cursor hỏng/sai phạm vi trả `422 INVALID_CURSOR`; gửi cursor với offset khác 0 trả
+`422 INVALID_PAGINATION`. Auth và scope seller vẫn được kiểm riêng ở backend.
+
+Client cũ vẫn dùng `offset` và `next_offset`; khi hết dữ liệu, hai trường next là null.
+Ở chế độ cursor, `next_offset` luôn null. Không dùng cursor để nhảy tới số trang tùy ý.
 | Bàn giao LOS sau khi ký | `POST /v1/cases/{case_id}/handoff` |
 
 Mọi lệnh ghi gửi `expected_version` bằng `version` mới nhất vừa đọc. Gặp `409 CASE_VERSION_CONFLICT` thì đọc lại hồ sơ rồi cho người dùng bấm lại.
