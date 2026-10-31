@@ -40,9 +40,9 @@ LLM_PURPOSE_LIMITS = {
     "copilot_ask": (20.0, 1),
 }
 RATE_LIMIT_DEFAULTS = {
-    "copilot": "20/60",
-    "case_create": "30/3600",
-    "statement_upload": "20/3600",
+    "copilot": "60/60",
+    "case_create": "60/60",
+    "statement_upload": "60/60",
 }
 STATEMENT_OCR = os.getenv("RIVERBANK_STATEMENT_OCR", "off")
 STATEMENT_OCR_PROVIDER = os.getenv("STATEMENT_OCR_PROVIDER", LLM_PROVIDER)
