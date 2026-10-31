@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +11,8 @@ from policy import RULES
 from routers import underwriting as routes
 from services.guardrail import BLOCK_MESSAGES
 from services.underwriting.evidence import read_evidence
-from services.underwriting.models import DecisionInput, Plan, Statement, WorkflowError
+from services.underwriting.models import Case, DecisionInput, Plan, Statement, WorkflowError
+from services.underwriting.pagination import case_position
 from services.underwriting.repository import MemoryCaseRepository
 from services.underwriting.risk import BaselineRiskModel
 from services.underwriting.service import UnderwritingService
@@ -513,3 +515,206 @@ def check_queue_scopes(service):
 
 def test_queue_lists_decided_cases_newest_first(service):
     check_queue_scopes(service)
+
+
+def seed_listing_cases(
+    repository, count=137, seller="minhchau.shop", status="PENDING_REVIEW", start=1
+):
+    ids = []
+    for number in range(start, start + count):
+        case_id = str(UUID(int=number))
+        case = Case(case_id, seller, seller, plan(seller), NOW.isoformat(), status=status)
+        repository.create(case, f"listing-{number}", f"hash-{number}")
+        ids.append(case_id)
+    return ids
+
+
+def check_listing_metadata(repository):
+    expected = {}
+    ids = {}
+    states = (
+        "PENDING_REVIEW",
+        "ESCALATED",
+        "AWAITING_STATEMENT",
+        "NO_LOAN_NEEDED",
+        "ACCEPTED",
+        "REJECTED",
+    )
+    for index, status in enumerate(states, 1):
+        ids[status] = seed_listing_cases(repository, count=index, start=index * 100, status=status)
+        expected[status] = index
+    seed_listing_cases(repository, count=2, start=1000, seller="thuha.closet")
+    expected["PENDING_REVIEW"] += 2
+    for status, total in [(None, 12), ("DECIDED", 11), *expected.items()]:
+        page = repository.queue_page(status, 2, 1)
+        assert page.total == total
+        assert page.counts_by_status == expected
+        assert len(page.items) == min(2, max(0, total - 1))
+        empty = repository.queue_page(status, 2, total + 10)
+        assert empty.items == [] and empty.total == total
+        assert empty.counts_by_status == expected
+    decided = sorted(ids["ACCEPTED"] + ids["REJECTED"], reverse=True)
+    page = repository.queue_page("DECIDED", 4, 0)
+    assert [case.case_id for case in page.items] == decided[:4]
+    next_page = repository.queue_page("DECIDED", 20, 0, case_position(page.items[-1]))
+    assert [case.case_id for case in next_page.items] == decided[4:]
+    assert next_page.total == 11
+    assert repository.seller_page("minhchau.shop", 2, 0).total == 21
+    assert repository.seller_page("thuha.closet", 2, 0).total == 2
+    assert repository.seller_page("unknown", 2, 0).total == 0
+
+
+def test_memory_listing_metadata_and_decided_union(service):
+    check_listing_metadata(service.repository)
+
+
+@pytest.mark.parametrize("status", [None, "DECIDED", "ACCEPTED", "PENDING_REVIEW"])
+@pytest.mark.parametrize("offset", [0, 2, 20])
+def test_queue_response_counts_and_total(client, service, status, offset):
+    seed_listing_cases(service.repository, count=3, status="ACCEPTED")
+    seed_listing_cases(service.repository, count=2, start=100, status="REJECTED")
+    seed_listing_cases(service.repository, count=4, start=200)
+    params = {"limit": 2, "offset": offset}
+    if status:
+        params["status"] = status
+    response = client.get("/v1/queue", params=params, headers=BANK)
+    assert response.status_code == 200
+    page = response.json()
+    total = {None: 4, "DECIDED": 5, "ACCEPTED": 3, "PENDING_REVIEW": 4}[status]
+    assert page["total"] == total and page["offset"] == offset
+    assert page["has_more"] == (offset + len(page["items"]) < total)
+    assert page["counts_by_status"] == {
+        "PENDING_REVIEW": 4,
+        "ESCALATED": 0,
+        "AWAITING_STATEMENT": 0,
+        "NO_LOAN_NEEDED": 0,
+        "ACCEPTED": 3,
+        "REJECTED": 2,
+    }
+
+
+def test_seller_total_is_scoped_and_excludes_queue_counts(client, service):
+    seed_listing_cases(service.repository, count=3)
+    seed_listing_cases(service.repository, count=7, start=100, seller="thuha.closet")
+    for offset in (0, 10):
+        page = client.get(
+            "/v1/me/cases",
+            params={"limit": 2, "offset": offset, "seller_id": "thuha.closet"},
+            headers=seller_headers(),
+        ).json()
+        assert page["total"] == 3 and "counts_by_status" not in page
+        assert all(item["seller_id"] == "minhchau.shop" for item in page["items"])
+        assert page["has_more"] == (offset == 0)
+
+
+@pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
+def test_empty_listing_returns_zero_total(client, path):
+    headers = BANK if path == "/v1/queue" else seller_headers()
+    page = client.get(path, headers=headers).json()
+    assert page["total"] == 0 and page["items"] == [] and not page["has_more"]
+    if path == "/v1/queue":
+        assert len(page["counts_by_status"]) == 6
+        assert not any(page["counts_by_status"].values())
+
+
+@pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
+@pytest.mark.parametrize("style", ["legacy", "index"])
+def test_case_lists_accept_large_pages_and_legacy_offsets(client, service, path, style):
+    ids = seed_listing_cases(service.repository)
+    headers = BANK if path == "/v1/queue" else seller_headers()
+    if path == "/v1/me/cases":
+        ids.reverse()
+    first_params = {"limit": 125} if style == "legacy" else {"page_size": 125, "page_index": 0}
+    first = client.get(path, params=first_params, headers=headers)
+    assert first.status_code == 200
+    page = first.json()
+    assert [item["case_id"] for item in page["items"]] == ids[:125]
+    assert page["has_more"] and page["next_offset"] == 125
+    assert (page["page_size"], page["page_index"], page["next_page_index"]) == (125, 0, 1)
+    last_params = (
+        {"limit": 125, "offset": 125} if style == "legacy" else {"page_size": 125, "page_index": 1}
+    )
+    last = client.get(path, params=last_params, headers=headers).json()
+    assert [item["case_id"] for item in last["items"]] == ids[125:]
+    assert not last["has_more"] and last["next_cursor"] is None and last["next_offset"] is None
+    assert last["page_index"] == 1 and last["next_page_index"] is None
+
+
+def test_queue_cursor_visits_every_case_with_equal_timestamps(client, service):
+    ids = seed_listing_cases(service.repository)
+    params, seen = {}, []
+    for _ in range(5):
+        response = client.get("/v1/queue", params=params, headers=BANK)
+        assert response.status_code == 200
+        page = response.json()
+        assert page["limit"] == 50
+        seen.extend(item["case_id"] for item in page["items"])
+        if not page["has_more"]:
+            break
+        params = {"cursor": page["next_cursor"]}
+    else:
+        pytest.fail("Pagination did not terminate")
+    assert seen == ids
+
+
+def test_seller_cursor_ignores_new_front_rows_and_rejects_other_scopes(client, service):
+    ids = seed_listing_cases(service.repository, count=5)
+    seed_listing_cases(service.repository, count=2, seller="thuha.closet", start=100)
+    first = client.get("/v1/me/cases?limit=2", headers=seller_headers()).json()
+    assert [item["case_id"] for item in first["items"]] == ids[-1:-3:-1]
+    token = first["next_cursor"]
+    seed_listing_cases(service.repository, count=1, start=1000)
+    seen = [item["case_id"] for item in first["items"]]
+    while token:
+        page = client.get(
+            "/v1/me/cases", params={"limit": 2, "cursor": token}, headers=seller_headers()
+        ).json()
+        assert page["next_offset"] is None
+        assert page["page_index"] is None and page["next_page_index"] is None
+        seen.extend(item["case_id"] for item in page["items"])
+        assert len(seen) <= len(ids)
+        token = page["next_cursor"]
+    assert seen == list(reversed(ids))
+    assert (
+        client.get(
+            "/v1/me/cases",
+            params={"cursor": first["next_cursor"]},
+            headers=seller_headers("thuha.closet"),
+        ).status_code
+        == 422
+    )
+    assert (
+        client.get("/v1/queue", params={"cursor": first["next_cursor"]}, headers=BANK).status_code
+        == 422
+    )
+
+
+@pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"cursor": "invalid"},
+        {"cursor": ""},
+        {"limit": 0},
+        {"offset": -1},
+        {"page_size": 0},
+        {"page_index": -1},
+        {"page_size": 50, "limit": 25},
+        {"page_index": 1, "offset": 1},
+        {"page_index": (1 << 63) - 1},
+    ],
+)
+def test_invalid_case_pagination_is_rejected(client, path, params):
+    headers = BANK if path == "/v1/queue" else seller_headers()
+    assert client.get(path, params=params, headers=headers).status_code == 422
+
+
+def test_queue_cursor_rejects_changed_filter_or_nonzero_offset(client, service):
+    seed_listing_cases(service.repository, count=3)
+    token = client.get("/v1/queue?limit=1", headers=BANK).json()["next_cursor"]
+    for params in (
+        {"cursor": token, "status": "ACCEPTED"},
+        {"cursor": token, "offset": 1},
+        {"cursor": token, "page_index": 0},
+    ):
+        assert client.get("/v1/queue", params=params, headers=BANK).status_code == 422

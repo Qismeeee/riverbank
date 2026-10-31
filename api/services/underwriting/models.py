@@ -160,8 +160,19 @@ class SellerView(CaseSummary):
 
 class QueueResponse(BaseModel):
     items: list[CaseSummary]
+    total: int
     limit: int
     offset: int
+    page_size: int
+    page_index: int | None
+    next_page_index: int | None
+    has_more: bool
+    next_cursor: str | None
+    next_offset: int | None
+
+
+class QueueStatusResponse(QueueResponse):
+    counts_by_status: dict[str, int]
 
 
 class CaseDetail(CaseSummary):

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from threading import RLock
 from typing import Iterator
@@ -9,6 +9,7 @@ from typing import Iterator
 from services.traffic import in_created_window
 
 from .models import Case, WorkflowError
+from .pagination import CasePosition, case_position, past_cursor
 
 
 def case_header(case: Case) -> dict:
@@ -33,10 +34,29 @@ DECIDED_STATES = ("ACCEPTED", "REJECTED")
 def queue_scope(status: str | None) -> tuple[list[str], bool]:
     if status is None:
         return list(OPEN_STATES), False
+    if status == "DECIDED":
+        return list(DECIDED_STATES), True
     return [status], status in DECIDED_STATES
 
 
+@dataclass
+class CaseListing:
+    items: list[Case]
+    total: int
+    counts_by_status: dict[str, int]
+
+
 class CaseRepository(ABC):
+    @abstractmethod
+    def queue_page(
+        self, status: str | None, limit: int, offset: int, after: CasePosition | None = None
+    ) -> CaseListing: ...
+
+    @abstractmethod
+    def seller_page(
+        self, seller_id: str, limit: int, offset: int, after: CasePosition | None = None
+    ) -> CaseListing: ...
+
     @abstractmethod
     def create(self, case: Case, key: str, request_hash: str) -> Case: ...
 
@@ -47,10 +67,14 @@ class CaseRepository(ABC):
     def get(self, case_id: str) -> Case: ...
 
     @abstractmethod
-    def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]: ...
+    def list_queue(
+        self, status: str | None, limit: int, offset: int, after: CasePosition | None = None
+    ) -> list[Case]: ...
 
     @abstractmethod
-    def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]: ...
+    def list_by_seller(
+        self, seller_id: str, limit: int, offset: int, after: CasePosition | None = None
+    ) -> list[Case]: ...
 
     @abstractmethod
     def count_created(self, start: datetime | None, end: datetime | None) -> int: ...
@@ -72,6 +96,27 @@ class CaseRepository(ABC):
 
 
 class MemoryCaseRepository(CaseRepository):
+    def queue_page(
+        self, status: str | None, limit: int, offset: int, after: CasePosition | None = None
+    ) -> CaseListing:
+        with self._lock:
+            counts = dict.fromkeys(OPEN_STATES + DECIDED_STATES, 0)
+            for case in self._cases.values():
+                counts[case.status] = counts.get(case.status, 0) + 1
+            states, _ = queue_scope(status)
+            return CaseListing(
+                self.list_queue(status, limit, offset, after),
+                sum(counts.get(state, 0) for state in states),
+                {state: counts[state] for state in OPEN_STATES + DECIDED_STATES},
+            )
+
+    def seller_page(
+        self, seller_id: str, limit: int, offset: int, after: CasePosition | None = None
+    ) -> CaseListing:
+        with self._lock:
+            total = sum(c.seller_id == seller_id for c in self._cases.values())
+            return CaseListing(self.list_by_seller(seller_id, limit, offset, after), total, {})
+
     def __init__(self) -> None:
         self._cases: dict[str, Case] = {}
         self._requests: dict[tuple[str, str], tuple[str, str]] = {}
@@ -112,21 +157,33 @@ class MemoryCaseRepository(CaseRepository):
                 raise WorkflowError("CASE_NOT_FOUND", 404)
             return deepcopy(self._cases[case_id])
 
-    def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]:
+    def list_queue(
+        self, status: str | None, limit: int, offset: int, after: CasePosition | None = None
+    ) -> list[Case]:
         states, newest_first = queue_scope(status)
         with self._lock:
             cases = sorted(
-                (c for c in self._cases.values() if c.status in states),
-                key=lambda c: (c.created_at, c.case_id),
+                (
+                    c
+                    for c in self._cases.values()
+                    if c.status in states and past_cursor(c, after, newest_first)
+                ),
+                key=case_position,
                 reverse=newest_first,
             )
             return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
 
-    def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
+    def list_by_seller(
+        self, seller_id: str, limit: int, offset: int, after: CasePosition | None = None
+    ) -> list[Case]:
         with self._lock:
             cases = sorted(
-                (c for c in self._cases.values() if c.seller_id == seller_id),
-                key=lambda c: (c.created_at, c.case_id),
+                (
+                    c
+                    for c in self._cases.values()
+                    if c.seller_id == seller_id and past_cursor(c, after, True)
+                ),
+                key=case_position,
                 reverse=True,
             )
             return [Case(**case_header(c)) for c in cases[offset : offset + limit]]
@@ -180,6 +237,54 @@ class MemoryCaseRepository(CaseRepository):
 
 
 class PostgresCaseRepository(CaseRepository):
+    def _listing(
+        self,
+        scope: str,
+        scope_params: list,
+        states: list[str] | None,
+        newest_first: bool,
+        limit: int,
+        offset: int,
+        after: CasePosition | None,
+    ) -> CaseListing:
+        order = "created_at desc,case_id desc" if newest_first else "created_at,case_id"
+        operator = "<" if newest_first else ">"
+        filters = " and status = any(%s)" if states is not None else ""
+        boundary = f" and (created_at,case_id) {operator} (%s,%s)" if after else ""
+        params = [*scope_params, *([states] if states is not None else []), *(after or ())]
+        with self._connect() as conn:
+            conn.execute("set transaction isolation level repeatable read read only")
+            counts = dict.fromkeys(OPEN_STATES + DECIDED_STATES, 0)
+            counts.update(
+                conn.execute(
+                    f"select status,count(*) from cases where {scope} group by status", scope_params
+                ).fetchall()
+            )
+            total = (
+                sum(counts.get(state, 0) for state in states) if states else sum(counts.values())
+            )
+            rows = conn.execute(
+                f"select header from cases where {scope}{filters}{boundary} "
+                f"order by {order} limit %s offset %s",
+                [*params, limit, offset],
+            ).fetchall()
+            return CaseListing(
+                [Case(**row[0]) for row in rows],
+                total,
+                {state: counts[state] for state in OPEN_STATES + DECIDED_STATES},
+            )
+
+    def queue_page(
+        self, status: str | None, limit: int, offset: int, after: CasePosition | None = None
+    ) -> CaseListing:
+        states, newest_first = queue_scope(status)
+        return self._listing("true", [], states, newest_first, limit, offset, after)
+
+    def seller_page(
+        self, seller_id: str, limit: int, offset: int, after: CasePosition | None = None
+    ) -> CaseListing:
+        return self._listing("seller_id=%s", [seller_id], None, True, limit, offset, after)
+
     def __init__(self, database_url: str):
         self.database_url = database_url
 
@@ -312,23 +417,32 @@ class PostgresCaseRepository(CaseRepository):
         with self._connect() as conn:
             return self._load(conn, case_id)
 
-    def list_queue(self, status: str | None, limit: int, offset: int) -> list[Case]:
+    def list_queue(
+        self, status: str | None, limit: int, offset: int, after: CasePosition | None = None
+    ) -> list[Case]:
         states, newest_first = queue_scope(status)
         order = "created_at desc,case_id desc" if newest_first else "created_at,case_id"
+        operator = "<" if newest_first else ">"
+        boundary = f"and (created_at,case_id) {operator} (%s,%s) " if after else ""
+        params = [states, *(after or ()), limit, offset]
         with self._connect() as conn:
             rows = conn.execute(
                 f"select header from cases where status = any(%s) "
-                f"order by {order} limit %s offset %s",
-                (states, limit, offset),
+                f"{boundary}order by {order} limit %s offset %s",
+                params,
             ).fetchall()
             return [Case(**row[0]) for row in rows]
 
-    def list_by_seller(self, seller_id: str, limit: int, offset: int) -> list[Case]:
+    def list_by_seller(
+        self, seller_id: str, limit: int, offset: int, after: CasePosition | None = None
+    ) -> list[Case]:
+        boundary = "and (created_at,case_id) < (%s,%s) " if after else ""
+        params = [seller_id, *(after or ()), limit, offset]
         with self._connect() as conn:
             rows = conn.execute(
                 "select header from cases where seller_id=%s "
-                "order by created_at desc,case_id desc limit %s offset %s",
-                (seller_id, limit, offset),
+                f"{boundary}order by created_at desc,case_id desc limit %s offset %s",
+                params,
             ).fetchall()
             return [Case(**row[0]) for row in rows]
 

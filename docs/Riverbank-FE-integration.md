@@ -105,6 +105,49 @@ Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau 
 | Nộp file sao kê thay seller | `POST /v1/cases/{case_id}/statements/upload`, `multipart/form-data` với `expected_version`, `period_start`, `period_end`, `file` |
 | Tra CIC thủ công khi Jev chặn (`runs[-1].cic.source` là `not_queried`, hoặc `deferred_until_statement` khi hồ sơ cần sao kê chưa nộp) | `POST /v1/cases/{case_id}/cic-inquiry` với `expected_version`, `reason` |
 | Chấp nhận, sửa số, từ chối | `POST /v1/cases/{case_id}/decisions` với `Idempotency-Key` |
+
+### Phân trang danh sách hồ sơ
+
+`GET /v1/queue` và `GET /v1/me/cases` mặc định 50 hồ sơ/trang, không còn trần
+100 hồ sơ/trang. `limit` là số nguyên dương; có thể yêu cầu trang lớn hơn khi cần,
+nhưng nên tải từng trang để giao diện phản hồi nhanh. Tổng số hồ sơ duyệt qua không bị giới hạn.
+
+FE dạng bảng dùng `?page_size=50&page_index=0`, trang tiếp theo là `page_index=1`.
+`page_index` bắt đầu từ 0; response có `page_size`, `page_index`, `next_page_index`
+và `has_more`. Cả hai API trả `total`: số hồ sơ trong phạm vi quyền và bộ lọc,
+trước khi áp dụng phân trang hoặc cursor. Không có trường `total_pages`.
+
+Queue hỗ trợ `status=DECIDED` để lấy hợp ACCEPTED/REJECTED, sắp xếp toàn bộ tập
+theo thời gian/ID giảm dần trước khi phân trang. Đây chỉ là bộ lọc, không phải trạng thái hồ sơ.
+Queue trả thêm `counts_by_status`, đủ sáu khóa PENDING_REVIEW, ESCALATED,
+AWAITING_STATEMENT, NO_LOAN_NEEDED, ACCEPTED, REJECTED (không có thì 0).
+Các count không bị bộ lọc status hoặc phân trang giới hạn. `total` của queue mặc định
+là tổng bốn trạng thái mở; với DECIDED là tổng ACCEPTED và REJECTED.
+`/me/cases` chỉ đếm hồ sơ của seller trong token và không trả `counts_by_status`.
+Items và số đếm trong mỗi response cùng snapshot: lock ở Memory, transaction
+REPEATABLE READ READ ONLY ở PostgreSQL. Snapshot không được giữ giữa các request.
+Offset vượt tổng trả danh sách rỗng, giữ nguyên offset, total và counts.
+Với limit/offset, `has_more = offset + len(items) < total`; với cursor, `has_more`
+cho biết còn hồ sơ sau vị trí cursor. FE hiển thị 25 hàng nên yêu cầu đúng 25,
+không yêu cầu 26 rồi bỏ hàng cuối khi dùng metadata của backend mới.
+
+Response vẫn giữ `items`, `limit`, `offset` và có `next_cursor`, `next_offset`.
+Danh sách lớn nên gọi trang đầu với `?page_size=50`, sau đó truyền nguyên `next_cursor` vào
+`?page_size=50&cursor=...` cho tới khi `has_more=false`. Cursor dùng cặp thời gian tạo/ID,
+có index hỗ trợ để tránh bỏ qua offset lớn; mỗi request vẫn đếm để trả metadata chính xác.
+
+Thứ tự giữ nguyên: queue đang xử lý cũ trước, hồ sơ đã quyết định và danh sách seller
+mới trước; ID phân biệt các hồ sơ cùng thời điểm. Đây là danh sách cập nhật trực tiếp,
+không phải snapshot: hồ sơ đổi trạng thái có thể rời/đi vào bộ lọc trong lúc duyệt.
+Đổi seller hoặc bộ lọc `status` thì bắt đầu lại trang đầu, không tái dùng cursor cũ.
+Cursor hỏng/sai phạm vi trả `422 INVALID_CURSOR`; gửi cursor với offset khác 0 trả
+`422 INVALID_PAGINATION`. Không gửi `page_index` cùng cursor hoặc offset; không gửi
+`page_size` và `limit` khác nhau. Auth và scope seller vẫn được kiểm riêng ở backend.
+
+Client cũ vẫn dùng `offset` và `next_offset`; khi hết dữ liệu, hai trường next là null.
+Ở chế độ cursor, `page_index`, `next_page_index`, `next_offset` luôn null. Với offset
+không trùng đầu trang, `page_index`/`next_page_index` cũng null. Không dùng cursor để
+nhảy tới số trang tùy ý.
 | Bàn giao LOS sau khi ký | `POST /v1/cases/{case_id}/handoff` |
 
 Mọi lệnh ghi gửi `expected_version` bằng `version` mới nhất vừa đọc. Gặp `409 CASE_VERSION_CONFLICT` thì đọc lại hồ sơ rồi cho người dùng bấm lại.

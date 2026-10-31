@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, Header, Path, Query, Response, UploadFile
 
@@ -32,6 +32,7 @@ from services.underwriting.models import (
     HandoffResponse,
     Plan,
     QueueResponse,
+    QueueStatusResponse,
     SellerView,
     Statement,
     StatementUpload,
@@ -39,6 +40,7 @@ from services.underwriting.models import (
     VersionInput,
     WorkflowError,
 )
+from services.underwriting.pagination import decode_cursor, encode_cursor
 from services.underwriting.repository import MemoryCaseRepository, PostgresCaseRepository
 from services.underwriting.risk import BaselineRiskModel, LightGbmRiskModel, RiskModel
 from services.underwriting.service import UnderwritingService, utc_now
@@ -106,6 +108,9 @@ def get_service() -> UnderwritingService:
 Service = Annotated[UnderwritingService, Depends(get_service)]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)]
 Identifier = Annotated[str, Path(pattern=r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")]
+PageLimit = Annotated[int | None, Query(ge=1, le=(1 << 63) - 2)]
+PageOffset = Annotated[int | None, Query(ge=0, le=(1 << 63) - 1)]
+PageCursor = Annotated[str | None, Query(max_length=2048)]
 
 
 def summary(case: Case) -> dict:
@@ -117,6 +122,43 @@ def summary(case: Case) -> dict:
         "version": case.version,
         "reason": case.reason,
         "created_at": case.created_at,
+    }
+
+
+def page_bounds(
+    limit: int | None,
+    page_size: int | None,
+    offset: int | None,
+    page_index: int | None,
+    cursor: str | None,
+) -> tuple[int, int]:
+    if limit is not None and page_size is not None and limit != page_size:
+        raise WorkflowError("INVALID_PAGINATION", 422)
+    size = page_size if page_size is not None else limit if limit is not None else 50
+    if page_index is not None:
+        if offset is not None or cursor is not None:
+            raise WorkflowError("INVALID_PAGINATION", 422)
+        offset = page_index * size
+    start = offset or 0
+    if start > (1 << 63) - 1 or (cursor is not None and start):
+        raise WorkflowError("INVALID_PAGINATION", 422)
+    return size, start
+
+
+def case_page(cases: list[Case], limit: int, offset: int, scope: str, cursor: str | None) -> dict:
+    items = cases[:limit]
+    has_more = len(cases) > limit
+    page_index = offset // limit if cursor is None and offset % limit == 0 else None
+    return {
+        "items": [summary(case) for case in items],
+        "limit": limit,
+        "offset": offset,
+        "page_size": limit,
+        "page_index": page_index,
+        "next_page_index": page_index + 1 if has_more and page_index is not None else None,
+        "has_more": has_more,
+        "next_cursor": encode_cursor(items[-1], scope) if has_more else None,
+        "next_offset": offset + len(items) if has_more and cursor is None else None,
     }
 
 
@@ -155,18 +197,25 @@ def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict
     }
 
 
-@router.get("/queue", response_model=QueueResponse)
+@router.get("/queue", response_model=QueueStatusResponse)
 def queue(
     service: Service,
     actor: BankUser,
-    status: Status | None = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    status: Status | Literal["DECIDED"] | None = None,
+    limit: PageLimit = None,
+    offset: PageOffset = None,
+    cursor: PageCursor = None,
+    page_size: PageLimit = None,
+    page_index: PageOffset = None,
 ) -> dict:
+    limit, offset = page_bounds(limit, page_size, offset, page_index, cursor)
+    scope = f"queue:{status or 'open'}"
+    after = decode_cursor(cursor, scope) if cursor is not None else None
+    listing = service.repository.queue_page(status, limit + 1, offset, after)
     return {
-        "items": [summary(c) for c in service.repository.list_queue(status, limit, offset)],
-        "limit": limit,
-        "offset": offset,
+        **case_page(listing.items, limit, offset, scope, cursor),
+        "total": listing.total,
+        "counts_by_status": listing.counts_by_status,
     }
 
 
@@ -174,11 +223,17 @@ def queue(
 def my_cases(
     service: Service,
     actor: SellerUser,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: PageLimit = None,
+    offset: PageOffset = None,
+    cursor: PageCursor = None,
+    page_size: PageLimit = None,
+    page_index: PageOffset = None,
 ) -> dict:
-    cases = service.repository.list_by_seller(actor.subject, limit, offset)
-    return {"items": [summary(c) for c in cases], "limit": limit, "offset": offset}
+    limit, offset = page_bounds(limit, page_size, offset, page_index, cursor)
+    scope = f"seller:{actor.subject}"
+    after = decode_cursor(cursor, scope) if cursor is not None else None
+    listing = service.repository.seller_page(actor.subject, limit + 1, offset, after)
+    return {**case_page(listing.items, limit, offset, scope, cursor), "total": listing.total}
 
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)
