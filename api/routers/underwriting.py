@@ -107,8 +107,8 @@ def get_service() -> UnderwritingService:
 Service = Annotated[UnderwritingService, Depends(get_service)]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)]
 Identifier = Annotated[str, Path(pattern=r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")]
-PageLimit = Annotated[int, Query(ge=1, le=(1 << 63) - 2)]
-PageOffset = Annotated[int, Query(ge=0, le=(1 << 63) - 1)]
+PageLimit = Annotated[int | None, Query(ge=1, le=(1 << 63) - 2)]
+PageOffset = Annotated[int | None, Query(ge=0, le=(1 << 63) - 1)]
 PageCursor = Annotated[str | None, Query(max_length=2048)]
 
 
@@ -124,13 +124,37 @@ def summary(case: Case) -> dict:
     }
 
 
+def page_bounds(
+    limit: int | None,
+    page_size: int | None,
+    offset: int | None,
+    page_index: int | None,
+    cursor: str | None,
+) -> tuple[int, int]:
+    if limit is not None and page_size is not None and limit != page_size:
+        raise WorkflowError("INVALID_PAGINATION", 422)
+    size = page_size if page_size is not None else limit if limit is not None else 50
+    if page_index is not None:
+        if offset is not None or cursor is not None:
+            raise WorkflowError("INVALID_PAGINATION", 422)
+        offset = page_index * size
+    start = offset or 0
+    if start > (1 << 63) - 1 or (cursor is not None and start):
+        raise WorkflowError("INVALID_PAGINATION", 422)
+    return size, start
+
+
 def case_page(cases: list[Case], limit: int, offset: int, scope: str, cursor: str | None) -> dict:
     items = cases[:limit]
     has_more = len(cases) > limit
+    page_index = offset // limit if cursor is None and offset % limit == 0 else None
     return {
         "items": [summary(case) for case in items],
         "limit": limit,
         "offset": offset,
+        "page_size": limit,
+        "page_index": page_index,
+        "next_page_index": page_index + 1 if has_more and page_index is not None else None,
         "has_more": has_more,
         "next_cursor": encode_cursor(items[-1], scope) if has_more else None,
         "next_offset": offset + len(items) if has_more and cursor is None else None,
@@ -177,12 +201,13 @@ def queue(
     service: Service,
     actor: BankUser,
     status: Status | None = None,
-    limit: PageLimit = 50,
-    offset: PageOffset = 0,
+    limit: PageLimit = None,
+    offset: PageOffset = None,
     cursor: PageCursor = None,
+    page_size: PageLimit = None,
+    page_index: PageOffset = None,
 ) -> dict:
-    if cursor is not None and offset:
-        raise WorkflowError("INVALID_PAGINATION", 422)
+    limit, offset = page_bounds(limit, page_size, offset, page_index, cursor)
     scope = f"queue:{status or 'open'}"
     after = decode_cursor(cursor, scope) if cursor is not None else None
     cases = service.repository.list_queue(status, limit + 1, offset, after)
@@ -193,12 +218,13 @@ def queue(
 def my_cases(
     service: Service,
     actor: SellerUser,
-    limit: PageLimit = 50,
-    offset: PageOffset = 0,
+    limit: PageLimit = None,
+    offset: PageOffset = None,
     cursor: PageCursor = None,
+    page_size: PageLimit = None,
+    page_index: PageOffset = None,
 ) -> dict:
-    if cursor is not None and offset:
-        raise WorkflowError("INVALID_PAGINATION", 422)
+    limit, offset = page_bounds(limit, page_size, offset, page_index, cursor)
     scope = f"seller:{actor.subject}"
     after = decode_cursor(cursor, scope) if cursor is not None else None
     cases = service.repository.list_by_seller(actor.subject, limit + 1, offset, after)

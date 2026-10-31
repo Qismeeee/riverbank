@@ -529,19 +529,26 @@ def seed_listing_cases(
 
 
 @pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
-def test_case_lists_accept_large_pages_and_legacy_offsets(client, service, path):
+@pytest.mark.parametrize("style", ["legacy", "index"])
+def test_case_lists_accept_large_pages_and_legacy_offsets(client, service, path, style):
     ids = seed_listing_cases(service.repository)
     headers = BANK if path == "/v1/queue" else seller_headers()
     if path == "/v1/me/cases":
         ids.reverse()
-    first = client.get(path, params={"limit": 125}, headers=headers)
+    first_params = {"limit": 125} if style == "legacy" else {"page_size": 125, "page_index": 0}
+    first = client.get(path, params=first_params, headers=headers)
     assert first.status_code == 200
     page = first.json()
     assert [item["case_id"] for item in page["items"]] == ids[:125]
     assert page["has_more"] and page["next_offset"] == 125
-    last = client.get(path, params={"limit": 125, "offset": 125}, headers=headers).json()
+    assert (page["page_size"], page["page_index"], page["next_page_index"]) == (125, 0, 1)
+    last_params = (
+        {"limit": 125, "offset": 125} if style == "legacy" else {"page_size": 125, "page_index": 1}
+    )
+    last = client.get(path, params=last_params, headers=headers).json()
     assert [item["case_id"] for item in last["items"]] == ids[125:]
     assert not last["has_more"] and last["next_cursor"] is None and last["next_offset"] is None
+    assert last["page_index"] == 1 and last["next_page_index"] is None
 
 
 def test_queue_cursor_visits_every_case_with_equal_timestamps(client, service):
@@ -574,6 +581,7 @@ def test_seller_cursor_ignores_new_front_rows_and_rejects_other_scopes(client, s
             "/v1/me/cases", params={"limit": 2, "cursor": token}, headers=seller_headers()
         ).json()
         assert page["next_offset"] is None
+        assert page["page_index"] is None and page["next_page_index"] is None
         seen.extend(item["case_id"] for item in page["items"])
         assert len(seen) <= len(ids)
         token = page["next_cursor"]
@@ -594,7 +602,18 @@ def test_seller_cursor_ignores_new_front_rows_and_rejects_other_scopes(client, s
 
 @pytest.mark.parametrize("path", ["/v1/queue", "/v1/me/cases"])
 @pytest.mark.parametrize(
-    "params", [{"cursor": "invalid"}, {"cursor": ""}, {"limit": 0}, {"offset": -1}]
+    "params",
+    [
+        {"cursor": "invalid"},
+        {"cursor": ""},
+        {"limit": 0},
+        {"offset": -1},
+        {"page_size": 0},
+        {"page_index": -1},
+        {"page_size": 50, "limit": 25},
+        {"page_index": 1, "offset": 1},
+        {"page_index": (1 << 63) - 1},
+    ],
 )
 def test_invalid_case_pagination_is_rejected(client, path, params):
     headers = BANK if path == "/v1/queue" else seller_headers()
@@ -604,5 +623,9 @@ def test_invalid_case_pagination_is_rejected(client, path, params):
 def test_queue_cursor_rejects_changed_filter_or_nonzero_offset(client, service):
     seed_listing_cases(service.repository, count=3)
     token = client.get("/v1/queue?limit=1", headers=BANK).json()["next_cursor"]
-    for params in ({"cursor": token, "status": "ACCEPTED"}, {"cursor": token, "offset": 1}):
+    for params in (
+        {"cursor": token, "status": "ACCEPTED"},
+        {"cursor": token, "offset": 1},
+        {"cursor": token, "page_index": 0},
+    ):
         assert client.get("/v1/queue", params=params, headers=BANK).status_code == 422

@@ -112,9 +112,13 @@ Phản hồi `201` có `case_id`, `status`, `reason`, `version`. Mở lại sau 
 100 hồ sơ/trang. `limit` là số nguyên dương; có thể yêu cầu trang lớn hơn khi cần,
 nhưng nên tải từng trang để giao diện phản hồi nhanh. Tổng số hồ sơ duyệt qua không bị giới hạn.
 
-Response giữ `items`, `limit`, `offset`, bổ sung `has_more`, `next_cursor`, `next_offset`.
-Gọi trang đầu với `?limit=50`, sau đó truyền nguyên `next_cursor` vào
-`?limit=50&cursor=...` cho tới khi `has_more=false`. Cursor dùng cặp thời gian tạo/ID,
+FE dạng bảng dùng `?page_size=50&page_index=0`, trang tiếp theo là `page_index=1`.
+`page_index` bắt đầu từ 0; response có `page_size`, `page_index`, `next_page_index`
+và `has_more`. Không có `total`/`total_pages` vì API không chạy COUNT toàn bộ ở mỗi trang.
+
+Response vẫn giữ `items`, `limit`, `offset` và có `next_cursor`, `next_offset`.
+Danh sách lớn nên gọi trang đầu với `?page_size=50`, sau đó truyền nguyên `next_cursor` vào
+`?page_size=50&cursor=...` cho tới khi `has_more=false`. Cursor dùng cặp thời gian tạo/ID,
 có index hỗ trợ và không cần đếm toàn bộ bảng hoặc bỏ qua offset lớn ở từng lần gọi.
 
 Thứ tự giữ nguyên: queue đang xử lý cũ trước, hồ sơ đã quyết định và danh sách seller
@@ -122,10 +126,13 @@ mới trước; ID phân biệt các hồ sơ cùng thời điểm. Đây là da
 không phải snapshot: hồ sơ đổi trạng thái có thể rời/đi vào bộ lọc trong lúc duyệt.
 Đổi seller hoặc bộ lọc `status` thì bắt đầu lại trang đầu, không tái dùng cursor cũ.
 Cursor hỏng/sai phạm vi trả `422 INVALID_CURSOR`; gửi cursor với offset khác 0 trả
-`422 INVALID_PAGINATION`. Auth và scope seller vẫn được kiểm riêng ở backend.
+`422 INVALID_PAGINATION`. Không gửi `page_index` cùng cursor hoặc offset; không gửi
+`page_size` và `limit` khác nhau. Auth và scope seller vẫn được kiểm riêng ở backend.
 
 Client cũ vẫn dùng `offset` và `next_offset`; khi hết dữ liệu, hai trường next là null.
-Ở chế độ cursor, `next_offset` luôn null. Không dùng cursor để nhảy tới số trang tùy ý.
+Ở chế độ cursor, `page_index`, `next_page_index`, `next_offset` luôn null. Với offset
+không trùng đầu trang, `page_index`/`next_page_index` cũng null. Không dùng cursor để
+nhảy tới số trang tùy ý.
 | Bàn giao LOS sau khi ký | `POST /v1/cases/{case_id}/handoff` |
 
 Mọi lệnh ghi gửi `expected_version` bằng `version` mới nhất vừa đọc. Gặp `409 CASE_VERSION_CONFLICT` thì đọc lại hồ sơ rồi cho người dùng bấm lại.

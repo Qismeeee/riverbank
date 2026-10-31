@@ -162,6 +162,9 @@ class QueueResponse(BaseModel):
     items: list[CaseSummary]
     limit: int
     offset: int
+    page_size: int
+    page_index: int | None
+    next_page_index: int | None
     has_more: bool
     next_cursor: str | None
     next_offset: int | None
