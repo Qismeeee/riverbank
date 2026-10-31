@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, Header, Path, Query, Response, UploadFile
 
@@ -32,6 +32,7 @@ from services.underwriting.models import (
     HandoffResponse,
     Plan,
     QueueResponse,
+    QueueStatusResponse,
     SellerView,
     Statement,
     StatementUpload,
@@ -196,11 +197,11 @@ def seller_view(case_id: Identifier, actor: Principal, service: Service) -> dict
     }
 
 
-@router.get("/queue", response_model=QueueResponse)
+@router.get("/queue", response_model=QueueStatusResponse)
 def queue(
     service: Service,
     actor: BankUser,
-    status: Status | None = None,
+    status: Status | Literal["DECIDED"] | None = None,
     limit: PageLimit = None,
     offset: PageOffset = None,
     cursor: PageCursor = None,
@@ -210,8 +211,12 @@ def queue(
     limit, offset = page_bounds(limit, page_size, offset, page_index, cursor)
     scope = f"queue:{status or 'open'}"
     after = decode_cursor(cursor, scope) if cursor is not None else None
-    cases = service.repository.list_queue(status, limit + 1, offset, after)
-    return case_page(cases, limit, offset, scope, cursor)
+    listing = service.repository.queue_page(status, limit + 1, offset, after)
+    return {
+        **case_page(listing.items, limit, offset, scope, cursor),
+        "total": listing.total,
+        "counts_by_status": listing.counts_by_status,
+    }
 
 
 @router.get("/me/cases", response_model=QueueResponse)
@@ -227,8 +232,8 @@ def my_cases(
     limit, offset = page_bounds(limit, page_size, offset, page_index, cursor)
     scope = f"seller:{actor.subject}"
     after = decode_cursor(cursor, scope) if cursor is not None else None
-    cases = service.repository.list_by_seller(actor.subject, limit + 1, offset, after)
-    return case_page(cases, limit, offset, scope, cursor)
+    listing = service.repository.seller_page(actor.subject, limit + 1, offset, after)
+    return {**case_page(listing.items, limit, offset, scope, cursor), "total": listing.total}
 
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)

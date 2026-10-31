@@ -114,12 +114,27 @@ nhưng nên tải từng trang để giao diện phản hồi nhanh. Tổng số
 
 FE dạng bảng dùng `?page_size=50&page_index=0`, trang tiếp theo là `page_index=1`.
 `page_index` bắt đầu từ 0; response có `page_size`, `page_index`, `next_page_index`
-và `has_more`. Không có `total`/`total_pages` vì API không chạy COUNT toàn bộ ở mỗi trang.
+và `has_more`. Cả hai API trả `total`: số hồ sơ trong phạm vi quyền và bộ lọc,
+trước khi áp dụng phân trang hoặc cursor. Không có trường `total_pages`.
+
+Queue hỗ trợ `status=DECIDED` để lấy hợp ACCEPTED/REJECTED, sắp xếp toàn bộ tập
+theo thời gian/ID giảm dần trước khi phân trang. Đây chỉ là bộ lọc, không phải trạng thái hồ sơ.
+Queue trả thêm `counts_by_status`, đủ sáu khóa PENDING_REVIEW, ESCALATED,
+AWAITING_STATEMENT, NO_LOAN_NEEDED, ACCEPTED, REJECTED (không có thì 0).
+Các count không bị bộ lọc status hoặc phân trang giới hạn. `total` của queue mặc định
+là tổng bốn trạng thái mở; với DECIDED là tổng ACCEPTED và REJECTED.
+`/me/cases` chỉ đếm hồ sơ của seller trong token và không trả `counts_by_status`.
+Items và số đếm trong mỗi response cùng snapshot: lock ở Memory, transaction
+REPEATABLE READ READ ONLY ở PostgreSQL. Snapshot không được giữ giữa các request.
+Offset vượt tổng trả danh sách rỗng, giữ nguyên offset, total và counts.
+Với limit/offset, `has_more = offset + len(items) < total`; với cursor, `has_more`
+cho biết còn hồ sơ sau vị trí cursor. FE hiển thị 25 hàng nên yêu cầu đúng 25,
+không yêu cầu 26 rồi bỏ hàng cuối khi dùng metadata của backend mới.
 
 Response vẫn giữ `items`, `limit`, `offset` và có `next_cursor`, `next_offset`.
 Danh sách lớn nên gọi trang đầu với `?page_size=50`, sau đó truyền nguyên `next_cursor` vào
 `?page_size=50&cursor=...` cho tới khi `has_more=false`. Cursor dùng cặp thời gian tạo/ID,
-có index hỗ trợ và không cần đếm toàn bộ bảng hoặc bỏ qua offset lớn ở từng lần gọi.
+có index hỗ trợ để tránh bỏ qua offset lớn; mỗi request vẫn đếm để trả metadata chính xác.
 
 Thứ tự giữ nguyên: queue đang xử lý cũ trước, hồ sơ đã quyết định và danh sách seller
 mới trước; ID phân biệt các hồ sơ cùng thời điểm. Đây là danh sách cập nhật trực tiếp,

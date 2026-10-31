@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from uuid import uuid4
 
 import psycopg
@@ -22,7 +23,13 @@ from services.underwriting.sources import (
     PostgresFeatureSource,
     seller_book_source,
 )
-from tests.test_underwriting import NOW, check_queue_scopes, plan, seed_listing_cases
+from tests.test_underwriting import (
+    NOW,
+    check_listing_metadata,
+    check_queue_scopes,
+    plan,
+    seed_listing_cases,
+)
 
 pytestmark = pytest.mark.skipif(
     not config.WORKFLOW_TEST_DATABASE_URL,
@@ -135,6 +142,43 @@ def test_postgres_cursor_pagination_preserves_order_and_scope(database, mode):
         seen.extend(case.case_id for case in rows)
         assert len(seen) <= len(expected)
     assert seen == expected
+
+
+def test_postgres_listing_metadata_and_decided_union(database):
+    check_listing_metadata(PostgresCaseRepository(database))
+
+
+@pytest.mark.parametrize("mode", ["queue", "seller"])
+def test_postgres_listing_counts_and_items_share_snapshot(database, monkeypatch, mode):
+    repository = PostgresCaseRepository(database)
+    writer = PostgresCaseRepository(database)
+    ids = seed_listing_cases(repository, count=2)
+    connect = repository._connect
+
+    class ConcurrentInsert:
+        def __init__(self, conn):
+            self.conn = conn
+
+        def execute(self, query, params=None):
+            result = self.conn.execute(query, params)
+            if query.startswith("select status,count(*)"):
+                seed_listing_cases(writer, count=1, start=1000)
+            return result
+
+    @contextmanager
+    def concurrent_connection():
+        with connect() as conn:
+            yield ConcurrentInsert(conn)
+
+    monkeypatch.setattr(repository, "_connect", concurrent_connection)
+    page = (
+        repository.queue_page(None, 10, 0)
+        if mode == "queue"
+        else repository.seller_page("minhchau.shop", 10, 0)
+    )
+    assert page.total == 2
+    assert {case.case_id for case in page.items} == set(ids)
+    assert writer.seller_page("minhchau.shop", 10, 0).total == 3
 
 
 @pytest.mark.parametrize(
