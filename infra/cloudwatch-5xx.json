@@ -1,0 +1,13 @@
+{
+  "logGroupName": "/riverbank/app",
+  "filterName": "riverbank-5xx",
+  "filterPattern": "{ ($.logger = \"http.log.access*\") && ($.status >= 500) }",
+  "metricTransformations": [
+    {
+      "metricName": "Http5xx",
+      "metricNamespace": "Riverbank",
+      "metricValue": "1",
+      "defaultValue": 0
+    }
+  ]
+}

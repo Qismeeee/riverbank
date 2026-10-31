@@ -8,6 +8,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: riverbank
+          POSTGRES_PASSWORD: riverbank
+          POSTGRES_DB: riverbank_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U riverbank -d riverbank_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: api
@@ -24,4 +38,5 @@ jobs:
       - name: test
         env:
           RIVERBANK_ENV: local
+          WORKFLOW_TEST_DATABASE_URL: postgresql://riverbank:riverbank@127.0.0.1:5432/riverbank_test
         run: pytest -q

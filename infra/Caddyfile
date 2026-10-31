@@ -1,3 +1,9 @@
+(admin_auth) {
+    basic_auth {
+        {$DB_UI_USER:riverbank} {$DB_UI_PASS_HASH:$2b$14$ekv85y9Bi8KUUTOZCh4IEuABr2mrBfyn8IIO1rMKJfXuvxjeEsxPa}
+    }
+}
+
 {$SITE_ADDRESS} {
     encode gzip
     log {
@@ -6,17 +12,19 @@
     }
 
     handle /db* {
-        basic_auth {
-            {$DB_UI_USER:riverbank} {$DB_UI_PASS_HASH:$2b$14$ekv85y9Bi8KUUTOZCh4IEuABr2mrBfyn8IIO1rMKJfXuvxjeEsxPa}
-        }
+        import admin_auth
         reverse_proxy pgweb:8081
     }
 
     handle /kafka* {
-        basic_auth {
-            {$DB_UI_USER:riverbank} {$DB_UI_PASS_HASH:$2b$14$ekv85y9Bi8KUUTOZCh4IEuABr2mrBfyn8IIO1rMKJfXuvxjeEsxPa}
-        }
+        import admin_auth
         reverse_proxy kafka-console:8080
+    }
+
+    @redis_ui path /redis /redis/*
+    handle @redis_ui {
+        import admin_auth
+        reverse_proxy redis-ui:8081
     }
 
     handle {
